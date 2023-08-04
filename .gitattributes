@@ -1,0 +1,10 @@
+*                       text=auto eol=lf
+*.[bB][aA][tT]          text eol=crlf
+*.[cC][mM][dD]          text eol=crlf
+*.[pP][sS]1             text eol=crlf
+
+# Older git versions try to fix line endings on images, this prevents it.
+*.png binary
+*.jpg binary
+*.ico binary
+
