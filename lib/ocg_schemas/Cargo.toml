@@ -9,6 +9,10 @@ license.workspace = true
 repository = "https://github.com/OpenCubeGame/OpenCubeGame/tree/dev/lib/gs_schemas"
 edition = "2021"
 
+[features]
+default = []
+regenerate-capnp = []
+
 [[bench]]
 name = "schemabench"
 harness = false
