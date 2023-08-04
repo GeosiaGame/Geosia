@@ -1,8 +1,91 @@
-[package]
-name = "open_cube_game"
-version = "0.1.0"
+[workspace]
+members = ["lib/*", "crates/*"]
+resolver = "2"
+
+[workspace.package]
+rust-version = "1.70"
 edition = "2021"
+license = "LGPL-3.0-only"
+authors = ["OpenCubeGame team"]
+repository = "https://github.com/OpenCubeGame/OpenCubeGame"
+keywords = ["gaming", "games", "voxel"]
+categories = ["games"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace.dependencies]
+# Local, unpublished (versions stay at 0.0.0 to reduce churn)
+ocg_client = { path = "crates/ocg_client", version = "0.0.0" }
+ocg_common = { path = "crates/ocg_common", version = "0.0.0" }
+# Local, published
+ocg_schemas = { version = "0.0.1", path = "lib/ocg_schemas" }
 
-[dependencies]
+# Remote
+anyhow = "1.0.71"
+bitflags = { version = "2.3.3", features = ["bytemuck", "serde"] }
+bitvec = { version = "1.0.1", features = ["serde"] }
+bytemuck = { version = "1.13.1", features = ["extern_crate_alloc", "extern_crate_std", "min_const_generics", "derive", "zeroable_maybe_uninit", "zeroable_atomics"] }
+capnp = "0.17.2"
+capnpc = "0.17.2"
+capnp-futures = "0.17.0"
+capnp-rpc = "0.17.0"
+either = "1.8.1"
+glam = { version = "0.24.0", features = ["bytemuck", "serde"] }
+hashbrown = { version = "0.14", features = ["serde", "nightly"] }
+itertools = "0.11.0"
+kstring = { version = "2.0.0", features = ["serde"] }
+rand = "0.8.5"
+rand_pcg = "0.3.1"
+rgb = { version = "0.8.36", features = ["serde"] }
+serde = { version = "1.0.164", features = ["derive"] }
+smallvec = { version = "1.10.0", features = ["serde", "const_generics", "const_new", "write", "union"] }
+thiserror = "1.0.40"
+
+# Remote, testing
+criterion = { version = "0.5.1", features = ["html_reports"] }
+quickcheck = "1.0.3"
+quickcheck_macros = "1.0.0"
+
+[workspace.dependencies.bevy]
+version = "0.11.0"
+default-features = false
+# Extra features are used in ocg_client on top of these common ones
+features = [
+    # Default Bevy functionality:
+    "bevy_asset",         # Assets management
+    "animation",          # Animation support
+    "filesystem_watcher", # Asset hot-reloading
+    "android_shared_stdcxx", # For Android builds, use shared C++ library
+
+    # Extra Bevy functionality:
+    "serialize",            # Support for `serde` Serialize/Deserialize
+    "bevy_dynamic_plugin",  # Support for loading of `DynamicPlugin`s
+
+    # Development/Debug features:
+    "dynamic_linking", # Dynamic linking for faster compile-times
+    "trace",           # Enable tracing for performance measurement
+    # "detailed_trace",  # Make traces more verbose
+    "trace_tracy",     # Tracing using `tracy`
+    # "trace_chrome",    # Tracing using the Chrome format
+]
+
+[workspace.dependencies.bevy_math]
+version = "0.11.0"
+default-features = false
+features = [
+    "serialize",            # Support for `serde` Serialize/Deserialize
+]
+
+[profile.dev]
+opt-level = 1
+debug-assertions = true
+debug = 2
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+debug = 1
+opt-level = 3
+codegen-units = 1
+lto = "thin"
+incremental = false
+

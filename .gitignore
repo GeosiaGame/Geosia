@@ -1,2 +1,14 @@
-/target
-Cargo.lock
+/target/
+/dist/
+crates/*/target
+**/*.rs.bk
+**/*.rs.pending-snap
+.idea/*
+*.log
+*.iml
+.vscode/settings.json
+.DS_Store
+/out/
+Thumbs.db
+/wgpu_trace/
+.cargo/config
