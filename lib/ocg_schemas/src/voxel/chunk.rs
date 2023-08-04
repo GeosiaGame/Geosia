@@ -1,6 +1,7 @@
 //! Representation of chunks of voxel data in the game.
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
+
 use crate::voxel::chunk_storage::{ArrayStorage, PaletteStorage};
 use crate::voxel::voxeltypes::BlockId;
 

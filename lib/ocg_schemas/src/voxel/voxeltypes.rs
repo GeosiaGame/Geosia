@@ -4,6 +4,7 @@ use std::fmt::{Debug, Formatter};
 use bytemuck::{Pod, TransparentWrapper, Zeroable};
 use rgb::RGBA8;
 use serde::{Deserialize, Serialize};
+
 use crate::registry::{RegistryName, RegistryNameRef, RegistryObject};
 
 /// A Block identifier used to uniquely identify a registered block variant.
@@ -77,7 +78,7 @@ pub enum BlockShapeSet {
     /// A cube filling the entire voxel
     FullCubeOnly,
     /// A block type that has its own defined shape(s) and does not use standard auto-generated ones.
-    Custom {}
+    Custom {},
 }
 
 /// A definition of a block type, specifying properties such as registry name, shape, textures.
@@ -93,7 +94,6 @@ pub struct BlockDefinition {
     pub has_collision_box: bool,
     /// If the block has a mesh that can be rendered
     pub has_drawable_mesh: bool,
-
 }
 
 //impl Default for BlockDefinition {}
@@ -104,6 +104,4 @@ impl RegistryObject for BlockDefinition {
     }
 }
 
-impl BlockDefinition {
-
-}
+impl BlockDefinition {}
