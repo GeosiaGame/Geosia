@@ -26,10 +26,14 @@
    - Some chunk groups might be "detached" from the main voxel grid, forming moving contraptions
 5. Block
    - 0.5m across in every dimension
+   - Consists of a block ID pointing to a block registry entry, and metadata
    - Can be:
      - A standard material block of one of the predefined shapes
+       - Metadata is managed by the engine and sets the block to one of the predefined shapes
      - A custom complex block with a custom model and potentially logic
+       - Metadata can be used to keep track of simple rendering/hitbox/etc. state
      - A "placeholder" block that makes sure the block space is reserved for an Entity managing it
+       - Metadata indexes into a entity array in the chunk to decode the Entity id
 6. Entity
    - Can be smaller or bigger than a block, or not have a physical form at all
    - Can house advanced logic and be capable of storing complex data
@@ -40,9 +44,7 @@
 ## Inventories
 
 - Stored as part of entities
-- Most items in the game should be "dumb": a simple single-ID no-metadata item that can be stored with an int
-- An optional metadata value will be provided for items that need to store a single integer and don't need complex data attached
-  - Can be used for durability, energy charge, etc.
+- Most items in the game should be "dumb": a simple single-ID item that can be stored with an int
   - Different items, even if related, should use different IDs (e.g. an iron plate and a bronze plate should be two different IDs)
 - For complex items, complex data can be attached. This will be a byte array that can be used to keep structured data as the implementation sees fit, with the requirement to serialize/deserialize to well-formed MessagePack data.
   - The byte array form enables code to do cheap comparisons of different items by just scanning one array and not jumping across a tree of pointers
