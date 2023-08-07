@@ -43,7 +43,7 @@ jobs:
           curl -L "https://github.com/mozilla/sccache/releases/download/v0.5.4/sccache-v0.5.4-x86_64-unknown-linux-musl.tar.gz" --output sccache.tar.gz
           tar xzf sccache.tar.gz
           rm sccache.tar.gz
-          mv -f "$SCCACHE_FILE"/sccache-dist "$HOME"/.local/bin/sccache
+          mv -f "$SCCACHE_FILE"/sccache "$HOME"/.local/bin/sccache
           rm -rf "$SCCACHE_FILE"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Install sccache (macos-latest)
