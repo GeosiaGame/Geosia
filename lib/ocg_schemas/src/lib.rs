@@ -1,4 +1,5 @@
 #![warn(missing_docs)]
+#![deny(clippy::disallowed_types)]
 
 //! A library crate of the in-memory, on-disk and network representations of the game's core data.
 
