@@ -33,7 +33,7 @@ impl BlockEntry {
 
 impl Debug for BlockEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BlockId{{id={}, metadata=0x{:08X}}}", self.id, self.metadata)
+        write!(f, "BlockEntry{{id={}, metadata=0x{:08X}}}", self.id, self.metadata)
     }
 }
 
