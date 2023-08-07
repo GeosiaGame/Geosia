@@ -3,6 +3,7 @@
 //! Overview:
 //!  - Based on
 
+/// Common game object types
 pub mod game_types_capnp {
     include!(concat!(
         env!("CARGO_MANIFEST_DIR"),

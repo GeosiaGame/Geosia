@@ -3,7 +3,7 @@ fn main() {
     {
         use capnpc::CompilerCommand as Capnp;
 
-        std::fs::remove_dir_all("capnp-generated/");
+        std::fs::remove_dir_all("capnp-generated/").expect("Could not clear the capnp-generated directory");
 
         Capnp::new()
             .src_prefix("capnp/")

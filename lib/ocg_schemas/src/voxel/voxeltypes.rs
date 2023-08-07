@@ -1,71 +1,39 @@
 //! Descriptors for in-game voxel/block types.
 use std::fmt::{Debug, Formatter};
 
-use bytemuck::{Pod, TransparentWrapper, Zeroable};
 use rgb::RGBA8;
 use serde::{Deserialize, Serialize};
 
-use crate::registry::{RegistryName, RegistryNameRef, RegistryObject};
+use crate::registry::{Registry, RegistryId, RegistryName, RegistryNameRef, RegistryObject};
 
-/// A Block identifier used to uniquely identify a registered block variant.
-/// Some bits are dedicated for faster property lookup to avoid an extra registry indirection, they must be validated against the registry on deserialization.
-///
-/// `[ registry id (32 bits) | for future use | render_mode (2b) | solid_side (6b) | shape (6b) ]`
-#[derive(
-    Copy,
-    Clone,
-    Default,
-    Ord,
-    PartialOrd,
-    Eq,
-    PartialEq,
-    Hash,
-    Serialize,
-    Deserialize,
-    Zeroable,
-    Pod,
-    TransparentWrapper,
-)]
-#[repr(transparent)]
-pub struct BlockId(u64);
+/// A Block type reference (id + metadata) stored in a chunk, used to uniquely identify a registered block variant.
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[repr(C)]
+pub struct BlockEntry {
+    /// The block ID in the registry
+    pub id: RegistryId,
+    /// Metadata, controlled by the game engine in case of standard-shape blocks and by the block if using custom shapes
+    pub metadata: u32,
+}
 
-impl BlockId {
-    pub fn from_bits(registry_id: u32, shape_id: u8, solid_sides: u8, render_mode: u8) -> Self {
-        Self(
-            (registry_id as u64) << 3
-                | (shape_id & 0b111111) as u64
-                | ((solid_sides & 0b111111) as u64) << 6
-                | ((render_mode & 0b11) as u64) << 12,
-        )
+/// A named registry of block definitions.
+pub type BlockRegistry = Registry<BlockDefinition>;
+
+impl BlockEntry {
+    /// Helper to construct a new block ID
+    pub fn new(id: RegistryId, metadata: u32) -> Self {
+        Self { id, metadata }
     }
 
-    pub fn registry_id_bits(self) -> u32 {
-        ((self.0 >> 32) & 0xFFFF_FFFF) as u32
-    }
-
-    pub fn shape_id_bits(self) -> u8 {
-        (self.0 & 0b111111) as u8
-    }
-
-    pub fn solid_sides_bits(self) -> u8 {
-        ((self.0 >> 6) & 0b111111) as u8
-    }
-
-    pub fn render_mode_bits(self) -> u8 {
-        ((self.0 >> 12) & 0b11) as u8
+    /// Helper to look up the block definition corresponding to this ID
+    pub fn lookup(self, registry: &BlockRegistry) -> Option<&BlockDefinition> {
+        registry.lookup_id_to_object(self.id)
     }
 }
 
-impl Debug for BlockId {
+impl Debug for BlockEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "BlockId(reg=0x{:08X}, shape={}, solid_sides={}, render_mode={})",
-            self.registry_id_bits(),
-            self.shape_id_bits(),
-            self.solid_sides_bits(),
-            self.render_mode_bits()
-        )
+        write!(f, "BlockId{{id={}, metadata=0x{:08X}}}", self.id, self.metadata)
     }
 }
 
@@ -96,7 +64,14 @@ pub struct BlockDefinition {
     pub has_drawable_mesh: bool,
 }
 
-//impl Default for BlockDefinition {}
+/// The zero ID block/air block, when no specific blocks have been generated
+pub static EMPTY_BLOCK: BlockDefinition = BlockDefinition {
+    name: RegistryName::ocg_const("empty"),
+    shape_set: BlockShapeSet::FullCubeOnly,
+    representative_color: RGBA8::new(0, 0, 0, 0),
+    has_collision_box: false,
+    has_drawable_mesh: false,
+};
 
 impl RegistryObject for BlockDefinition {
     fn registry_name(&self) -> RegistryNameRef {
