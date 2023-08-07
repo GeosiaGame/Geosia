@@ -3,6 +3,8 @@
 
 //! The clientside of OpenCubeGame
 
+mod flycam;
+
 use bevy::a11y::AccessibilityPlugin;
 use bevy::audio::AudioPlugin;
 use bevy::core_pipeline::CorePipelinePlugin;
@@ -21,6 +23,8 @@ use bevy::time::TimePlugin;
 use bevy::ui::UiPlugin;
 use bevy::window::{ExitCondition, PresentMode};
 use bevy::winit::WinitPlugin;
+
+use crate::flycam::FlyCameraPlugin;
 
 fn main() {
     // Unset the manifest dir to make bevy load assets from the workspace root
@@ -46,6 +50,7 @@ fn main() {
             exit_condition: ExitCondition::OnPrimaryClosed,
             close_when_requested: true,
         })
+        .add_plugins(FlyCameraPlugin)
         .add_plugins(AccessibilityPlugin)
         .add_plugins(AssetPlugin::default())
         .add_plugins(ScenePlugin)
@@ -72,6 +77,8 @@ mod debug_window {
     use bevy::log;
     use bevy::prelude::*;
 
+    use crate::flycam::FlyCam;
+
     pub struct DebugWindow;
 
     impl Plugin for DebugWindow {
@@ -88,10 +95,14 @@ mod debug_window {
     ) {
         log::warn!("Setting up debug window");
         let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
-        commands.spawn(Camera3dBundle {
-            transform: Transform::from_xyz(0.0, 6., 12.0).looking_at(Vec3::new(0., 0., 0.), Vec3::Y),
-            ..default()
-        });
+
+        commands.spawn((
+            Camera3dBundle {
+                transform: Transform::from_xyz(0.0, 6., 12.0).looking_at(Vec3::new(0., 0., 0.), Vec3::Y),
+                ..default()
+            },
+            FlyCam,
+        ));
 
         let debug_material = materials.add(StandardMaterial {
             base_color: Color::FUCHSIA,
