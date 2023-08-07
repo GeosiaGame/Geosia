@@ -20,7 +20,7 @@ pub fn setup_basic_blocks(registry: &mut BlockRegistry) {
         .push_object(BlockDefinition {
             name: STONE_BLOCK_NAME,
             shape_set: StandardShapedMaterial,
-            representative_color: RGBA8::new(64, 64, 64, 255),
+            representative_color: RGBA8::new(128, 128, 128, 255),
             has_collision_box: true,
             has_drawable_mesh: true,
         })
