@@ -64,7 +64,7 @@ pub struct BlockDefinition {
     pub has_drawable_mesh: bool,
 }
 
-/// The zero ID block/air block, when no specific blocks have been generated
+/// The empty block definition, used when no specific blocks have been generated
 pub static EMPTY_BLOCK: BlockDefinition = BlockDefinition {
     name: RegistryName::ocg_const("empty"),
     shape_set: BlockShapeSet::FullCubeOnly,
