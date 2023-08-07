@@ -3,7 +3,7 @@ use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
 
 use crate::voxel::chunk_storage::{ArrayStorage, PaletteStorage};
-use crate::voxel::voxeltypes::BlockId;
+use crate::voxel::voxeltypes::BlockEntry;
 
 /// RGB block light data (in a R5G5B5 format).
 #[repr(transparent)]
@@ -12,7 +12,11 @@ pub struct BlockLight(u16);
 
 /// A 32³ grid of voxel data
 #[derive(Clone, Eq, PartialEq)]
-pub struct Chunk {
-    blocks: PaletteStorage<BlockId>,
-    light_level: ArrayStorage<BlockLight>,
+pub struct Chunk<ExtraChunkData> {
+    /// Block data
+    pub blocks: PaletteStorage<BlockEntry>,
+    /// Light data
+    pub light_level: ArrayStorage<BlockLight>,
+    /// Any extra per-chunk data needed by the API user
+    pub extra_data: ExtraChunkData,
 }

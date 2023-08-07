@@ -1,3 +1,8 @@
+#![warn(missing_docs)]
+#![deny(clippy::disallowed_types)]
+
+//! The clientside of OpenCubeGame
+
 use bevy::a11y::AccessibilityPlugin;
 use bevy::audio::AudioPlugin;
 use bevy::core_pipeline::CorePipelinePlugin;

@@ -99,6 +99,11 @@ macro_rules! impl_simple_ivec3_newtype {
             pub const fn new(x: i32, y: i32, z: i32) -> Self {
                 Self(IVec3::new(x, y, z))
             }
+
+            /// Constructs a new [`Self`] from a given coordinate copied to all dimensions.
+            pub const fn splat(v: i32) -> Self {
+                Self(IVec3::splat(v))
+            }
         }
 
         impl From<IVec3> for $T {
@@ -245,6 +250,16 @@ impl InChunkRange {
     /// Checks if the range has any blocks, false if one or more of the dimensions are zero.
     pub const fn is_empty(self) -> bool {
         (self.min.0.x == self.max.0.x) || (self.min.0.y == self.max.0.y) || (self.min.0.z == self.max.0.z)
+    }
+
+    /// Checks if the range covers the entire chunk
+    pub const fn is_everything(self) -> bool {
+        self.min.0.x == 0
+            && self.min.0.y == 0
+            && self.min.0.z == 0
+            && self.max.0.x == (CHUNK_DIM - 1)
+            && self.max.0.y == (CHUNK_DIM - 1)
+            && self.max.0.z == (CHUNK_DIM - 1)
     }
 
     /// Returns the corner with the smallest coordinates.

@@ -1,42 +1,12 @@
-//! Data structures for storage and manipulation of per-block data.
-use std::fmt::Debug;
-use std::hash::Hash;
-use std::iter::{Enumerate, Map, Take};
+//! Palette storage
 
 use bitvec::prelude::*;
 use either::Either;
-use hashbrown::HashMap;
 use itertools::{iproduct, Itertools};
 use smallvec::{smallvec, SmallVec};
 
-use crate::coordinates::*;
-
-/// Marker trait for all the requirements for a type to be stored as per-block chunk data.
-/// Do not derive yourself, the blanked implementation should cover all types that are valid.
-pub trait ChunkDataType: Clone + Default + PartialEq + Hash + Debug {}
-
-/// Blanket implementation for all valid chunk data types.
-impl<T> ChunkDataType for T where T: Clone + Default + PartialEq + Hash + Debug {}
-
-/// A container for chunk's data, abstracted from the actual in-memory representation for flexibility.
-///
-/// The game uses various types of storage, ranging from dense array representations, through palette compression to sparse hash-based storage.
-pub trait ChunkStorage<DataType: ChunkDataType> {
-    /// Clone all elements of the chunk into a dense XZY-ordered array (with strides of X=1, Z=32, Y=32²).
-    fn copy_dense(&self, output: &mut [DataType; CHUNK_DIM3Z]);
-    /// Gets the element at the given coordinates, or [`None`] if there is no chunk data at all.
-    fn get(&self, position: InChunkPos) -> &DataType;
-    /// Gets the element at the given coordinates, for [`Copy`] types. If there is no chunk data, returns the default value.
-    fn get_copy(&self, position: InChunkPos) -> DataType
-    where
-        DataType: Copy;
-    /// Puts a single element at the given coordinates.
-    ///
-    /// Returns the old value.
-    fn put(&mut self, position: InChunkPos, new_value: DataType) -> DataType;
-    /// Fills a cuboid with the given value.
-    fn fill(&mut self, range: InChunkRange, new_value: DataType);
-}
+use crate::coordinates::{InChunkPos, InChunkRange, CHUNK_DIM, CHUNK_DIM2, CHUNK_DIM3Z};
+use crate::voxel::chunk_storage::{ChunkDataType, ChunkIterator, ChunkStorage};
 
 /// Chunk data compressed by storing a list of used values in a `palette` array and indices into that array for every chunk element.
 /// A special case for all data being of the same type has a very small memory footprint.
@@ -48,42 +18,6 @@ pub struct PaletteStorage<DataType: ChunkDataType> {
     /// Length of [`palette`] at the last palette GC call
     last_gc_palette_len: usize,
 }
-
-/// Simple XZY dense array storage for chunk data (with strides of X=1, Z=32, Y=32²).
-#[derive(Clone, Eq, PartialEq)]
-pub enum ArrayStorage<T> {
-    /// Single-element case for cases where every single chunk element is identical
-    Singleton(T),
-    /// Case where at least one element in a chunk is different
-    Array(Box<[T; CHUNK_DIM3Z]>),
-}
-
-/// Storage for sparse chunk data, only allocating data for the data that's present at the cost of slower lookups and writes.
-pub struct SparseStorage<DataType: ChunkDataType> {
-    data: HashMap<u16, DataType>,
-}
-
-#[inline]
-fn i_to_xzy_itermap<T>((i, val): (usize, T)) -> (InChunkPos, T) {
-    (InChunkPos::try_from_index(i).unwrap(), val)
-}
-
-type XzyIterator<Iter> =
-    Map<Enumerate<Take<Iter>>, fn((usize, <Iter as Iterator>::Item)) -> (InChunkPos, <Iter as Iterator>::Item)>;
-
-/// Extension methods for iterators over chunks
-trait ChunkIterator: Iterator {
-    #[inline]
-    fn enumerate_xzy(self) -> XzyIterator<Self>
-    where
-        Self: Sized,
-    {
-        self.take(CHUNK_DIM3Z).enumerate().map(i_to_xzy_itermap)
-    }
-}
-impl<T> ChunkIterator for T where T: Iterator {}
-
-// Implementations
 
 enum SafePaletteIndices<'d> {
     Singleton,
@@ -149,6 +83,15 @@ const PAL_DATA_ARRAY_U8_LEN: usize = CHUNK_DIM3Z / 2;
 const PAL_DATA_ARRAY_U16_LEN: usize = CHUNK_DIM3Z;
 
 impl<DataType: ChunkDataType + Copy> PaletteStorage<DataType> {
+    /// Constructs new palette storage filled with the given value
+    pub fn new(fill_with: DataType) -> Self {
+        Self {
+            palette: smallvec![fill_with],
+            data_storage: smallvec![0],
+            last_gc_palette_len: 0,
+        }
+    }
+
     fn data(&self) -> SafePaletteIndices {
         SafePaletteIndices::new(&self.data_storage)
     }
@@ -307,13 +250,9 @@ impl<DataType: ChunkDataType + Copy> PaletteStorage<DataType> {
         upgrade(&mut self.data_storage)
     }
 }
-impl<DataType: ChunkDataType + Copy> Default for PaletteStorage<DataType> {
+impl<DataType: ChunkDataType + Copy + Default> Default for PaletteStorage<DataType> {
     fn default() -> Self {
-        Self {
-            palette: smallvec![DataType::default()],
-            data_storage: smallvec![0],
-            last_gc_palette_len: 0,
-        }
+        Self::new(DataType::default())
     }
 }
 impl<DataType: ChunkDataType + Copy> ChunkStorage<DataType> for PaletteStorage<DataType> {
@@ -335,7 +274,7 @@ impl<DataType: ChunkDataType + Copy> ChunkStorage<DataType> for PaletteStorage<D
     #[inline]
     fn get_copy(&self, position: InChunkPos) -> DataType {
         match self.data() {
-            SafePaletteIndices::Singleton => self.palette.first().copied().unwrap_or_default(),
+            SafePaletteIndices::Singleton => self.palette.first().copied().unwrap(),
             SafePaletteIndices::U8(indices) => self.palette[indices[position.as_index()] as usize],
             SafePaletteIndices::U16(indices) => self.palette[indices[position.as_index()] as usize],
         }
@@ -347,18 +286,18 @@ impl<DataType: ChunkDataType + Copy> ChunkStorage<DataType> for PaletteStorage<D
         match self.data_mut() {
             SafePaletteIndicesMut::Singleton => {
                 if palette_pos == 0 {
-                    return self.palette.get(0).copied().unwrap_or_default();
+                    return self.palette.get(0).copied().unwrap();
                 }
             }
             SafePaletteIndicesMut::U8(indices) => {
                 if palette_pos <= u8::MAX as u16 {
                     let old_idx = std::mem::replace(&mut indices[position.as_index()], palette_pos as u8);
-                    return self.palette.get(old_idx as usize).copied().unwrap_or_default();
+                    return self.palette.get(old_idx as usize).copied().unwrap();
                 }
             }
             SafePaletteIndicesMut::U16(indices) => {
                 let old_idx = std::mem::replace(&mut indices[position.as_index()], palette_pos);
-                return self.palette.get(old_idx as usize).copied().unwrap_or_default();
+                return self.palette.get(old_idx as usize).copied().unwrap();
             }
         }
         // Needs upgrade, otherwise an early return is used above
@@ -368,14 +307,14 @@ impl<DataType: ChunkDataType + Copy> ChunkStorage<DataType> for PaletteStorage<D
             SafePaletteIndicesMut::U8(indices) => {
                 if palette_pos <= u8::MAX as u16 {
                     let old_idx = std::mem::replace(&mut indices[position.as_index()], palette_pos as u8);
-                    return self.palette.get(old_idx as usize).copied().unwrap_or_default();
+                    return self.palette.get(old_idx as usize).copied().unwrap();
                 } else {
                     unreachable!();
                 }
             }
             SafePaletteIndicesMut::U16(indices) => {
                 let old_idx = std::mem::replace(&mut indices[position.as_index()], palette_pos);
-                return self.palette.get(old_idx as usize).copied().unwrap_or_default();
+                return self.palette.get(old_idx as usize).copied().unwrap();
             }
         }
     }

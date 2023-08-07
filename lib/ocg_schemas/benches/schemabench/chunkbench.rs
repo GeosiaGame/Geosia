@@ -1,8 +1,8 @@
 use std::cell::Cell;
 
 use criterion::{black_box, criterion_group, BenchmarkId, Criterion};
-use ocg_schemas::chunk_storage::{ChunkStorage, PaletteStorage};
 use ocg_schemas::coordinates::{InChunkPos, CHUNK_DIM3, CHUNK_DIM3Z};
+use ocg_schemas::voxel::chunk_storage::{ChunkStorage, PaletteStorage};
 use rand::distributions::Uniform;
 use rand::prelude::*;
 use rand_pcg::Pcg64Mcg;

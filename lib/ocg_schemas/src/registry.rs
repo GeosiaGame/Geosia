@@ -2,13 +2,16 @@
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroU32, TryFromIntError};
 
+use bytemuck::{PodInOption, TransparentWrapper, ZeroableInOption};
 use hashbrown::{Equivalent, HashMap};
 use kstring::{KString, KStringRef};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Default namespace for the OpenCubeGame's objects (as a `const` for compile-time functions)
+pub const OCG_REGISTRY_DOMAIN_CONST: &str = "ocg";
 /// Default namespace for the OpenCubeGame's objects
-pub static OCG_REGISTRY_DOMAIN: &str = "ocg";
+pub static OCG_REGISTRY_DOMAIN: &str = OCG_REGISTRY_DOMAIN_CONST;
 /// Default namespace for the OpenCubeGame's objects, as a [`KString`] for convenience
 pub static OCG_REGISTRY_DOMAIN_KS: KString = KString::from_static(OCG_REGISTRY_DOMAIN);
 
@@ -31,11 +34,19 @@ pub struct RegistryNameRef<'n> {
 }
 
 impl RegistryName {
-    /// Constructs a `gs:`-namespaced name
+    /// Constructs a `ocg:`-namespaced name
     pub fn ocg(key: impl Into<KString>) -> Self {
         Self {
             ns: OCG_REGISTRY_DOMAIN_KS.clone(),
             key: key.into(),
+        }
+    }
+
+    /// A compiletime constructor for `ocg:`-namespaced names
+    pub const fn ocg_const(key: &'static str) -> Self {
+        Self {
+            ns: KString::from_static(OCG_REGISTRY_DOMAIN_CONST),
+            key: KString::from_static(key),
         }
     }
 
@@ -94,8 +105,13 @@ impl<'a> From<&RegistryNameRef<'a>> for RegistryName {
 
 /// Newtype wrapper around a u32 registry ID.
 #[repr(transparent)]
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize, TransparentWrapper)]
 pub struct RegistryId(pub NonZeroU32);
+
+// SAFETY: transparent NonZeroU32 wrapper, NonZeroU32 implements this trait
+unsafe impl ZeroableInOption for RegistryId {}
+// SAFETY: transparent NonZeroU32 wrapper, NonZeroU32 implements this trait
+unsafe impl PodInOption for RegistryId {}
 
 impl Display for RegistryId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
