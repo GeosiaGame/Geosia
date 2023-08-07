@@ -29,7 +29,7 @@ capnp-futures = "0.17.0"
 capnp-rpc = "0.17.0"
 either = "1.8.1"
 glam = { version = "0.24.0", features = ["bytemuck", "serde"] }
-hashbrown = { version = "0.14", features = ["serde", "nightly"] }
+hashbrown = { version = "0.14", features = ["serde"] }
 itertools = "0.11.0"
 kstring = { version = "2.0.0", features = ["serde"] }
 rand = "0.8.5"
