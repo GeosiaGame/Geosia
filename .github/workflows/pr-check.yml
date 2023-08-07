@@ -38,11 +38,13 @@ jobs:
       - name: Install sccache (ubuntu-latest)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          SCCACHE_FILE=sccache-dist-v0.5.4-x86_64-unknown-linux-musl
-          mkdir -p $HOME/.local/bin
-          curl -L "https://github.com/mozilla/sccache/releases/download/v0.5.4/sccache-dist-v0.5.4-x86_64-unknown-linux-musl.tar.gz" --output sccache.tar.gz"
+          SCCACHE_FILE=sccache-v0.5.4-x86_64-unknown-linux-musl
+          mkdir -p "$HOME"/.local/bin
+          curl -L "https://github.com/mozilla/sccache/releases/download/v0.5.4/sccache-v0.5.4-x86_64-unknown-linux-musl.tar.gz" --output sccache.tar.gz
           tar xzf sccache.tar.gz
-          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+          rm sccache.tar.gz
+          mv -f "$SCCACHE_FILE"/sccache-dist "$HOME"/.local/bin/sccache
+          rm -rf "$SCCACHE_FILE"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Install sccache (macos-latest)
         if: matrix.os == 'macos-latest'
@@ -61,14 +63,14 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-r${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
       - name: Cache sccache
         uses: actions/cache@v3
         with:
           path: ${{ matrix.sccache-path }}
-          key: ${{ runner.os }}-sccache-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-sccache-r${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-sccache-
       - name: Start sccache server
