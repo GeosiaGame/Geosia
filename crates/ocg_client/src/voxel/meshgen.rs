@@ -3,7 +3,7 @@
 use anyhow::Context;
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
-use ocg_schemas::coordinates::{AbsBlockPos, RelBlockPos, CHUNK_DIM};
+use ocg_schemas::coordinates::{AbsBlockPos, AbsChunkPos, RelBlockPos, CHUNK_DIM};
 use ocg_schemas::dependencies::itertools::iproduct;
 use ocg_schemas::direction::ALL_DIRECTIONS;
 use ocg_schemas::voxel::chunk_storage::ChunkStorage;

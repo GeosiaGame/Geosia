@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::registry::{Registry, RegistryId, RegistryName, RegistryNameRef, RegistryObject};
 
-/// The type for metadata attached to a block entry, used for determining the shape to render and/or collide with.
 pub type BlockMetadata = u32;
 
 /// A Block type reference (id + metadata) stored in a chunk, used to uniquely identify a registered block variant.

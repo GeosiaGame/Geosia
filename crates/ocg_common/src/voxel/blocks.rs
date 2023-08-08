@@ -1,16 +1,14 @@
 //! The builtin block types.
 //! Most of this will be moved to a "base" mod at some point in the future.
 
+use ocg_schemas::dependencies::kstring::KString;
 use ocg_schemas::dependencies::rgb::RGBA8;
 use ocg_schemas::registry::RegistryName;
 use ocg_schemas::voxel::voxeltypes::BlockShapeSet::StandardShapedMaterial;
 use ocg_schemas::voxel::voxeltypes::{BlockDefinition, BlockRegistry, EMPTY_BLOCK};
 
-/// Registry name for stone.
 pub const STONE_BLOCK_NAME: RegistryName = RegistryName::ocg_const("stone");
-/// Registry name for dirt.
 pub const DIRT_BLOCK_NAME: RegistryName = RegistryName::ocg_const("dirt");
-/// Registry name for grass.
 pub const GRASS_BLOCK_NAME: RegistryName = RegistryName::ocg_const("grass");
 
 /// Installs the base set of blocks into the given block registry.
@@ -20,7 +18,7 @@ pub fn setup_basic_blocks(registry: &mut BlockRegistry) {
         .push_object(BlockDefinition {
             name: STONE_BLOCK_NAME,
             shape_set: StandardShapedMaterial,
-            representative_color: RGBA8::new(128, 128, 128, 255),
+            representative_color: RGBA8::new(64, 64, 64, 255),
             has_collision_box: true,
             has_drawable_mesh: true,
         })

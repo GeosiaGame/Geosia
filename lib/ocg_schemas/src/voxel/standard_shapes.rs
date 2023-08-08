@@ -8,7 +8,7 @@ use smallvec::{smallvec, SmallVec};
 use crate::direction::OctahedralOrientation;
 use crate::voxel::voxeltypes::BlockMetadata;
 
-/// Helper for determining the shape&orientation of a standard-shaped block from its metadata.
+/// Helper for determining the shape&orientation of a standard-shaped block from its metadata
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
 pub struct StandardShapeMetadata {
     shape: u16,
@@ -16,12 +16,10 @@ pub struct StandardShapeMetadata {
 }
 
 impl StandardShapeMetadata {
-    /// A default metadata object for a meta value of 0.
     pub fn new() -> Self {
         Default::default()
     }
 
-    /// Construct standard shape metadata from the given shape and orientation IDs.
     pub fn from_parts(shape: u16, orientation: u16) -> Option<Self> {
         if shape >= 64 || orientation >= 24 {
             None
@@ -30,7 +28,6 @@ impl StandardShapeMetadata {
         }
     }
 
-    /// Constructs standard shape metadata from the given block metadata value.
     pub fn from_meta(meta: BlockMetadata) -> Self {
         Self {
             shape: (meta & 0xFFFF) as u16,
@@ -38,22 +35,18 @@ impl StandardShapeMetadata {
         }
     }
 
-    /// Gets the equivalent block metadata value.
     pub fn to_meta(self) -> BlockMetadata {
         (((self.orientation as u32) << 16) | self.shape as u32) as BlockMetadata
     }
 
-    /// Gets the raw shape ID.
     pub fn shape_bits(self) -> u16 {
         self.shape
     }
 
-    /// Gets the raw orientation ID.
     pub fn orientation_bits(self) -> u16 {
         self.orientation
     }
 
-    /// Gets the voxel shape definition object corresponding to this metadata value.
     pub fn shape(self) -> &'static VoxelShapeDef {
         match self.shape_bits() {
             STANDARD_SHAPE_CUBE => &VOXEL_CUBE_SHAPE,
@@ -64,71 +57,49 @@ impl StandardShapeMetadata {
         }
     }
 
-    /// Gets the orientation corresponding to this metadata value.
     pub fn orientation(self) -> OctahedralOrientation {
         OctahedralOrientation::try_from_index(self.orientation_bits() as usize).unwrap_or_default()
     }
 }
 
-/// The shape ID for a cube.
 pub const STANDARD_SHAPE_CUBE: u16 = 0;
-/// The shape ID for a slope.
 pub const STANDARD_SHAPE_SLOPE: u16 = 1;
-/// The shape ID for a corner slope.
 pub const STANDARD_SHAPE_CORNER: u16 = 2;
-/// The shape ID for a inner corner slope.
 pub const STANDARD_SHAPE_INNER_CORNER: u16 = 3;
 
-/// A definition of a voxel mesh.
 #[derive(Clone, Debug)]
 pub struct VoxelShapeDef {
-    /// Whether this mesh produces ambient occlusion shadows around it.
     pub causes_ambient_occlusion: bool,
-    /// The submeshes for each of the mesh sides, indexed by [`crate::direction::Direction`] IDs.
     pub sides: [VSSide; 6],
 }
 
-/// A vertex for a voxel mesh.
 #[derive(Clone, Debug)]
 pub struct VSVertex {
-    /// The offset from the center of the block.
     pub offset: Vec3A,
-    /// The texture mapping coordinates.
     pub texcoord: Vec2,
-    /// A unit length vector pointing "up" from the face it's a part of.
     pub normal: Vec3A,
-    /// Barycentric coordinate within the voxel face.
     /// <https://www.asawicki.info/news_1721_how_to_correctly_interpolate_vertex_attributes_on_a_parallelogram_using_modern_gpus>
     /// Archive: <https://web.archive.org/web/20200516133048/https://www.asawicki.info/news_1721_how_to_correctly_interpolate_vertex_attributes_on_a_parallelogram_using_modern_gpus>
     pub barycentric: Vec3A,
     /// Sign when added to the "extra data" sum for proper quadrilateral interpolation
     pub barycentric_sign: i32,
-    /// List of blocks to check to calculate the ambient occlusion values.
     pub ao_offsets: SmallVec<[IVec3; 4]>,
 }
 
-/// A single side of a voxel mesh.
 #[derive(Clone, Debug)]
 pub struct VSSide {
     /// Whether this side covers the entire voxel area in this direction, stopping the neighbor from rendering
     pub can_clip: bool,
     /// Whether this side is within the voxel area in this direction, so it is possible that the neighbor is stopping it from rendering
     pub can_be_clipped: bool,
-    /// The vertices of the mesh.
     pub vertices: SmallVec<[VSVertex; 8]>,
-    /// Indices into the vertices array, in triples forming triangles.
     pub indices: SmallVec<[u32; 8]>,
 }
 
-/// Shape definition for empty voxels.
 pub static VOXEL_NO_SHAPE: Lazy<VoxelShapeDef> = Lazy::new(init_no_shape);
-/// Shape definitions for cube blocks.
 pub static VOXEL_CUBE_SHAPE: Lazy<VoxelShapeDef> = Lazy::new(init_cube_shape);
-/// Shape definitions for slope blocks.
 pub static VOXEL_SLOPE_SHAPE: Lazy<VoxelShapeDef> = Lazy::new(init_slope_shape);
-/// Shape definitions for corner slope blocks.
 pub static VOXEL_CORNER_SHAPE: Lazy<VoxelShapeDef> = Lazy::new(init_corner_shape);
-/// Shape definitions for inner corner slope blocks.
 pub static VOXEL_INNER_CORNER_SHAPE: Lazy<VoxelShapeDef> = Lazy::new(init_inner_corner_shape);
 
 fn init_no_shape() -> VoxelShapeDef {
@@ -151,7 +122,6 @@ fn init_no_shape() -> VoxelShapeDef {
     }
 }
 
-/// A signum function that returns 0 for values x where |x|<0.1
 fn approx_signum(mut v: Vec3A) -> IVec3 {
     let abs = v.abs();
     if abs.x < 0.1 {
@@ -166,7 +136,6 @@ fn approx_signum(mut v: Vec3A) -> IVec3 {
     v.signum().as_ivec3()
 }
 
-/// Calculates the set of ambient occlusion neighbors from the position&normal at a given vertex.
 fn corner_ao_set(corner: Vec3A, inormal: IVec3) -> SmallVec<[IVec3; 4]> {
     let icorner = approx_signum(corner);
     let mut sv = SmallVec::new();
@@ -190,7 +159,6 @@ fn corner_ao_set(corner: Vec3A, inormal: IVec3) -> SmallVec<[IVec3; 4]> {
     sv
 }
 
-/// Constructs a list of vertices for a quad with the given center and local right&up vectors.
 fn quad_verts(center: Vec3A, right: Vec3A, up: Vec3A) -> SmallVec<[VSVertex; 8]> {
     let fnormal = -right.cross(up);
     let inormal = approx_signum(fnormal);

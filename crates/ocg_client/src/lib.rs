@@ -75,8 +75,9 @@ mod debug_window {
     use bevy::math::Vec3A;
     use bevy::prelude::*;
     use ocg_common::voxel::blocks::{setup_basic_blocks, GRASS_BLOCK_NAME, STONE_BLOCK_NAME};
-    use ocg_schemas::coordinates::{AbsChunkPos, InChunkRange};
+    use ocg_schemas::coordinates::{AbsChunkPos, InChunkPos, InChunkRange};
     use ocg_schemas::dependencies::itertools::iproduct;
+    use ocg_schemas::voxel::chunk_group::ChunkGroup;
     use ocg_schemas::voxel::chunk_storage::ChunkStorage;
     use ocg_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME};
 
@@ -101,6 +102,11 @@ mod debug_window {
         let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
         commands.spawn(Camera3dBundle {
             transform: Transform::from_xyz(0.0, 6., 12.0).looking_at(Vec3::new(0., 0., 0.), Vec3::Y),
+            ..default()
+        });
+
+        let debug_material = materials.add(StandardMaterial {
+            base_color: Color::FUCHSIA,
             ..default()
         });
 
