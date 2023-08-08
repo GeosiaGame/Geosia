@@ -31,7 +31,7 @@ impl<T: ChunkDataType> ArrayStorage<T> {
                     .try_into()
                     .unwrap();
                 *self = Self::Array(new_arr);
-                let Self::Array(arr) = self else {unreachable!()};
+                let Self::Array(arr) = self else { unreachable!() };
                 arr
             }
         }

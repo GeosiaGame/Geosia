@@ -87,6 +87,7 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets
       - name: Check formatting
+        if: matrix.rust == 'nightly'
         run: cargo fmt --check --all
 
       - name: Print sccache stats
