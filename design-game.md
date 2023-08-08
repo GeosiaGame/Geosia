@@ -31,3 +31,21 @@ OCG is a block-oriented sandbox factory game where you start your factory with a
 - Key requirement: the factory must look alive. See items moving around, energy conduits glowing, furnaces giving off a heat effect
 - Some automation should be immediately available, with more convenient forms unlocking as more complex processes become necessary
 - Most machines will be "multiblock": taking up the space of many blocks, often composed of various parts working in unison
+
+## Weather system
+
+- Dynamic, world-wide weather system based on an underlying 3D fBm noise function.
+- Allows for unique, localized weather that moves over time, shifting and becoming stronger or weaker. Gets rid of the need for a global weather system.
+- Current ideas for weather types:
+  - Rain
+  - Snow
+  - Storm
+  - Blizzard
+  - Hurricane/Tornado (Destructability up for debate)
+  - Tropical Storm
+  - Heavy winds
+  - Light rain
+  - Overcast
+  - And more (mostly because listing a ton of weather events is annoying)
+- Some weather events will depend dually on location (temperature, biome, etc) as well as the main system.
+- Location, temperature only determine the actual interpretation of the noise.
