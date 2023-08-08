@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::registry::{Registry, RegistryId, RegistryName, RegistryNameRef, RegistryObject};
 
+pub type BlockMetadata = u32;
+
 /// A Block type reference (id + metadata) stored in a chunk, used to uniquely identify a registered block variant.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[repr(C)]
@@ -13,7 +15,7 @@ pub struct BlockEntry {
     /// The block ID in the registry
     pub id: RegistryId,
     /// Metadata, controlled by the game engine in case of standard-shape blocks and by the block if using custom shapes
-    pub metadata: u32,
+    pub metadata: BlockMetadata,
 }
 
 /// A named registry of block definitions.
@@ -64,9 +66,12 @@ pub struct BlockDefinition {
     pub has_drawable_mesh: bool,
 }
 
+/// The registry name of [`EMPTY_BLOCK`]
+pub const EMPTY_BLOCK_NAME: RegistryName = RegistryName::ocg_const("empty");
+
 /// The empty block definition, used when no specific blocks have been generated
 pub static EMPTY_BLOCK: BlockDefinition = BlockDefinition {
-    name: RegistryName::ocg_const("empty"),
+    name: EMPTY_BLOCK_NAME,
     shape_set: BlockShapeSet::FullCubeOnly,
     representative_color: RGBA8::new(0, 0, 0, 0),
     has_collision_box: false,

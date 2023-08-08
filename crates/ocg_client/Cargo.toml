@@ -13,6 +13,7 @@ rust-version.workspace = true
 ocg_schemas.workspace = true
 ocg_common.workspace = true
 # Remote
+anyhow.workspace = true
 
 [dependencies.bevy]
 workspace = true

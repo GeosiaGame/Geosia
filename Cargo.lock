@@ -3135,6 +3135,7 @@ dependencies = [
 name = "ocg_client"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "bevy",
  "ocg_common",
  "ocg_schemas",
@@ -3144,6 +3145,7 @@ dependencies = [
 name = "ocg_common"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "bevy",
  "ocg_schemas",
 ]
@@ -3164,6 +3166,7 @@ dependencies = [
  "hashbrown 0.14.0",
  "itertools 0.11.0",
  "kstring",
+ "once_cell",
  "quickcheck",
  "quickcheck_macros",
  "rand",

@@ -22,6 +22,7 @@ pub mod dependencies {
     pub use hashbrown;
     pub use itertools;
     pub use kstring;
+    pub use once_cell;
     pub use rgb;
     pub use serde;
     pub use smallvec;

@@ -92,6 +92,12 @@ impl<DataType: ChunkDataType + Copy> PaletteStorage<DataType> {
         }
     }
 
+    /// Returns the list of the current palette entries.
+    /// Note that not every entry might actually be used in the chunk data, the palette data is not trimmed on every chunk mutation.
+    pub fn palette_entries(&self) -> &[DataType] {
+        &self.palette[..]
+    }
+
     fn data(&self) -> SafePaletteIndices {
         SafePaletteIndices::new(&self.data_storage)
     }
