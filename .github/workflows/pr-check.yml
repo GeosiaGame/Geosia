@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest ]
-        rust: [ stable, nightly ]
+        rust: [ stable, nightly-2023-08-08 ]
         include:
           - os: ubuntu-latest
             sccache-path: /home/runner/.cache/sccache
@@ -87,7 +87,7 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets
       - name: Check formatting
-        if: matrix.rust == 'nightly'
+        if: startsWith(matrix.rust, 'nightly')
         run: cargo fmt --check --all
 
       - name: Print sccache stats
