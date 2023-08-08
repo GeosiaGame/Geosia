@@ -58,7 +58,7 @@ impl Direction {
 
     /// Picks the approximate grid-aligned direction from a non-grid-aligned vector.
     /// Biases towards `UP` for zero vectors.
-    pub fn from_approx_vec(v: Vec3A) -> Self {
+    pub fn from_approx_vecf(v: Vec3A) -> Self {
         if v.length_squared() == 0.0 {
             Self::UP
         } else {
@@ -73,7 +73,7 @@ impl Direction {
     }
 
     /// Tries to convert an integer vector into a direction it it's precisely an axis-aligned unit vector.
-    pub fn try_from_ivec(v: IVec3) -> Option<Self> {
+    pub fn try_from_vec(v: IVec3) -> Option<Self> {
         let va: [i32; 3] = v.into();
         match va {
             [1, 0, 0] => Some(Direction::XPlus),
@@ -87,7 +87,7 @@ impl Direction {
     }
 
     /// Converts the direction into an axis-aligned integer unit vector.
-    pub fn to_ivec(self) -> IVec3 {
+    pub fn to_veci(self) -> IVec3 {
         use Direction::*;
         match self {
             XMinus => IVec3::new(-1, 0, 0),
@@ -100,7 +100,7 @@ impl Direction {
     }
 
     /// Converts the direction into an axis-aligned floating point unit vector.
-    pub fn to_vec(self) -> Vec3A {
+    pub fn to_vecf(self) -> Vec3A {
         use Direction::*;
         match self {
             XMinus => Vec3A::new(-1.0, 0.0, 0.0),
@@ -190,7 +190,7 @@ impl Debug for OctahedralOrientation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "OctahedralOrientation {{right: {:?}, up: {:?}, front: {:?}}}",
+            "OctoOrientation {{right: {:?}, up: {:?}, front: {:?}}}",
             self.right(),
             self.up(),
             self.front()
@@ -214,7 +214,7 @@ impl OctahedralOrientation {
     }
 
     /// Tries to construct an orientation from the given local directions.
-    pub fn try_from_directions(right: Direction, up: Direction, front: Direction) -> Option<Self> {
+    pub fn try_from_dirs(right: Direction, up: Direction, front: Direction) -> Option<Self> {
         if Direction::cross(right, up) != Some(front) {
             None
         } else {
@@ -260,7 +260,7 @@ impl OctahedralOrientation {
     }
 
     /// Converts an index (0..24, as returned from to_index) to an orientation
-    pub fn try_from_index(i: usize) -> Option<Self> {
+    pub fn from_index(i: usize) -> Option<Self> {
         if i >= 24 {
             None
         } else {
@@ -280,11 +280,11 @@ impl OctahedralOrientation {
     }
 
     /// M * v will rotate the vector v to match this orientation
-    pub fn to_matrix(self) -> Mat3A {
+    pub fn to_matrixf(self) -> Mat3A {
         Mat3A::from_cols(
-            self.right().to_ivec().as_vec3a(),
-            self.up().to_ivec().as_vec3a(),
-            self.front().to_ivec().as_vec3a(),
+            self.right().to_veci().as_vec3a(),
+            self.up().to_veci().as_vec3a(),
+            self.front().to_veci().as_vec3a(),
         )
     }
 
@@ -294,13 +294,13 @@ impl OctahedralOrientation {
     }
 
     /// Rotates a global direction vector to the local space of this orientation.
-    pub fn apply_to_ivec(self, vec: IVec3) -> IVec3 {
-        (self.to_matrix() * vec.as_vec3a()).as_ivec3()
+    pub fn apply_to_veci(self, vec: IVec3) -> IVec3 {
+        (self.to_matrixf() * vec.as_vec3a()).as_ivec3()
     }
 
     /// Rotates a global direction vector to the local space of this orientation.
-    pub fn apply_to_vec(self, vec: Vec3A) -> Vec3A {
-        self.to_matrix() * vec
+    pub fn apply_to_vecf(self, vec: Vec3A) -> Vec3A {
+        self.to_matrixf() * vec
     }
 
     /// Rotates a direction in the local space of this orientation to the global space.
@@ -309,13 +309,13 @@ impl OctahedralOrientation {
     }
 
     /// Rotates a direction vector in the local space of this orientation to the global space.
-    pub fn unapply_to_ivec(self, vec: IVec3) -> IVec3 {
-        (self.to_matrix().transpose() * vec.as_vec3a()).as_ivec3()
+    pub fn unapply_to_veci(self, vec: IVec3) -> IVec3 {
+        (self.to_matrixf().transpose() * vec.as_vec3a()).as_ivec3()
     }
 
     /// Rotates a direction vector in the local space of this orientation to the global space.
-    pub fn unapply_to_vec(self, vec: Vec3A) -> Vec3A {
-        self.to_matrix().transpose() * vec
+    pub fn unapply_to_vecf(self, vec: Vec3A) -> Vec3A {
+        self.to_matrixf().transpose() * vec
     }
 
     /// The local "right" direction converted to the global space
@@ -361,9 +361,9 @@ mod test {
         for dir_idx in 0..6 {
             for orientation_idx in 0..24 {
                 let dir = Direction::try_from_index(dir_idx).unwrap();
-                let orientation = OctahedralOrientation::try_from_index(orientation_idx).unwrap();
-                let applied = Direction::from_approx_vec(orientation.to_matrix() * dir.to_vec());
-                let unapplied = Direction::from_approx_vec(orientation.to_matrix().transpose() * dir.to_vec());
+                let orientation = OctahedralOrientation::from_index(orientation_idx).unwrap();
+                let applied = Direction::from_approx_vecf(orientation.to_matrixf() * dir.to_vecf());
+                let unapplied = Direction::from_approx_vecf(orientation.to_matrixf().transpose() * dir.to_vecf());
                 lut[dir_idx * 24 + orientation_idx] = (applied, unapplied);
             }
         }
@@ -376,7 +376,7 @@ mod test {
         for &d1 in &ALL_DIRECTIONS {
             for &d2 in &ALL_DIRECTIONS {
                 for &d3 in &ALL_DIRECTIONS {
-                    if let Some(_orientation) = OctahedralOrientation::try_from_directions(d1, d2, d3) {
+                    if let Some(_orientation) = OctahedralOrientation::try_from_dirs(d1, d2, d3) {
                         allowed += 1;
                     }
                 }
@@ -391,7 +391,7 @@ mod test {
         for &d1 in &ALL_DIRECTIONS {
             for &d2 in &ALL_DIRECTIONS {
                 for &d3 in &ALL_DIRECTIONS {
-                    if let Some(orn) = OctahedralOrientation::try_from_directions(d1, d2, d3) {
+                    if let Some(orn) = OctahedralOrientation::try_from_dirs(d1, d2, d3) {
                         assert_eq!(orn.right(), d1);
                         assert_eq!(orn.up(), d2);
                         assert_eq!(orn.front(), d3);
@@ -399,11 +399,11 @@ mod test {
                         assert_eq!(orn.down(), d2.opposite());
                         assert_eq!(orn.back(), d3.opposite());
                         let idx = orn.to_index();
-                        assert_eq!(Some(orn), OctahedralOrientation::try_from_index(idx));
+                        assert_eq!(Some(orn), OctahedralOrientation::from_index(idx));
                         assert!(indices_used.insert(idx));
                         assert_eq!(
                             Some(orn),
-                            OctahedralOrientation::try_from_directions(orn.right(), orn.up(), orn.front())
+                            OctahedralOrientation::try_from_dirs(orn.right(), orn.up(), orn.front())
                         );
                         assert_eq!(Some(orn), OctahedralOrientation::from_right_up(orn.right(), orn.up()));
                         assert_eq!(Some(orn), OctahedralOrientation::from_up_front(orn.up(), orn.front()));
@@ -431,7 +431,7 @@ mod test {
         assert_eq!(default_orientation.down(), Direction::DOWN);
         assert_eq!(default_orientation.back(), Direction::BACK);
         let id3 = Mat3A::IDENTITY;
-        assert_eq!(default_orientation.to_matrix(), id3);
+        assert_eq!(default_orientation.to_matrixf(), id3);
     }
 
     #[test]
@@ -439,10 +439,10 @@ mod test {
         let mut non_zero = 0;
         for &d1 in &ALL_DIRECTIONS {
             for &d2 in &ALL_DIRECTIONS {
-                let v1 = d1.to_ivec();
-                let v2 = d2.to_ivec();
+                let v1 = d1.to_veci();
+                let v2 = d2.to_veci();
                 let vcross = v1.cross(v2);
-                let vdcross = Direction::try_from_ivec(vcross);
+                let vdcross = Direction::try_from_vec(vcross);
                 let dcross = Direction::cross(d1, d2);
                 assert_eq!(dcross, vdcross);
                 if dcross.is_some() {
