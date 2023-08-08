@@ -4,6 +4,7 @@
 //! A library crate of the in-memory, on-disk and network representations of the game's core data.
 
 pub mod coordinates;
+pub mod direction;
 pub mod physics;
 pub mod registry;
 pub mod schemas;
