@@ -3,7 +3,7 @@
 use anyhow::Context;
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
-use ocg_schemas::coordinates::{AbsBlockPos, AbsChunkPos, RelBlockPos, CHUNK_DIM};
+use ocg_schemas::coordinates::{AbsBlockPos, RelBlockPos, CHUNK_DIM};
 use ocg_schemas::dependencies::itertools::iproduct;
 use ocg_schemas::direction::ALL_DIRECTIONS;
 use ocg_schemas::voxel::chunk_storage::ChunkStorage;
@@ -25,6 +25,7 @@ pub fn does_chunk_need_rendering(chunk: &ClientChunk, registry: &BlockRegistry) 
 
 const AO_OCCLUSION_FACTOR: f32 = 0.88;
 
+/// Creates a bevy mesh from a chunk, using neighboring chunks to determine culling&ambient occlusion information.
 #[allow(clippy::cognitive_complexity)]
 #[inline(never)]
 pub fn mesh_from_chunk(
