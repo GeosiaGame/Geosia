@@ -1,14 +1,16 @@
 //! The builtin block types.
 //! Most of this will be moved to a "base" mod at some point in the future.
 
-use ocg_schemas::dependencies::kstring::KString;
 use ocg_schemas::dependencies::rgb::RGBA8;
 use ocg_schemas::registry::RegistryName;
 use ocg_schemas::voxel::voxeltypes::BlockShapeSet::StandardShapedMaterial;
 use ocg_schemas::voxel::voxeltypes::{BlockDefinition, BlockRegistry, EMPTY_BLOCK};
 
+/// Registry name for stone.
 pub const STONE_BLOCK_NAME: RegistryName = RegistryName::ocg_const("stone");
+/// Registry name for dirt.
 pub const DIRT_BLOCK_NAME: RegistryName = RegistryName::ocg_const("dirt");
+/// Registry name for grass.
 pub const GRASS_BLOCK_NAME: RegistryName = RegistryName::ocg_const("grass");
 pub const SNOWY_GRASS_BLOCK_NAME: RegistryName = RegistryName::ocg_const("snowy_grass");
 

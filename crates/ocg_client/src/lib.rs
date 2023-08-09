@@ -80,7 +80,6 @@ mod debug_window {
     use ocg_common::voxel::generator::StdGenerator;
     use ocg_schemas::coordinates::{AbsChunkPos, InChunkPos, InChunkRange, CHUNK_DIM};
     use ocg_schemas::dependencies::itertools::iproduct;
-    use ocg_schemas::voxel::chunk_group::ChunkGroup;
     use ocg_schemas::voxel::chunk_storage::ChunkStorage;
     use ocg_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME};
 
@@ -103,11 +102,6 @@ mod debug_window {
     ) {
         log::warn!("Setting up debug window");
         let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
-
-        let debug_material = materials.add(StandardMaterial {
-            base_color: Color::FUCHSIA,
-            ..default()
-        });
 
         let white_material = materials.add(StandardMaterial {
             base_color: Color::GRAY,
