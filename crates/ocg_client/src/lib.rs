@@ -3,6 +3,7 @@
 
 //! The clientside of OpenCubeGame
 pub mod voxel;
+mod debugcam;
 
 use bevy::a11y::AccessibilityPlugin;
 use bevy::audio::AudioPlugin;
@@ -63,7 +64,8 @@ pub fn client_main() {
         .add_plugins(AudioPlugin::default())
         .add_plugins(GilrsPlugin)
         .add_plugins(AnimationPlugin)
-        .add_plugins(GltfPlugin::default());
+        .add_plugins(GltfPlugin::default())
+        .add_plugins(debugcam::PlayerPlugin);
 
     app.add_plugins(debug_window::DebugWindow);
 
@@ -75,7 +77,8 @@ mod debug_window {
     use bevy::math::Vec3A;
     use bevy::prelude::*;
     use ocg_common::voxel::blocks::{setup_basic_blocks, GRASS_BLOCK_NAME, STONE_BLOCK_NAME};
-    use ocg_schemas::coordinates::{AbsChunkPos, InChunkPos, InChunkRange};
+    use ocg_common::voxel::generator::StdGenerator;
+    use ocg_schemas::coordinates::{AbsChunkPos, InChunkPos, InChunkRange, CHUNK_DIM};
     use ocg_schemas::dependencies::itertools::iproduct;
     use ocg_schemas::voxel::chunk_group::ChunkGroup;
     use ocg_schemas::voxel::chunk_storage::ChunkStorage;
@@ -100,10 +103,6 @@ mod debug_window {
     ) {
         log::warn!("Setting up debug window");
         let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
-        commands.spawn(Camera3dBundle {
-            transform: Transform::from_xyz(0.0, 6., 12.0).looking_at(Vec3::new(0., 0., 0.), Vec3::Y),
-            ..default()
-        });
 
         let debug_material = materials.add(StandardMaterial {
             base_color: Color::FUCHSIA,
@@ -115,6 +114,13 @@ mod debug_window {
             ..default()
         });
 
+        commands.spawn(PbrBundle {
+            mesh: meshes.add(shape::Torus::default().into()),
+            material: debug_material,
+            transform: Transform::from_xyz(0.0, 10.0, 0.0),
+            ..default()
+        });
+
         let mut block_reg = BlockRegistry::default();
         setup_basic_blocks(&mut block_reg);
         let block_reg = block_reg;
@@ -122,8 +128,9 @@ mod debug_window {
         let (stone, _) = block_reg.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
         let (grass, _) = block_reg.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
 
+        let generator = StdGenerator::new(0);
         let mut test_chunks = ClientChunkGroup::new();
-        for (cx, cy, cz) in iproduct!(-2..=2, -2..=2, -2..=2) {
+        for (cx, cy, cz) in iproduct!(-8..=8, -4..=4, -8..=8) {
             let cpos = AbsChunkPos::new(cx, cy, cz);
             let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
             for pos in InChunkRange::WHOLE_CHUNK.iter_xzy() {
@@ -137,23 +144,28 @@ mod debug_window {
                     chunk.blocks.put(pos, BlockEntry::new(id, 0));
                 }
             }
+            generator.generate_chunk(cpos, &mut chunk, &block_reg);
             test_chunks.chunks.insert(cpos, chunk);
         }
-        let c00mesh = mesh_from_chunk(
-            &block_reg,
-            &test_chunks
-                .get_neighborhood_around(AbsChunkPos::ZERO)
-                .transpose_option()
-                .unwrap(),
-        )
-        .unwrap();
-
-        commands.spawn(PbrBundle {
-            mesh: meshes.add(c00mesh),
-            material: white_material,
-            transform: Transform::from_xyz(-16.0, -45.0, -60.0),
-            ..default()
-        });
+        for (pos, _) in test_chunks.chunks.iter() {
+            let chunks = &test_chunks
+            .get_neighborhood_around(*pos)
+            .transpose_option();
+            if chunks.is_some() {
+                let c00mesh = mesh_from_chunk(
+                    &block_reg,
+                    &chunks.as_ref().unwrap(),
+                )
+                .unwrap();
+    
+                commands.spawn(PbrBundle {
+                    mesh: meshes.add(c00mesh),
+                    material: white_material.clone(),
+                    transform: Transform::from_xyz(0.0, 0.0, 0.0),
+                    ..default()
+                });
+            }
+        }
 
         commands.spawn(DirectionalLightBundle {
             directional_light: DirectionalLight {

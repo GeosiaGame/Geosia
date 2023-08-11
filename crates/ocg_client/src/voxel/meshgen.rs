@@ -156,7 +156,7 @@ pub fn mesh_from_chunk(
         }
     }
 
-    warn!("Mesh of {} indices", ibuf.len());
+    //warn!("Mesh of {} indices", ibuf.len());
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos_buf);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normal_buf);
