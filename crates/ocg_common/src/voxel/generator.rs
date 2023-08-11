@@ -13,7 +13,7 @@ use ocg_schemas::coordinates::{CHUNK_DIM, CHUNK_DIMZ};
 use super::blocks::*;
 use super::noise::fbm_noise::Fbm;
 
-const GLOBAL_SCALE_MOD: f64 = 4.0;
+const GLOBAL_SCALE_MOD: f64 = 1.0;
 const GLOBAL_BIOME_SCALE: f64 = 256.0;
 const SUPERGRID_SIZE: i32 = 4 * CHUNK_DIM as i32;
 type InCellRng = Xoshiro256StarStar;
@@ -93,13 +93,11 @@ impl CellGen {
     fn new(seed: u64) -> Self {
         let mut simplex = Fbm::<SuperSimplex>::new(0);
         let mut octaves = Vec::new();
-        octaves.push(0.0);
         octaves.push(1.0);
         octaves.push(1.0);
-        octaves.push(2.0);
+        octaves.push(1.0);
+        octaves.push(1.0);
         simplex = simplex.set_octaves(octaves);
-        simplex = simplex.set_persistence(0.6);
-        simplex = simplex.set_frequency(2.0);
         let mut s = Self {
             seed: 0,
             height_map_gen: [simplex.clone(), simplex.clone(), simplex.clone(), simplex.clone(), simplex.clone()], // init like this because Fbm can't implement copy
@@ -245,7 +243,7 @@ impl CellGen {
             let hh = self.hills_height_noise(pos);
             height = hh;
         } else if ec < 0.8 {
-            let nlin = (ec - 0.7) / 0.75;
+            let nlin = (ec - 0.7) / 1.0;
             let olin = 1.0 - nlin;
             let hh = self.hills_height_noise(pos);
             let mh = self.mountains_height_noise(pos);
@@ -373,21 +371,23 @@ impl<ECD> StdGenerator<ECD> where ECD: Clone + Default {
             //    //println!("Amount of generated blocks at chunk=[{0},{1},{2}] x={pos_x},z={pos_z}: {h}", pos.x, pos.y, pos.z)
             //}
 //            chunk_blocks.put(b_pos, BlockEntry::new(i_dirt, 0));
-            chunk_blocks.put(b_pos, BlockEntry::new(
-            if pos_y == h {
-                    if vp.elevation == VPElevation::Mountain && y > 80 {
-                        i_snow_grass
-                    } else {
-                        i_grass
-                    }
-                } else if pos_y < h - 5 {
-                    i_stone
-                } else if pos_y < h {
-                    i_dirt
-                } else {
-                    i_air
-                },
-            0));
+            if (h > 0) {
+                chunk_blocks.put(b_pos, BlockEntry::new(
+                    if pos_y == h {
+                            if vp.elevation == VPElevation::Mountain && y > 80 {
+                                i_snow_grass
+                            } else {
+                                i_grass
+                            }
+                        } else if pos_y < h - 5 {
+                            i_stone
+                        } else if pos_y < h {
+                            i_dirt
+                        } else {
+                            i_air
+                        },
+                    0));
+            }
             //if pos_y - h - 16 < 0 {
             //    chunk_blocks.put(b_pos, BlockEntry::new(i_stone, 0));
             //}

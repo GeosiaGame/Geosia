@@ -108,13 +108,6 @@ mod debug_window {
             ..default()
         });
 
-        commands.spawn(PbrBundle {
-            mesh: meshes.add(shape::Torus::default().into()),
-            material: debug_material,
-            transform: Transform::from_xyz(0.0, 10.0, 0.0),
-            ..default()
-        });
-
         let mut block_reg = BlockRegistry::default();
         setup_basic_blocks(&mut block_reg);
         let block_reg = block_reg;
@@ -124,10 +117,10 @@ mod debug_window {
 
         let generator = StdGenerator::new(0);
         let mut test_chunks = ClientChunkGroup::new();
-        for (cx, cy, cz) in iproduct!(-8..=8, -4..=4, -8..=8) {
+        for (cx, cy, cz) in iproduct!(-4..=4, -4..=4, -4..=4) {
             let cpos = AbsChunkPos::new(cx, cy, cz);
             let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
-            for pos in InChunkRange::WHOLE_CHUNK.iter_xzy() {
+            /*for pos in InChunkRange::WHOLE_CHUNK.iter_xzy() {
                 if (pos.cmpeq(IVec3::splat(0)) | pos.cmpeq(IVec3::splat(31))).any() {
                     // Empty borders to force a full render
                     continue;
@@ -137,7 +130,7 @@ mod debug_window {
                     let id = if fpos.y < 0.2 { stone } else { grass };
                     chunk.blocks.put(pos, BlockEntry::new(id, 0));
                 }
-            }
+            }*/
             generator.generate_chunk(cpos, &mut chunk, &block_reg);
             test_chunks.chunks.insert(cpos, chunk);
         }
