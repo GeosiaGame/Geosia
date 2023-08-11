@@ -13,9 +13,9 @@ use ocg_schemas::coordinates::{CHUNK_DIM, CHUNK_DIMZ};
 use super::blocks::*;
 use super::noise::fbm_noise::Fbm;
 
-const GLOBAL_SCALE_MOD: f64 = 1.0;
+const GLOBAL_SCALE_MOD: f64 = 2.0;
 const GLOBAL_BIOME_SCALE: f64 = 256.0;
-const SUPERGRID_SIZE: i32 = 4 * CHUNK_DIM as i32;
+const SUPERGRID_SIZE: i32 = 4 * CHUNK_DIM;
 type InCellRng = Xoshiro256StarStar;
 type CellPointsT = [CellPoint; 4];
 
@@ -94,8 +94,8 @@ impl CellGen {
         let mut simplex = Fbm::<SuperSimplex>::new(0);
         let mut octaves = Vec::new();
         octaves.push(1.0);
-        octaves.push(1.0);
-        octaves.push(1.0);
+        octaves.push(0.0);
+        octaves.push(0.0);
         octaves.push(1.0);
         simplex = simplex.set_octaves(octaves);
         let mut s = Self {
@@ -118,8 +118,8 @@ impl CellGen {
         for hmg in self.height_map_gen.iter_mut() {
             hmg.set_seed(sdgen.next_u32());
         }
-        Fbm::<SuperSimplex>::set_seed(&mut self.elevation_map_gen, sdgen.next_u32());
-        Fbm::<SuperSimplex>::set_seed(&mut self.moisture_map_gen, sdgen.next_u32());
+        Fbm::set_seed(&mut self.elevation_map_gen, sdgen.next_u32());
+        Fbm::set_seed(&mut self.moisture_map_gen, sdgen.next_u32());
         self.cell_points.clear();
     }
 
@@ -196,14 +196,14 @@ impl CellGen {
     }
 
     fn plains_height_noise(&self, pos: IVec2) -> f64 {
-        let scale_factor = GLOBAL_SCALE_MOD * 120.0;
+        let scale_factor = GLOBAL_SCALE_MOD * 20.0;
         let p = pos.as_dvec2() / scale_factor;
 
         (0.75 * self.h_n(0, p) + 0.25 * self.h_n(1, p * 2.0)) * 5.0 + 10.0
     }
 
     fn hills_height_noise(&self, pos: IVec2) -> f64 {
-        let scale_factor = GLOBAL_SCALE_MOD * 160.0;
+        let scale_factor = GLOBAL_SCALE_MOD * 40.0;
         let p = pos.as_dvec2() / scale_factor;
 
         (0.60 * self.h_n(0, p) + 0.25 * self.h_n(1, p * 1.5) + 0.15 * self.h_n(2, p * 3.0)) * 30.0
@@ -211,7 +211,7 @@ impl CellGen {
     }
 
     fn mountains_height_noise(&self, pos: IVec2) -> f64 {
-        let scale_factor = GLOBAL_SCALE_MOD * 200.0;
+        let scale_factor = GLOBAL_SCALE_MOD * 80.0;
         let p = pos.as_dvec2() / scale_factor;
 
         let h0 = 0.50 * self.h_rn(0, p);
@@ -219,7 +219,7 @@ impl CellGen {
 
         (h01 + (h01 / 0.75) * 0.15 * self.h_n(2, p * 5.0)
             + (h01 / 0.75) * 0.05 * self.h_rn(3, p * 9.0))
-            * 750.0
+            * 150.0
             + 40.0
     }
 
@@ -243,7 +243,7 @@ impl CellGen {
             let hh = self.hills_height_noise(pos);
             height = hh;
         } else if ec < 0.8 {
-            let nlin = (ec - 0.7) / 1.0;
+            let nlin = (ec - 0.7) / 0.1;
             let olin = 1.0 - nlin;
             let hh = self.hills_height_noise(pos);
             let mh = self.mountains_height_noise(pos);
@@ -293,29 +293,26 @@ impl Default for CellGen {
     }
 }
 
-pub struct StdGenerator<ECD> {
+pub struct StdGenerator {
     seed: u64,
     cell_gen: ThreadLocal<RefCell<CellGen>>,
-    extra_data: ECD
 }
 
-impl<ECD> Default for StdGenerator<ECD> where ECD: Clone + Default {
+impl Default for StdGenerator {
     fn default() -> Self {
         Self::new(0)
     }
 }
 
-impl<ECD> StdGenerator<ECD> where ECD: Clone + Default {
+impl StdGenerator {
     pub fn new(seed: u64) -> Self {
         Self {
             seed,
             cell_gen: ThreadLocal::default(),
-            extra_data: ECD::default()
         }
     }
 
-    pub fn generate_chunk(&self, pos: AbsChunkPos, chunk: &mut Chunk<ECD>, block_registry: &Registry<BlockDefinition>) {
-        let chunk_blocks = &mut chunk.blocks;
+    pub fn generate_chunk(&self, pos: AbsChunkPos, chunk: &mut PaletteStorage<BlockEntry>, block_registry: &Registry<BlockDefinition>) {
         let (i_air, _) = block_registry.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
         let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
         let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
@@ -343,36 +340,13 @@ impl<ECD> StdGenerator<ECD> where ECD: Clone + Default {
 
         for (pos_x, pos_y, pos_z) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM, 0..CHUNK_DIM) {
             let b_pos = InChunkPos::try_new(pos_x, pos_y, pos_z).unwrap();
-            //let xc = (vidx % CHUNK_DIM) as i32;
-            //let zc = ((vidx / CHUNK_DIM) % CHUNK_DIM) as i32;
-            //let yc = ((vidx / CHUNK_DIM / CHUNK_DIM) % CHUNK_DIM) as i32;
-            ////let x = (chunk.position.0.x * VCD) as i32 + xc;
             let y = (pos.y * CHUNK_DIM) + pos_y;
-            ////let z = (chunk.position.0.z * VCD) as i32 + zc;
-            //let vp = vparams[(xc + zc * (CHUNK_DIM as i32)) as usize];
             let vp = vparams[(pos_x + pos_z * (CHUNK_DIM as i32)) as usize];
 
             let h = vp.height - (pos.y * CHUNK_DIM);
-                        
-            //if h > 0 {
-            //    chunk_blocks.put(InChunkPos::try_new(pos_x, h, pos_x).unwrap(), BlockEntry::new(i_dirt, 0));
 
-            //    let max_x = if pos_x >= CHUNK_DIM - 1 { 0 } else { pos_x + 1 };
-            //    let max_z = if pos_z >= CHUNK_DIM - 1 { 0 } else { pos_z + 1 };
-            //    
-            //    let bottom = InChunkPos::try_new(pos_x, 0, pos_z).unwrap();
-            //    let surface_minus_5 = InChunkPos::try_new(max_x, h - 5, max_z).unwrap();
-            //    let surface_minus_1 = InChunkPos::try_new(pos_x, h - 1, pos_z).unwrap();
-            //    let surface = InChunkPos::try_new(max_x, h, max_z).unwrap();
-
-            //    chunk_blocks.fill(InChunkRange::from_corners(bottom, surface_minus_5), BlockEntry::new(i_stone, 0));
-            //    chunk_blocks.fill(InChunkRange::from_corners(surface_minus_5, surface_minus_1), BlockEntry::new(i_dirt, 0));
-            //    chunk_blocks.fill(InChunkRange::from_corners(surface_minus_1, surface), if vp.elevation == VPElevation::Mountain { BlockEntry::new(i_snow_grass, 0) } else { BlockEntry::new(i_grass, 0) });
-            //    //println!("Amount of generated blocks at chunk=[{0},{1},{2}] x={pos_x},z={pos_z}: {h}", pos.x, pos.y, pos.z)
-            //}
-//            chunk_blocks.put(b_pos, BlockEntry::new(i_dirt, 0));
-            if (h > 0) {
-                chunk_blocks.put(b_pos, BlockEntry::new(
+            if h >= 0 {
+                chunk.put(b_pos, BlockEntry::new(
                     if pos_y == h {
                             if vp.elevation == VPElevation::Mountain && y > 80 {
                                 i_snow_grass
@@ -388,9 +362,6 @@ impl<ECD> StdGenerator<ECD> where ECD: Clone + Default {
                         },
                     0));
             }
-            //if pos_y - h - 16 < 0 {
-            //    chunk_blocks.put(b_pos, BlockEntry::new(i_stone, 0));
-            //}
         }
     }
 }

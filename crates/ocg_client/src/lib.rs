@@ -112,26 +112,13 @@ mod debug_window {
         setup_basic_blocks(&mut block_reg);
         let block_reg = block_reg;
         let (empty, _) = block_reg.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
-        let (stone, _) = block_reg.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
-        let (grass, _) = block_reg.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
 
         let generator = StdGenerator::new(0);
         let mut test_chunks = ClientChunkGroup::new();
-        for (cx, cy, cz) in iproduct!(-4..=4, -4..=4, -4..=4) {
+        for (cx, cy, cz) in iproduct!(-8..=8, -8..=8, -8..=8) {
             let cpos = AbsChunkPos::new(cx, cy, cz);
             let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
-            /*for pos in InChunkRange::WHOLE_CHUNK.iter_xzy() {
-                if (pos.cmpeq(IVec3::splat(0)) | pos.cmpeq(IVec3::splat(31))).any() {
-                    // Empty borders to force a full render
-                    continue;
-                }
-                let fpos = (pos.as_vec3a() / Vec3A::splat(16.0)) - Vec3A::splat(1.0);
-                if fpos.length_squared() <= 0.75 {
-                    let id = if fpos.y < 0.2 { stone } else { grass };
-                    chunk.blocks.put(pos, BlockEntry::new(id, 0));
-                }
-            }*/
-            generator.generate_chunk(cpos, &mut chunk, &block_reg);
+            generator.generate_chunk(cpos, &mut chunk.blocks, &block_reg);
             test_chunks.chunks.insert(cpos, chunk);
         }
         for (pos, _) in test_chunks.chunks.iter() {
