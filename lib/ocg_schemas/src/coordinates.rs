@@ -40,7 +40,7 @@ pub struct InChunkIndexError(usize);
 /// A block position inside of a chunk, limited to 0..=[CHUNK_DIM]
 pub struct InChunkPos(pub(crate) IVec3);
 
-#[derive(Copy, Clone, PartialEq, Hash, Debug, Default, Pod, Zeroable, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Pod, Zeroable, Serialize, Deserialize)]
 #[repr(C)]
 /// A range of block positions inside of a chunk, with coordinates limited to 0..[CHUNK_DIM] (min&max are *inclusive*)
 pub struct InChunkRange {
@@ -48,7 +48,13 @@ pub struct InChunkRange {
     pub(crate) max: InChunkPos,
 }
 
-impl Eq for InChunkRange {}
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Pod, Zeroable, Serialize, Deserialize)]
+#[repr(C)]
+/// A range of chunk positions (min&max are *inclusive*)
+pub struct AbsChunkRange {
+    pub(crate) min: AbsChunkPos,
+    pub(crate) max: AbsChunkPos,
+}
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Pod, Zeroable, Serialize, Deserialize)]
 #[repr(transparent)]
@@ -325,6 +331,71 @@ impl InChunkRange {
     }
 }
 
+impl AbsChunkRange {
+    /// Empty range containing no chunks, originating at (0, 0, 0).
+    pub const ZERO: Self = Self::from_corners(AbsChunkPos::ZERO, AbsChunkPos::ZERO);
+    /// A single chunk at (0, 0, 0).
+    pub const BLOCK_AT_ZERO: Self = Self::from_corners(AbsChunkPos::ZERO, AbsChunkPos::ONE);
+
+    /// Constructs a new range from two (inclusive) corner positions.
+    pub const fn from_corners(a: AbsChunkPos, b: AbsChunkPos) -> Self {
+        // Min/max manually implemented to allow for `const` calls
+        let (min_x, max_x) = if a.0.x < b.0.x {
+            (a.0.x, b.0.x)
+        } else {
+            (b.0.x, (a.0.x))
+        };
+        let (min_y, max_y) = if a.0.y < b.0.y {
+            (a.0.y, b.0.y)
+        } else {
+            (b.0.y, (a.0.y))
+        };
+        let (min_z, max_z) = if a.0.z < b.0.z {
+            (a.0.z, b.0.z)
+        } else {
+            (b.0.z, (a.0.z))
+        };
+        let min = AbsChunkPos(IVec3::new(min_x, min_y, min_z));
+        let max = AbsChunkPos(IVec3::new(max_x, max_y, max_z));
+        Self { min, max }
+    }
+
+    /// Checks if the range has any blocks, false if one or more of the dimensions are zero.
+    pub const fn is_empty(self) -> bool {
+        (self.min.0.x == self.max.0.x) || (self.min.0.y == self.max.0.y) || (self.min.0.z == self.max.0.z)
+    }
+
+    /// Checks if the range covers the entire chunk
+    pub const fn is_everything(self) -> bool {
+        self.min.0.x == 0
+            && self.min.0.y == 0
+            && self.min.0.z == 0
+            && self.max.0.x == (CHUNK_DIM - 1)
+            && self.max.0.y == (CHUNK_DIM - 1)
+            && self.max.0.z == (CHUNK_DIM - 1)
+    }
+
+    /// Returns the corner with the smallest coordinates.
+    pub const fn min(self) -> AbsChunkPos {
+        self.min
+    }
+
+    /// Returns the corner with the largest coordinates.
+    pub const fn max(self) -> AbsChunkPos {
+        self.max
+    }
+
+    /// Returns an iterator over all the coordinates inside this range, in XZY order.
+    pub fn iter_xzy(self) -> impl Iterator<Item = AbsChunkPos> {
+        itertools::iproduct!(
+            self.min.y..=self.max.y,
+            self.min.z..=self.max.z,
+            self.min.x..=self.max.x
+        )
+        .map(|(y, z, x)| AbsChunkPos(IVec3::new(y, z, x)))
+    }
+}
+
 // === AbsChunkPos
 impl_simple_ivec3_newtype!(AbsChunkPos);
 
@@ -341,6 +412,13 @@ impl From<AbsBlockPos> for AbsChunkPos {
 // === RelChunkPos
 impl_simple_ivec3_newtype!(RelChunkPos);
 impl_rel_abs_pair!(RelChunkPos, AbsChunkPos);
+
+impl From<AbsChunkPos> for RelChunkPos {
+    fn from(value: AbsChunkPos) -> Self {
+        Self(value.0)
+    }
+}
+
 // === AbsBlockPos
 impl_simple_ivec3_newtype!(AbsBlockPos);
 

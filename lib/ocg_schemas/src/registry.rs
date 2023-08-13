@@ -254,6 +254,16 @@ impl<Object: RegistryObject> Registry<Object> {
     pub fn lookup_id_to_object(&self, id: RegistryId) -> Option<&Object> {
         self.id_to_obj.get(id.0.get() as usize)?.as_ref()
     }
+
+    /// Get all objects in this registry, in no particular order.
+    pub fn get_objects(&self) -> Vec<Option<&Object>> {
+        self.id_to_obj.iter().map(|x| x.as_ref()).collect()
+    }
+
+    /// Get all registry IDs in this registry, in no particular oder.
+    pub fn get_ids(&self) -> Vec<&RegistryId> {
+        self.name_to_id.values().collect()
+    }
 }
 
 #[cfg(test)]

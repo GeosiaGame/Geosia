@@ -1,7 +1,9 @@
+//! Default world generator
+
 use bevy::math::{ivec2, IVec2, DVec2};
 use lru::LruCache;
-use noise::{NoiseFn, Seedable, SuperSimplex};
-use ocg_schemas::{voxel::{chunk_storage::{PaletteStorage, ChunkStorage}, voxeltypes::{BlockEntry, BlockDefinition, EMPTY_BLOCK_NAME}, chunk::Chunk}, coordinates::{AbsChunkPos, InChunkPos, InChunkRange}, registry::Registry, dependencies::itertools::iproduct};
+use noise::{NoiseFn, SuperSimplex};
+use ocg_schemas::{voxel::{chunk_storage::{PaletteStorage, ChunkStorage}, voxeltypes::{BlockEntry, BlockDefinition, EMPTY_BLOCK_NAME}, biome::{VPElevation, VPMoisture, VPTemperature, BiomeDefinition, biome_map::{self, BiomeMap}, biome_picker::BiomeGenerator, RuleSrc}}, coordinates::{AbsChunkPos, InChunkPos, AbsChunkRange}, registry::Registry, dependencies::itertools::iproduct};
 use rand::prelude::*;
 use rand_xoshiro::Xoshiro256StarStar;
 use std::cell::RefCell;
@@ -12,6 +14,8 @@ use ocg_schemas::coordinates::{CHUNK_DIM, CHUNK_DIMZ};
 
 use super::blocks::*;
 use super::noise::fbm_noise::Fbm;
+
+pub mod rule_sources;
 
 const GLOBAL_SCALE_MOD: f64 = 2.0;
 const GLOBAL_BIOME_SCALE: f64 = 256.0;
@@ -28,11 +32,17 @@ struct CellPoint {
     pos: IVec2,
     /// 0..1
     elevation_class: f64,
+    /// 0..1
+    moisture_class: f64,
+    /// 0..1
+    temperature_class: f64,
 }
 
 impl CellPoint {
     pub fn calc(&mut self, cg: &mut CellGen) {
         self.elevation_class = cg.elevation_noise(self.pos);
+        self.moisture_class = cg.moisture_noise(self.pos);
+        self.temperature_class = cg.temperature_noise(self.pos);
     }
 }
 
@@ -41,35 +51,9 @@ impl Default for CellPoint {
         Self {
             pos: ivec2(0, 0),
             elevation_class: 0.0,
+            moisture_class: 0.0,
+            temperature_class: 0.0,
         }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum VPElevation {
-    LowLand,
-    Hill,
-    Mountain,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum VPMoisture {
-    Deadland,
-    Desert,
-    LowMoist,
-    MedMoist,
-    HiMoist,
-}
-
-impl Default for VPElevation {
-    fn default() -> Self {
-        VPElevation::LowLand
-    }
-}
-
-impl Default for VPMoisture {
-    fn default() -> Self {
-        VPMoisture::MedMoist
     }
 }
 
@@ -78,6 +62,7 @@ struct VoxelParams {
     height: i32,
     elevation: VPElevation,
     moisture: VPMoisture,
+    temperature: VPTemperature,
 }
 
 struct CellGen {
@@ -85,6 +70,7 @@ struct CellGen {
     height_map_gen: [Fbm<SuperSimplex>; 5],
     elevation_map_gen: Fbm<SuperSimplex>,
     moisture_map_gen: Fbm<SuperSimplex>,
+    temperature_map_gen: Fbm<SuperSimplex>,
     cell_points: LruCache<IVec2, CellPointsT>,
     nearest_buf: Vec<(i32, CellPoint)>,
 }
@@ -103,6 +89,7 @@ impl CellGen {
             height_map_gen: [simplex.clone(), simplex.clone(), simplex.clone(), simplex.clone(), simplex.clone()], // init like this because Fbm can't implement copy
             elevation_map_gen: simplex.clone(),
             moisture_map_gen: simplex.clone(),
+            temperature_map_gen: simplex.clone(),
             cell_points: LruCache::new(64.try_into().unwrap()),
             nearest_buf: Vec::with_capacity(16),
         };
@@ -120,6 +107,7 @@ impl CellGen {
         }
         Fbm::set_seed(&mut self.elevation_map_gen, sdgen.next_u32());
         Fbm::set_seed(&mut self.moisture_map_gen, sdgen.next_u32());
+        Fbm::set_seed(&mut self.temperature_map_gen, sdgen.next_u32());
         self.cell_points.clear();
     }
 
@@ -184,6 +172,18 @@ impl CellGen {
         nf(pos.as_dvec2() / scale_factor)
     }
 
+    fn moisture_noise(&self, pos: IVec2) -> f64 {
+        let nf = |p: DVec2| (self.moisture_map_gen.get([p.x, p.y]) + 1.0) / 2.0;
+        let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
+        nf(pos.as_dvec2() / scale_factor)
+    }
+
+    fn temperature_noise(&self, pos: IVec2) -> f64 {
+        let nf = |p: DVec2| (self.temperature_map_gen.get([p.x, p.y]) + 1.0) / 2.0;
+        let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
+        nf(pos.as_dvec2() / scale_factor)
+    }
+
     /// 0..=1 height noise
     fn h_n(&self, i: usize, p: DVec2) -> f64 {
         let point: [f64; 2] = [p.x as f64, p.y as f64];
@@ -227,6 +227,7 @@ impl CellGen {
         self.find_nearest_cell_points(pos, 1);
         let cp = self.nearest_buf[0].1;
         let cec = cp.elevation_class;
+        let cmc = cp.moisture_class;
         let ec = self.elevation_noise(pos);
 
         let height: f64;
@@ -277,12 +278,26 @@ impl CellGen {
             elevation = VPElevation::Mountain;
         }
 
-        let moisture = VPMoisture::MedMoist;
+        let moisture: VPMoisture;
+        if cmc < 0.2 {
+            moisture = VPMoisture::Deadland;
+        } else if cmc < 0.4 {
+            moisture = VPMoisture::Desert;
+        } else if cmc < 0.6 {
+            moisture = VPMoisture::LowMoist;
+        } else if cmc < 0.8 {
+            moisture = VPMoisture::MedMoist;
+        } else {
+             moisture = VPMoisture::HiMoist
+        }
+
+        let temperature = VPTemperature::MedTemp;
 
         VoxelParams {
             height: height.round() as i32,
             elevation,
             moisture,
+            temperature,
         }
     }
 }
@@ -295,21 +310,30 @@ impl Default for CellGen {
 
 pub struct StdGenerator {
     seed: u64,
+    biome_gen: RefCell<BiomeGenerator>,
     cell_gen: ThreadLocal<RefCell<CellGen>>,
 }
 
 impl Default for StdGenerator {
     fn default() -> Self {
-        Self::new(0)
+        Self::new(0, BiomeGenerator::new(0))
     }
 }
 
 impl StdGenerator {
-    pub fn new(seed: u64) -> Self {
+    pub fn new(seed: u64, biome_gen: BiomeGenerator) -> Self {
         Self {
             seed,
+            biome_gen: RefCell::new(biome_gen),
             cell_gen: ThreadLocal::default(),
         }
+    }
+
+    pub fn generate_area_biome_map(&self, area: AbsChunkRange, biome_map: &mut BiomeMap, biome_registry: &Registry<BiomeDefinition<RuleSrc>>) {
+        let mut biomegen = self
+            .biome_gen
+            .borrow_mut();
+        biomegen.generate_area_biomes(area, biome_map, biome_registry);
     }
 
     pub fn generate_chunk(&self, pos: AbsChunkPos, chunk: &mut PaletteStorage<BlockEntry>, block_registry: &Registry<BlockDefinition>) {
@@ -322,6 +346,10 @@ impl StdGenerator {
         let mut cellgen = self
             .cell_gen
             .get_or(|| RefCell::new(CellGen::new(self.seed)))
+            .borrow_mut();
+        
+        let biomegen = self
+            .biome_gen
             .borrow_mut();
 
         let vparams: [VoxelParams; CHUNK_DIMZ * CHUNK_DIMZ] = {
@@ -341,7 +369,7 @@ impl StdGenerator {
         for (pos_x, pos_y, pos_z) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM, 0..CHUNK_DIM) {
             let b_pos = InChunkPos::try_new(pos_x, pos_y, pos_z).unwrap();
             let y = (pos.y * CHUNK_DIM) + pos_y;
-            let vp = vparams[(pos_x + pos_z * (CHUNK_DIM as i32)) as usize];
+            let vp = vparams[(pos_x + pos_z * (CHUNK_DIM)) as usize];
 
             let h = vp.height - (pos.y * CHUNK_DIM);
 

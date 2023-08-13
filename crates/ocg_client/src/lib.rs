@@ -74,13 +74,16 @@ pub fn client_main() {
 
 mod debug_window {
     use bevy::log;
-    use bevy::math::Vec3A;
     use bevy::prelude::*;
-    use ocg_common::voxel::blocks::{setup_basic_blocks, GRASS_BLOCK_NAME, STONE_BLOCK_NAME};
+    use ocg_common::voxel::biomes::setup_basic_biomes;
+    use ocg_common::voxel::blocks::setup_basic_blocks;
     use ocg_common::voxel::generator::StdGenerator;
-    use ocg_schemas::coordinates::{AbsChunkPos, InChunkPos, InChunkRange, CHUNK_DIM};
+    use ocg_schemas::coordinates::AbsChunkPos;
+    use ocg_schemas::coordinates::AbsChunkRange;
     use ocg_schemas::dependencies::itertools::iproduct;
-    use ocg_schemas::voxel::chunk_storage::ChunkStorage;
+    use ocg_schemas::voxel::biome::BiomeRegistry;
+    use ocg_schemas::voxel::biome::biome_map::BiomeMap;
+    use ocg_schemas::voxel::biome::biome_picker::BiomeGenerator;
     use ocg_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME};
 
     use crate::voxel::meshgen::mesh_from_chunk;
@@ -113,7 +116,14 @@ mod debug_window {
         let block_reg = block_reg;
         let (empty, _) = block_reg.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
 
-        let generator = StdGenerator::new(0);
+        let mut biome_reg = BiomeRegistry::default();
+        setup_basic_biomes(&mut biome_reg);
+        let biome_reg = biome_reg;
+
+        let mut biome_map = BiomeMap::default();
+        let generator = StdGenerator::new(0, BiomeGenerator::new(0));
+        generator.generate_area_biome_map(AbsChunkRange::from_corners(AbsChunkPos::new(-8, -8, -8), AbsChunkPos::new(8, 8, 8)), &mut biome_map, &biome_reg);
+
         let mut test_chunks = ClientChunkGroup::new();
         for (cx, cy, cz) in iproduct!(-8..=8, -8..=8, -8..=8) {
             let cpos = AbsChunkPos::new(cx, cy, cz);

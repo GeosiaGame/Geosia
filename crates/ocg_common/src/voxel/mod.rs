@@ -2,5 +2,6 @@
 #![allow(missing_docs)]
 
 pub mod blocks;
+pub mod biomes;
 pub mod generator;
 pub mod noise;
