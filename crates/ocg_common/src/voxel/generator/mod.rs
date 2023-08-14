@@ -13,7 +13,6 @@ use thread_local::ThreadLocal;
 use ocg_schemas::coordinates::{CHUNK_DIM, CHUNK_DIMZ};
 
 use super::blocks::*;
-use super::noise::fbm_noise::Fbm;
 
 const GLOBAL_SCALE_MOD: f64 = 2.0;
 const GLOBAL_BIOME_SCALE: f64 = 256.0;

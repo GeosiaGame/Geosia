@@ -1,5 +1,6 @@
+//! bBm noise function with configurable per-octave strength.
+
 use noise::{NoiseFn, Seedable};
-//use alloc::vec::Vec;
 use bevy_math::{DVec2, DVec3, DVec4};
 
 /// Noise function that outputs fBm (fractal Brownian motion) noise.

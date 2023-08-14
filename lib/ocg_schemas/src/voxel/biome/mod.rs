@@ -2,13 +2,14 @@
 
 use std::fmt::Debug;
 
-use noise::NoiseFn;
+use dyn_clone::DynClone;
+use noise::{NoiseFn, SuperSimplex, Perlin, Worley, Constant};
 use rgb::RGBA8;
 use serde::{Serialize, Deserialize};
 
 use crate::registry::{Registry, RegistryName, RegistryObject, RegistryId};
 
-use super::{voxeltypes::BlockEntry, generation::{RuleSource, ConditionSource, rule_sources::EmptyRuleSource}};
+use super::generation::{RuleSource, ConditionSource, fbm_noise::Fbm};
 
 
 pub mod biome_map;
@@ -27,7 +28,11 @@ pub struct BiomeEntry {
 pub type RuleSrc = dyn RuleSource;
 /// Holy shit another one
 pub type ConditionSrc = dyn ConditionSource;
-pub type NoiseFn2 = dyn NoiseFn<f64, 2> + Sync;
+
+pub trait NoiseFn2Trait: NoiseFn<f64, 2> + DynClone + Debug + Sync + Send {}
+dyn_clone::clone_trait_object!(NoiseFn2Trait);
+
+pub type NoiseFn2 = dyn NoiseFn2Trait;
 
 /// A named registry of block definitions.
 pub type BiomeRegistry = Registry<BiomeDefinition>;
@@ -48,7 +53,7 @@ impl Debug for BiomeEntry {
 }
 
 /// A definition of a biome type, specifying properties such as registry name, shape, textures.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct BiomeDefinition {
     /// The unique registry name
     pub name: RegistryName,
@@ -63,10 +68,9 @@ pub struct BiomeDefinition {
     /// Moisture of this biome.
     pub moisture: VPMoisture,
     /// The block placement rule source for this biome.
-    #[serde(skip)]
-    pub rule_source: &'static RuleSrc,
-    #[serde(skip)]
-    pub surface_noise: &'static NoiseFn2,
+    pub rule_source: Box<RuleSrc>,
+    /// The noise function for this biome.
+    pub surface_noise: Box<NoiseFn2>,
 }
 
 impl BiomeDefinition {}
@@ -126,35 +130,10 @@ impl Default for VPTemperature {
     }
 }
 
-/// Always-true condition.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct AlwaysTrueCondition();
-
-impl ConditionSource for AlwaysTrueCondition {
-    fn test(&mut self, pos: bevy_math::IVec3, context: &super::generation::Context) -> bool {
-        true
-    }
-}
-
-impl Debug for AlwaysTrueCondition {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("AlwaysTrueCondition").finish()
-    }
-}
-
 /// The registry name of [`EMPTY_BIOME`]
 pub const EMPTY_BIOME_NAME: RegistryName = RegistryName::ocg_const("empty");
 
-/// The empty biome definition, used when no specific biomes have been generated
-pub static EMPTY_BIOME: BiomeDefinition = BiomeDefinition {
-    name: EMPTY_BIOME_NAME,
-    representative_color: RGBA8::new(0, 0, 0, 0),
-    size_chunks: 0,
-    elevation: VPElevation::LowLand,
-    temperature: VPTemperature::MedTemp,
-    moisture: VPMoisture::MedMoist,
-    rule_source: &EmptyRuleSource(),
-    surface_noise: &noise::Constant {
-        value: 0.0
-    },
-};
+impl NoiseFn2Trait for Constant {}
+impl NoiseFn2Trait for Fbm<SuperSimplex> {}
+impl NoiseFn2Trait for SuperSimplex {}
+impl NoiseFn2Trait for Perlin {}

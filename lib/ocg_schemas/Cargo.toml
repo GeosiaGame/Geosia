@@ -36,6 +36,8 @@ thiserror.workspace = true
 rand.workspace = true
 rand_xoshiro.workspace = true
 noise.workspace = true
+typetag.workspace = true
+dyn-clone.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

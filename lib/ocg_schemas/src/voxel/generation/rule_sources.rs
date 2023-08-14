@@ -8,27 +8,28 @@ use crate::voxel::voxeltypes::BlockEntry;
 use super::RuleSource;
 
 /// Empty Rule source. Does nothing.
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct EmptyRuleSource();
 
+#[typetag::serde]
 impl RuleSource for EmptyRuleSource {
-    fn place(self: &mut Self, pos: &bevy_math::IVec3, context: &super::Context, block_registry: &crate::voxel::voxeltypes::BlockRegistry) -> Option<BlockEntry> {
+    fn place(self: &mut Self, _pos: &bevy_math::IVec3, _context: &super::Context, _block_registry: &crate::voxel::voxeltypes::BlockRegistry) -> Option<BlockEntry> {
         None
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 /// Rule source that runs `result`, but only if `condition` succeeds.
 pub struct ConditionRuleSource {
     /// The condition to test for.
-    condition: &'static ConditionSrc,
+    condition: Box<ConditionSrc>,
     /// The Function to run.
-    result: &'static RuleSrc,
+    result: Box<RuleSrc>,
 }
 
 impl ConditionRuleSource {
     /// Helper for creating new `ConditionRuleSource`s
-    pub fn new(condition: &'static ConditionSrc, result: &'static RuleSrc) -> Self {
+    pub fn new(condition: Box<ConditionSrc>, result: Box<RuleSrc>) -> Self {
         Self {
             condition: condition,
             result: result
@@ -36,6 +37,7 @@ impl ConditionRuleSource {
     }
 }
 
+#[typetag::serde]
 impl RuleSource for ConditionRuleSource {
     fn place(self: &mut Self, pos: &bevy_math::IVec3, context: &super::Context, block_registry: &crate::voxel::voxeltypes::BlockRegistry) -> Option<BlockEntry> {
         if self.condition.test(*pos, context) {
@@ -46,22 +48,23 @@ impl RuleSource for ConditionRuleSource {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 /// Rule source that runs `result`s until one returns non-empty.
 pub struct ChainRuleSource {
     /// The Function(s) to run.
-    rules: Vec<&'static RuleSrc>,
+    rules: Vec<Box<RuleSrc>>,
 }
 
 impl ChainRuleSource {
     /// Helper for creating new `ChainRuleSource`s
-    pub fn new(rules: Vec<&'static RuleSrc>) -> Self {
+    pub fn new(rules: Vec<Box<RuleSrc>>) -> Self {
         Self {
             rules: rules
         }
     }
 }
 
+#[typetag::serde]
 impl RuleSource for ChainRuleSource {
     fn place(self: &mut Self, pos: &bevy_math::IVec3, context: &super::Context, block_registry: &crate::voxel::voxeltypes::BlockRegistry) -> Option<BlockEntry> {
         for rule in self.rules.iter_mut() {
@@ -74,7 +77,7 @@ impl RuleSource for ChainRuleSource {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 /// Rule source that returns a BlockEntry.
 pub struct BlockRuleSource {
     /// The `BlockEntry` this returns.
@@ -90,6 +93,7 @@ impl BlockRuleSource {
     }
 }
 
+#[typetag::serde]
 impl RuleSource for BlockRuleSource {
     fn place(self: &mut Self, _pos: &bevy_math::IVec3, _context: &super::Context, _block_registry: &crate::voxel::voxeltypes::BlockRegistry) -> Option<BlockEntry> {
         Some(self.entry)

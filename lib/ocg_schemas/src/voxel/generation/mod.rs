@@ -2,10 +2,10 @@
 
 use std::fmt::Debug;
 
+use dyn_clone::DynClone;
 use bevy_math::IVec3;
 use hashbrown::HashMap;
 use noise::{NoiseFn, Seedable};
-use serde::{Serializer, Deserializer, Serialize, Deserialize};
 
 use crate::{voxel::{biome::biome_picker::BiomeGenerator, chunk::Chunk}, registry::RegistryName};
 
@@ -26,19 +26,27 @@ pub struct Context {
     biome_generator: BiomeGenerator,
     chunk: GenerationChunk,
     random: PositionalRandomFactory<rand_xoshiro::Xoshiro512StarStar>,
+    ground_y: i32,
 }
 
 /// Block placement rule source.
-pub trait RuleSource: Sync + Debug {
+#[typetag::serde(tag = "rule_source")]
+pub trait RuleSource: Sync + Send + Debug + DynClone {
     /// Placement function
     fn place(self: &mut Self, pos: &IVec3, context: &Context, block_registry: &BlockRegistry) -> Option<BlockEntry>;
 }
 
+dyn_clone::clone_trait_object!(RuleSource);
+
 /// Block placement condition. Used for testing if a certain position is valid etc.
-pub trait ConditionSource: Sync + Debug {
+#[typetag::serde(tag = "condition_source")]
+pub trait ConditionSource: Sync + Send + Debug + DynClone {
     /// Wether a block is valid.
     fn test(self: &mut Self, pos: IVec3, context: &Context) -> bool;
 }
+
+dyn_clone::clone_trait_object!(ConditionSource);
+
 
 /// Worldgen-only per-chunk data storage
 #[derive(Clone, Default)]
@@ -74,38 +82,4 @@ where
         sources.push(source.set_seed(seed + (octaves[x] * 100.0) as u32));
     }
     sources
-}
-
-/// Fake trait for adding Copy to RuleSource
-pub trait RuleSourceClone {
-    /// dumb helper function
-    fn serialize_trait<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer, Self: Sized;
-    fn deserialize_trait<'de, D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de>, Self: Sized;
-    fn default_trait() -> Self where Self: Sized;
-}
-
-impl<T> RuleSourceClone for T where T: 'static + RuleSource + Clone + Default + Serialize + for<'a> Deserialize<'a> {
-    fn serialize_trait<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer, Self: Sized {
-        self.serialize_trait(serializer)
-    }
-
-    fn deserialize_trait<'de, D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de>, Self: Sized {
-        Self::deserialize(deserializer)
-    }
-
-    fn default_trait() -> Self where Self: Sized {
-        Self::default()
-    }
-}
-
-impl Serialize for (dyn RuleSource) where (dyn RuleSource): Sized + Clone + Default {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
-        self.serialize_trait(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for (dyn RuleSource) where (dyn RuleSource): Sized + Clone + Default {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
-        Self::deserialize_trait(deserializer)
-    }
 }
