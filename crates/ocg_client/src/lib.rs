@@ -117,18 +117,18 @@ mod debug_window {
         let (empty, _) = block_reg.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
 
         let mut biome_reg = BiomeRegistry::default();
-        setup_basic_biomes(&mut biome_reg);
+        setup_basic_biomes(&block_reg, &mut biome_reg);
         let biome_reg = biome_reg;
 
         let mut biome_map = BiomeMap::default();
-        let generator = StdGenerator::new(0, BiomeGenerator::new(0));
-        generator.generate_area_biome_map(AbsChunkRange::from_corners(AbsChunkPos::new(-8, -8, -8), AbsChunkPos::new(8, 8, 8)), &mut biome_map, &biome_reg);
+        let mut generator = StdGenerator::new(0, BiomeMap::default(), BiomeGenerator::new(0));
+        generator.generate_area_biome_map(AbsChunkRange::from_corners(AbsChunkPos::new(-8, -8, -8), AbsChunkPos::new(8, 8, 8)), &biome_reg);
 
         let mut test_chunks = ClientChunkGroup::new();
         for (cx, cy, cz) in iproduct!(-8..=8, -8..=8, -8..=8) {
             let cpos = AbsChunkPos::new(cx, cy, cz);
             let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
-            generator.generate_chunk(cpos, &mut chunk.blocks, &block_reg);
+            generator.generate_chunk(cpos, &mut chunk.blocks, &block_reg, &biome_reg);
             test_chunks.chunks.insert(cpos, chunk);
         }
         for (pos, _) in test_chunks.chunks.iter() {

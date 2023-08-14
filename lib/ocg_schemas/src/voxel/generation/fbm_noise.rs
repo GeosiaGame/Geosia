@@ -93,6 +93,7 @@ where
         }
     }
 
+    /// Sets the octave list and returns a new fBm noise generator.
     pub fn set_octaves(&self, octaves: Vec<f64>) -> Self {
         Self {
             sources: super::build_sources(self.seed, &octaves),
@@ -107,14 +108,17 @@ where
         Self { sources, ..self }
     }
 
+    /// Sets the frequency and returns a new fBm noise generator.
     pub fn set_frequency(self, frequency: f64) -> Self {
         Self { frequency, ..self }
     }
     
+    /// Sets the lacunarity and returns a new fBm noise generator.
     pub fn set_lacunarity(self, lacunarity: f64) -> Self {
         Self { lacunarity, ..self }
     }
 
+    /// Sets the persistence and returns a new fBm noise generator.
     pub fn set_persistence(self, persistence: f64) -> Self {
         Self {
             persistence,
@@ -122,7 +126,8 @@ where
             ..self
         }
     }
-    
+
+    /// Sets the seed for this noise.
     pub fn set_seed(&mut self, seed: u32) {
         if self.seed == seed {
             return;

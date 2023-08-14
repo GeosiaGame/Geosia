@@ -11,7 +11,7 @@ use crate::{voxel::{biome::biome_picker::BiomeGenerator, chunk::Chunk}, registry
 
 use self::positional_random::PositionalRandomFactory;
 
-use super::voxeltypes::{BlockEntry, BlockRegistry};
+use super::{voxeltypes::{BlockEntry, BlockRegistry}, chunk_storage::PaletteStorage};
 
 pub mod fbm_noise;
 pub mod positional_random;
@@ -22,18 +22,18 @@ pub mod condition_sources;
 pub type GenerationChunk = Chunk<GenerationChunkData>;
 
 /// Context data for world generation.
-pub struct Context {
-    biome_generator: BiomeGenerator,
-    chunk: GenerationChunk,
-    random: PositionalRandomFactory<rand_xoshiro::Xoshiro512StarStar>,
-    ground_y: i32,
+pub struct Context<'a> {
+    pub biome_generator: &'a BiomeGenerator,
+    pub chunk: &'a PaletteStorage<BlockEntry>,
+    pub random: PositionalRandomFactory<rand_xoshiro::Xoshiro512StarStar>,
+    pub ground_y: i32,
 }
 
 /// Block placement rule source.
 #[typetag::serde(tag = "rule_source")]
 pub trait RuleSource: Sync + Send + Debug + DynClone {
     /// Placement function
-    fn place(self: &mut Self, pos: &IVec3, context: &Context, block_registry: &BlockRegistry) -> Option<BlockEntry>;
+    fn place(self: &Self, pos: &IVec3, context: &Context, block_registry: &BlockRegistry) -> Option<BlockEntry>;
 }
 
 dyn_clone::clone_trait_object!(RuleSource);
@@ -42,7 +42,7 @@ dyn_clone::clone_trait_object!(RuleSource);
 #[typetag::serde(tag = "condition_source")]
 pub trait ConditionSource: Sync + Send + Debug + DynClone {
     /// Wether a block is valid.
-    fn test(self: &mut Self, pos: IVec3, context: &Context) -> bool;
+    fn test(self: &Self, pos: &IVec3, context: &Context) -> bool;
 }
 
 dyn_clone::clone_trait_object!(ConditionSource);
@@ -57,7 +57,7 @@ pub struct GenerationChunkData {
 /// Manager for different noise functions.
 pub struct NoiseManager {
     // just add a `noise_2d` etc. when need be.
-    noise_3d: HashMap<RegistryName, &'static dyn NoiseFn<f64, 3>>,
+    noise_3d: HashMap<RegistryName, Box<dyn NoiseFn<f64, 3>>>,
 }
 
 impl NoiseManager {
@@ -67,7 +67,7 @@ impl NoiseManager {
     }
 
     /// Adds a noise to the noise manager. IF it already contains one with the same id, the old one is removed.
-    pub fn add_noise_3d(&mut self, id: RegistryName, noise: &'static dyn NoiseFn<f64, 3>) {
+    pub fn add_noise_3d(&mut self, id: RegistryName, noise: Box<dyn NoiseFn<f64, 3>>) {
         self.noise_3d.insert(id, noise);
     }
 }

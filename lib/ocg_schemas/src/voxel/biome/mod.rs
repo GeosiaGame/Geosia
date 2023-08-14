@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 
 use dyn_clone::DynClone;
-use noise::{NoiseFn, SuperSimplex, Perlin, Worley, Constant};
+use noise::{NoiseFn, SuperSimplex, Perlin, Constant};
 use rgb::RGBA8;
 use serde::{Serialize, Deserialize};
 
@@ -16,26 +16,12 @@ pub mod biome_map;
 pub mod biome_picker;
 
 /// A biome entry stored in the per-planet biome map.
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[repr(C)]
 pub struct BiomeEntry {
     /// The biome ID in registry.
     pub id: RegistryId,
 }
-
-/// God save my soul from the hell that is Rust generic types.
-/// You NEED to use this type alias everywhere where one is required, by the way. FUN.
-pub type RuleSrc = dyn RuleSource;
-/// Holy shit another one
-pub type ConditionSrc = dyn ConditionSource;
-
-pub trait NoiseFn2Trait: NoiseFn<f64, 2> + DynClone + Debug + Sync + Send {}
-dyn_clone::clone_trait_object!(NoiseFn2Trait);
-
-pub type NoiseFn2 = dyn NoiseFn2Trait;
-
-/// A named registry of block definitions.
-pub type BiomeRegistry = Registry<BiomeDefinition>;
 
 impl BiomeEntry {
     /// Helper to construct a new biome entry.
@@ -44,13 +30,29 @@ impl BiomeEntry {
             id: id,
         }
     }
-}
 
-impl Debug for BiomeEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BiomeEntry").field("id", &self.id).finish()
+    /// Helper to look up the biome definition corresponding to this ID
+    pub fn lookup(self, registry: &BiomeRegistry) -> Option<&BiomeDefinition> {
+        registry.lookup_id_to_object(self.id)
     }
 }
+
+
+/// God save my soul from the hell that is Rust generic types.
+/// You NEED to use this type alias everywhere where one is required, by the way. FUN.
+pub type RuleSrc = dyn RuleSource;
+/// Holy shit another one
+pub type ConditionSrc = dyn ConditionSource;
+/// WHERE DO THESE KEEP APPEARING FROM
+pub type NoiseFn2 = dyn NoiseFn2Trait;
+
+/// Helper trait for NoiseFn<f64, 2> + required extras
+pub trait NoiseFn2Trait: NoiseFn<f64, 2> + DynClone + Debug + Sync + Send {}
+dyn_clone::clone_trait_object!(NoiseFn2Trait);
+
+
+/// A named registry of block definitions.
+pub type BiomeRegistry = Registry<BiomeDefinition>;
 
 /// A definition of a biome type, specifying properties such as registry name, shape, textures.
 #[derive(Clone, Debug)]
