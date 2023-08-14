@@ -1,7 +1,7 @@
 //! The builtin biome types.
 //! Most of this will be moved to a "base" mod at some point in the future.
 
-use ocg_schemas::{voxel::biome::{BiomeRegistry, EMPTY_BIOME, BiomeDefinition, VPElevation, VPTemperature, VPMoisture}, registry::RegistryName, dependencies::rgb::RGBA8};
+use ocg_schemas::{voxel::{biome::{BiomeRegistry, BiomeDefinition, VPElevation, VPTemperature, VPMoisture, EMPTY_BIOME_NAME}, generation::{rule_sources::{EmptyRuleSource, ChainRuleSource, ConditionRuleSource}, fbm_noise::Fbm, condition_sources::YLevelCondition}}, registry::RegistryName, dependencies::rgb::RGBA8};
 
 
 /// Registry name for plains.
@@ -14,7 +14,16 @@ pub const HILLS_BIOME_NAME: RegistryName = RegistryName::ocg_const("hills");
 pub const MOUNTAINS_BIOME_NAME: RegistryName = RegistryName::ocg_const("mountains");
 
 pub fn setup_basic_biomes(registry: &mut BiomeRegistry) {
-    registry.push_object(EMPTY_BIOME.clone()).unwrap();
+    registry.push_object(BiomeDefinition {
+        name: EMPTY_BIOME_NAME,
+        representative_color: RGBA8::new(0, 0, 0, 0),
+        size_chunks: 0,
+        elevation: VPElevation::LowLand,
+        temperature: VPTemperature::MedTemp,
+        moisture: VPMoisture::MedMoist,
+        rule_source: Box::new(EmptyRuleSource()),
+        surface_noise: Box::new(noise::Constant {value: 0.0}),
+    }).unwrap();
     registry
         .push_object(BiomeDefinition {
             name: PLAINS_BIOME_NAME,
@@ -23,7 +32,8 @@ pub fn setup_basic_biomes(registry: &mut BiomeRegistry) {
             elevation: VPElevation::LowLand,
             temperature: VPTemperature::MedTemp,
             moisture: VPMoisture::MedMoist,
-            //rule_source: 
+            rule_source: Box::new(ChainRuleSource::new(vec![ConditionRuleSource::new(YLevelCondition::, result)])),
+            surface_noise: Box::new(Fbm::new(0)),
         })
         .unwrap();
     registry
@@ -34,6 +44,8 @@ pub fn setup_basic_biomes(registry: &mut BiomeRegistry) {
             elevation: VPElevation::Ocean,
             temperature: VPTemperature::MedTemp,
             moisture: VPMoisture::HiMoist,
+            rule_source: todo!(),
+            surface_noise: todo!(),
         })
         .unwrap();
     registry
@@ -44,6 +56,8 @@ pub fn setup_basic_biomes(registry: &mut BiomeRegistry) {
             elevation: VPElevation::Hill,
             temperature: VPTemperature::MedTemp,
             moisture: VPMoisture::MedMoist,
+            rule_source: todo!(),
+            surface_noise: todo!(),
         })
         .unwrap();
     registry
@@ -54,6 +68,8 @@ pub fn setup_basic_biomes(registry: &mut BiomeRegistry) {
             elevation: VPElevation::Mountain,
             temperature: VPTemperature::Freezing,
             moisture: VPMoisture::LowMoist,
+            rule_source: todo!(),
+            surface_noise: todo!(),
         })
         .unwrap();
 }
