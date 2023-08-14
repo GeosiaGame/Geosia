@@ -4,7 +4,8 @@ use std::fmt::Debug;
 
 use bevy_math::IVec3;
 use hashbrown::HashMap;
-use noise::NoiseFn;
+use noise::{NoiseFn, Seedable};
+use serde::{Serializer, Deserializer, Serialize, Deserialize};
 
 use crate::{voxel::{biome::biome_picker::BiomeGenerator, chunk::Chunk}, registry::RegistryName};
 
@@ -12,7 +13,10 @@ use self::positional_random::PositionalRandomFactory;
 
 use super::voxeltypes::{BlockEntry, BlockRegistry};
 
+pub mod fbm_noise;
 pub mod positional_random;
+pub mod rule_sources;
+pub mod condition_sources;
 
 /// Worldgen Chunk type.
 pub type GenerationChunk = Chunk<GenerationChunkData>;
@@ -27,13 +31,13 @@ pub struct Context {
 /// Block placement rule source.
 pub trait RuleSource: Sync + Debug {
     /// Placement function
-    fn place(self: &mut Self, pos: &IVec3, context: &Context, block_registry: &BlockRegistry) -> BlockEntry;
+    fn place(self: &mut Self, pos: &IVec3, context: &Context, block_registry: &BlockRegistry) -> Option<BlockEntry>;
 }
 
 /// Block placement condition. Used for testing if a certain position is valid etc.
-pub trait Condition {
+pub trait ConditionSource: Sync + Debug {
     /// Wether a block is valid.
-    fn test(pos: IVec3, context: &Context) -> bool;
+    fn test(self: &mut Self, pos: IVec3, context: &Context) -> bool;
 }
 
 /// Worldgen-only per-chunk data storage
@@ -60,19 +64,27 @@ impl NoiseManager {
     }
 }
 
-/*
+fn build_sources<Source>(seed: u32, octaves: &Vec<f64>) -> Vec<Source>
+where
+    Source: Default + Seedable,
+{
+    let mut sources = Vec::with_capacity(octaves.len());
+    for x in 0..octaves.len() {
+        let source = Source::default();
+        sources.push(source.set_seed(seed + (octaves[x] * 100.0) as u32));
+    }
+    sources
+}
+
 /// Fake trait for adding Copy to RuleSource
 pub trait RuleSourceClone {
     /// dumb helper function
-    fn clone_box(&self) -> Box<dyn RuleSource>;
     fn serialize_trait<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer, Self: Sized;
     fn deserialize_trait<'de, D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de>, Self: Sized;
+    fn default_trait() -> Self where Self: Sized;
 }
 
-impl<T> RuleSourceClone for T where T: 'static + RuleSource + Clone + Serialize + for<'a> Deserialize<'a> {
-    fn clone_box(&self) -> Box<dyn RuleSource> {
-        Box::new(self.clone())
-    }
+impl<T> RuleSourceClone for T where T: 'static + RuleSource + Clone + Default + Serialize + for<'a> Deserialize<'a> {
     fn serialize_trait<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer, Self: Sized {
         self.serialize_trait(serializer)
     }
@@ -80,23 +92,20 @@ impl<T> RuleSourceClone for T where T: 'static + RuleSource + Clone + Serialize 
     fn deserialize_trait<'de, D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de>, Self: Sized {
         Self::deserialize(deserializer)
     }
-}
 
-impl Clone for Box<dyn RuleSource> {
-    fn clone(&self) -> Box<dyn RuleSource> {
-        self.clone_box()
+    fn default_trait() -> Self where Self: Sized {
+        Self::default()
     }
 }
 
-impl Serialize for (dyn RuleSource) {
+impl Serialize for (dyn RuleSource) where (dyn RuleSource): Sized + Clone + Default {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
         self.serialize_trait(serializer)
     }
 }
 
-impl<'de> Deserialize<'de> for (dyn RuleSource) {
+impl<'de> Deserialize<'de> for (dyn RuleSource) where (dyn RuleSource): Sized + Clone + Default {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
         Self::deserialize_trait(deserializer)
     }
 }
-*/

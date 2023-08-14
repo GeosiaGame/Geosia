@@ -2,12 +2,13 @@
 
 use std::fmt::Debug;
 
+use noise::NoiseFn;
 use rgb::RGBA8;
 use serde::{Serialize, Deserialize};
 
 use crate::registry::{Registry, RegistryName, RegistryObject, RegistryId};
 
-use super::{voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME}, generation::RuleSource};
+use super::{voxeltypes::BlockEntry, generation::{RuleSource, ConditionSource, rule_sources::EmptyRuleSource}};
 
 
 pub mod biome_map;
@@ -22,15 +23,14 @@ pub struct BiomeEntry {
 }
 
 /// God save my soul from the hell that is Rust generic types.
-/// You NEED to use this type alias everywhere, by the way. FUN.
-pub type RuleSrc = impl RuleSource + Clone;
+/// You NEED to use this type alias everywhere where one is required, by the way. FUN.
+pub type RuleSrc = dyn RuleSource;
+/// Holy shit another one
+pub type ConditionSrc = dyn ConditionSource;
+pub type NoiseFn2 = dyn NoiseFn<f64, 2> + Sync;
 
 /// A named registry of block definitions.
-pub type BiomeRegistry = Registry<BiomeDefinition<RuleSrc>>;
-
-fn __impl_rule_source() -> RuleSrc {
-    EmptyRuleSource {}
-}
+pub type BiomeRegistry = Registry<BiomeDefinition>;
 
 impl BiomeEntry {
     /// Helper to construct a new biome entry.
@@ -49,7 +49,7 @@ impl Debug for BiomeEntry {
 
 /// A definition of a biome type, specifying properties such as registry name, shape, textures.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BiomeDefinition<RS: RuleSource + Sized> {
+pub struct BiomeDefinition {
     /// The unique registry name
     pub name: RegistryName,
     /// A color that can represent the biome on maps, debug views, etc.
@@ -63,12 +63,15 @@ pub struct BiomeDefinition<RS: RuleSource + Sized> {
     /// Moisture of this biome.
     pub moisture: VPMoisture,
     /// The block placement rule source for this biome.
-    pub rule_source: RS,
+    #[serde(skip)]
+    pub rule_source: &'static RuleSrc,
+    #[serde(skip)]
+    pub surface_noise: &'static NoiseFn2,
 }
 
-impl<RS> BiomeDefinition<RS> where RS: RuleSource {}
+impl BiomeDefinition {}
 
-impl<RS> RegistryObject for BiomeDefinition<RS> where RS: RuleSource {
+impl RegistryObject for BiomeDefinition {
     fn registry_name(&self) -> crate::registry::RegistryNameRef {
         self.name.as_ref()
     }
@@ -123,30 +126,19 @@ impl Default for VPTemperature {
     }
 }
 
-/// Empty Rule source. Does nothing.
+/// Always-true condition.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct EmptyRuleSource();
-impl EmptyRuleSource {
-    const fn new() -> Self {
-        Self()
+pub struct AlwaysTrueCondition();
+
+impl ConditionSource for AlwaysTrueCondition {
+    fn test(&mut self, pos: bevy_math::IVec3, context: &super::generation::Context) -> bool {
+        true
     }
 }
 
-impl Default for EmptyRuleSource {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl RuleSource for EmptyRuleSource {
-    fn place(self: &mut Self, pos: &bevy_math::IVec3, context: &super::generation::Context, block_registry: &super::voxeltypes::BlockRegistry) -> BlockEntry {
-        BlockEntry::new(block_registry.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap().0, 0)
-    }
-}
-
-impl Debug for EmptyRuleSource {
+impl Debug for AlwaysTrueCondition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("EmptyRuleSource").finish()
+        f.debug_tuple("AlwaysTrueCondition").finish()
     }
 }
 
@@ -154,12 +146,15 @@ impl Debug for EmptyRuleSource {
 pub const EMPTY_BIOME_NAME: RegistryName = RegistryName::ocg_const("empty");
 
 /// The empty biome definition, used when no specific biomes have been generated
-pub static EMPTY_BIOME: BiomeDefinition<RuleSrc> = BiomeDefinition {
+pub static EMPTY_BIOME: BiomeDefinition = BiomeDefinition {
     name: EMPTY_BIOME_NAME,
     representative_color: RGBA8::new(0, 0, 0, 0),
     size_chunks: 0,
     elevation: VPElevation::LowLand,
     temperature: VPTemperature::MedTemp,
     moisture: VPMoisture::MedMoist,
-    rule_source: EmptyRuleSource::new(),
+    rule_source: &EmptyRuleSource(),
+    surface_noise: &noise::Constant {
+        value: 0.0
+    },
 };

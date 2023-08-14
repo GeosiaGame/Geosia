@@ -3,7 +3,7 @@
 use bevy::math::{ivec2, IVec2, DVec2};
 use lru::LruCache;
 use noise::{NoiseFn, SuperSimplex};
-use ocg_schemas::{voxel::{chunk_storage::{PaletteStorage, ChunkStorage}, voxeltypes::{BlockEntry, BlockDefinition, EMPTY_BLOCK_NAME}, biome::{VPElevation, VPMoisture, VPTemperature, BiomeDefinition, biome_map::{self, BiomeMap}, biome_picker::BiomeGenerator, RuleSrc}}, coordinates::{AbsChunkPos, InChunkPos, AbsChunkRange}, registry::Registry, dependencies::itertools::iproduct};
+use ocg_schemas::{voxel::{chunk_storage::{PaletteStorage, ChunkStorage}, voxeltypes::{BlockEntry, BlockDefinition, EMPTY_BLOCK_NAME}, biome::{VPElevation, VPMoisture, VPTemperature, BiomeDefinition, biome_map::{self, BiomeMap}, biome_picker::BiomeGenerator, RuleSrc}, generation::fbm_noise::Fbm}, coordinates::{AbsChunkPos, InChunkPos, AbsChunkRange}, registry::Registry, dependencies::itertools::iproduct};
 use rand::prelude::*;
 use rand_xoshiro::Xoshiro256StarStar;
 use std::cell::RefCell;
@@ -14,8 +14,6 @@ use ocg_schemas::coordinates::{CHUNK_DIM, CHUNK_DIMZ};
 
 use super::blocks::*;
 use super::noise::fbm_noise::Fbm;
-
-pub mod rule_sources;
 
 const GLOBAL_SCALE_MOD: f64 = 2.0;
 const GLOBAL_BIOME_SCALE: f64 = 256.0;
@@ -329,7 +327,7 @@ impl StdGenerator {
         }
     }
 
-    pub fn generate_area_biome_map(&self, area: AbsChunkRange, biome_map: &mut BiomeMap, biome_registry: &Registry<BiomeDefinition<RuleSrc>>) {
+    pub fn generate_area_biome_map(&self, area: AbsChunkRange, biome_map: &mut BiomeMap, biome_registry: &Registry<BiomeDefinition>) {
         let mut biomegen = self
             .biome_gen
             .borrow_mut();
