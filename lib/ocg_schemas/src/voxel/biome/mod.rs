@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 
 use dyn_clone::DynClone;
-use noise::{NoiseFn, SuperSimplex, Perlin, Constant};
+use noise::{NoiseFn, SuperSimplex, Perlin, Constant, Multiply, Add, Max, Min, Power};
 use rgb::RGBA8;
 use serde::{Serialize, Deserialize};
 
@@ -47,7 +47,7 @@ pub type ConditionSrc = dyn ConditionSource;
 pub type NoiseFn2 = dyn NoiseFn2Trait;
 
 /// Helper trait for NoiseFn<f64, 2> + required extras
-pub trait NoiseFn2Trait: NoiseFn<f64, 2> + DynClone + Debug + Sync + Send {}
+pub trait NoiseFn2Trait: NoiseFn<f64, 2> + DynClone + Sync + Send {}
 dyn_clone::clone_trait_object!(NoiseFn2Trait);
 
 
@@ -55,7 +55,7 @@ dyn_clone::clone_trait_object!(NoiseFn2Trait);
 pub type BiomeRegistry = Registry<BiomeDefinition>;
 
 /// A definition of a biome type, specifying properties such as registry name, shape, textures.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct BiomeDefinition {
     /// The unique registry name
     pub name: RegistryName,
@@ -84,7 +84,7 @@ impl RegistryObject for BiomeDefinition {
 }
 
 /// Height variance "areas".
-#[derive(Copy, Clone, Hash, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Hash, Debug, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum VPElevation {
     Underground,
     Ocean,
@@ -95,7 +95,7 @@ pub enum VPElevation {
 }
 
 /// Temperature variance "areas".
-#[derive(Copy, Clone, Hash, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Hash, Debug, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum VPTemperature {
     Freezing,
     LowTemp,
@@ -105,7 +105,7 @@ pub enum VPTemperature {
 }
 
 /// Moisture variation "areas".
-#[derive(Copy, Clone, Hash, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Hash, Debug, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum VPMoisture {
     Deadland,
     Desert,
@@ -132,10 +132,82 @@ impl Default for VPTemperature {
     }
 }
 
-/// The registry name of [`EMPTY_BIOME`]
-pub const EMPTY_BIOME_NAME: RegistryName = RegistryName::ocg_const("empty");
+pub struct Noises {
+    pub elevation_noise: Box<dyn NoiseFn<f64, 3>>, 
+    pub temperature_noise: Box<dyn NoiseFn<f64, 3>>, 
+    pub moisture_noise: Box<dyn NoiseFn<f64, 3>>,
+}
 
+///
+/// NOISE FUNCTION WRAPPERS
+/// 
 impl NoiseFn2Trait for Constant {}
 impl NoiseFn2Trait for Fbm<SuperSimplex> {}
 impl NoiseFn2Trait for SuperSimplex {}
 impl NoiseFn2Trait for Perlin {}
+
+/// newtype wrapper
+pub struct Mul2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub Multiply<f64, S1, S2, 2>);
+impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Mul2<S1, S2> {
+    fn get(&self, point: [f64; 2]) -> f64 {
+        self.0.get(point)
+    }
+}
+impl<S1, S2> NoiseFn2Trait for Mul2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {}
+impl<S1, S2> Clone for Mul2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
+    fn clone(&self) -> Self {
+        Self(Multiply::new(self.0.source1.clone(), self.0.source2.clone()))
+    }
+}
+/// newtype wrapper
+pub struct Add2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub Add<f64, S1, S2, 2>);
+impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Add2<S1, S2> {
+    fn get(&self, point: [f64; 2]) -> f64 {
+        self.0.get(point)
+    }
+}
+impl<S1, S2> NoiseFn2Trait for Add2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {}
+impl<S1, S2> Clone for Add2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
+    fn clone(&self) -> Self {
+        Self(Add::new(self.0.source1.clone(), self.0.source2.clone()))
+    }
+}
+/// newtype wrapper
+pub struct Max2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub Max<f64, S1, S2, 2>);
+impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Max2<S1, S2> {
+    fn get(&self, point: [f64; 2]) -> f64 {
+        self.0.get(point)
+    }
+}
+impl<S1, S2> NoiseFn2Trait for Max2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {}
+impl<S1, S2> Clone for Max2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
+    fn clone(&self) -> Self {
+        Self(Max::new(self.0.source1.clone(), self.0.source2.clone()))
+    }
+}
+/// newtype wrapper
+pub struct Min2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub Min<f64, S1, S2, 2>);
+impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Min2<S1, S2> {
+    fn get(&self, point: [f64; 2]) -> f64 {
+        self.0.get(point)
+    }
+}
+impl<S1, S2> NoiseFn2Trait for Min2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {}
+impl<S1, S2> Clone for Min2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
+    fn clone(&self) -> Self {
+        Self(Min::new(self.0.source1.clone(), self.0.source2.clone()))
+    }
+}
+/// newtype wrapper
+pub struct Pow2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub Power<f64, S1, S2, 2>);
+impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Pow2<S1, S2> {
+    fn get(&self, point: [f64; 2]) -> f64 {
+        self.0.get(point)
+    }
+}
+impl<S1, S2> NoiseFn2Trait for Pow2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {}
+impl<S1, S2> Clone for Pow2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
+    fn clone(&self) -> Self {
+        Self(Power::new(self.0.source1.clone(), self.0.source2.clone()))
+    }
+}

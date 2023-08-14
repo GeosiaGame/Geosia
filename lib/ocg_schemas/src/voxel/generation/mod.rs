@@ -4,10 +4,9 @@ use std::fmt::Debug;
 
 use dyn_clone::DynClone;
 use bevy_math::IVec3;
-use hashbrown::HashMap;
-use noise::{NoiseFn, Seedable};
+use noise::Seedable;
 
-use crate::{voxel::{biome::biome_picker::BiomeGenerator, chunk::Chunk}, registry::RegistryName};
+use crate::voxel::{biome::biome_picker::BiomeGenerator, chunk::Chunk};
 
 use self::positional_random::PositionalRandomFactory;
 
@@ -23,10 +22,16 @@ pub type GenerationChunk = Chunk<GenerationChunkData>;
 
 /// Context data for world generation.
 pub struct Context<'a> {
+    /// The biome generator. Unmodifiable.
     pub biome_generator: &'a BiomeGenerator,
+    /// The chunk. Unmodifiable through here.
     pub chunk: &'a PaletteStorage<BlockEntry>,
+    /// A positional random factory.
     pub random: PositionalRandomFactory<rand_xoshiro::Xoshiro512StarStar>,
+    /// The ground Y level in this block position.
     pub ground_y: i32,
+    /// The sea level for this planet.
+    pub sea_level: i32,
 }
 
 /// Block placement rule source.
@@ -52,24 +57,6 @@ dyn_clone::clone_trait_object!(ConditionSource);
 #[derive(Clone, Default)]
 pub struct GenerationChunkData {
     //
-}
-
-/// Manager for different noise functions.
-pub struct NoiseManager {
-    // just add a `noise_2d` etc. when need be.
-    noise_3d: HashMap<RegistryName, Box<dyn NoiseFn<f64, 3>>>,
-}
-
-impl NoiseManager {
-    /// Gets a 3D noise from the noise manager.
-    pub fn get_noise_3d(&self, id: &RegistryName) -> &'_ dyn NoiseFn<f64, 3> {
-        self.noise_3d.get(id).unwrap()
-    }
-
-    /// Adds a noise to the noise manager. IF it already contains one with the same id, the old one is removed.
-    pub fn add_noise_3d(&mut self, id: RegistryName, noise: Box<dyn NoiseFn<f64, 3>>) {
-        self.noise_3d.insert(id, noise);
-    }
 }
 
 fn build_sources<Source>(seed: u32, octaves: &Vec<f64>) -> Vec<Source>

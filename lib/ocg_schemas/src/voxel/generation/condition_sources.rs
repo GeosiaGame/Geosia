@@ -65,9 +65,32 @@ pub struct GroundLevelCondition();
 #[typetag::serde]
 impl ConditionSource for GroundLevelCondition {
     fn test(&self, pos: &IVec3, context: &Context) -> bool {
-        context.ground_y >= pos.y
+        context.ground_y == pos.y
     }
 }
+
+/// Under ground Y level condition. Exclusive.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UnderGroundLevelCondition();
+
+#[typetag::serde]
+impl ConditionSource for UnderGroundLevelCondition {
+    fn test(&self, pos: &IVec3, context: &Context) -> bool {
+        context.ground_y > pos.y
+    }
+}
+
+/// Under ground Y level condition. Exclusive.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UnderSeaLevelCondition();
+
+#[typetag::serde]
+impl ConditionSource for UnderSeaLevelCondition {
+    fn test(&self, pos: &IVec3, context: &Context) -> bool {
+        context.sea_level > pos.y
+    }
+}
+
 
 /// Ground Y level condition with an offset. Inclusive.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -86,7 +109,7 @@ impl OffsetGroundLevelCondition {
 #[typetag::serde]
 impl ConditionSource for OffsetGroundLevelCondition {
     fn test(self: &Self, pos: &IVec3, context: &Context) -> bool {
-        context.ground_y + self.offset >= pos.y
+        pos.y <= context.ground_y && pos.y > context.ground_y - self.offset
     }
 }
 

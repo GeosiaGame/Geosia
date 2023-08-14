@@ -22,10 +22,10 @@ impl BiomeMap {
     /// Gets biomes near the supplied position, in all cardinal directions (with strides of X=1, Z=3, Y=3²).
     pub fn get_biomes_near(&self, pos: AbsChunkPos) -> [Option<&BiomeEntry>; 27] {
         let mut new_arr = Vec::from_iter(repeat(Option::None).take(27));
-        for (o_x, o_z, o_y) in iproduct!(-1..=1, -1..=1, -1..=1) {
-            let obj = self.map.get(&(pos + RelChunkPos::new(o_x, o_y, o_z)));
+        for (o_x, o_z, o_y) in iproduct!(0..=2, 0..=2, 0..=2) {
+            let obj = self.map.get(&(pos + RelChunkPos::new(o_x - 1, o_y - 1, o_z - 1)));
             if obj.is_some() {
-                new_arr.insert((o_x + (o_z * 3) + (o_y * 3 * 3)) as usize, Option::Some(obj.unwrap()));
+                new_arr[(o_x + (o_z * 3) + (o_y * 3 * 3)) as usize] = Option::Some(obj.unwrap());
             }
         }
         <[Option<&BiomeEntry>; 27]>::try_from(new_arr).unwrap()

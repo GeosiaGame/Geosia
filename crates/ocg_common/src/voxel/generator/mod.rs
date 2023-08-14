@@ -4,7 +4,7 @@ use bevy::math::{ivec2, IVec2, DVec2};
 use bevy_math::IVec3;
 use lru::LruCache;
 use noise::{NoiseFn, SuperSimplex};
-use ocg_schemas::{voxel::{chunk_storage::{PaletteStorage, ChunkStorage}, voxeltypes::{BlockEntry, BlockDefinition, EMPTY_BLOCK_NAME}, biome::{VPElevation, VPMoisture, VPTemperature, BiomeDefinition, biome_map::BiomeMap, biome_picker::BiomeGenerator}, generation::{fbm_noise::Fbm, Context, positional_random::PositionalRandomFactory}}, coordinates::{AbsChunkPos, InChunkPos, AbsChunkRange}, registry::Registry, dependencies::itertools::iproduct};
+use ocg_schemas::{voxel::{chunk_storage::{PaletteStorage, ChunkStorage}, voxeltypes::{BlockEntry, BlockDefinition, EMPTY_BLOCK_NAME}, biome::{VPElevation, VPMoisture, VPTemperature, BiomeDefinition, biome_map::BiomeMap, biome_picker::BiomeGenerator, Noises}, generation::{fbm_noise::Fbm, Context, positional_random::PositionalRandomFactory}}, coordinates::{AbsChunkPos, InChunkPos, AbsChunkRange}, registry::Registry, dependencies::itertools::iproduct};
 use rand::prelude::*;
 use rand_xoshiro::Xoshiro256StarStar;
 use std::cell::RefCell;
@@ -13,7 +13,7 @@ use thread_local::ThreadLocal;
 
 use ocg_schemas::coordinates::{CHUNK_DIM, CHUNK_DIMZ};
 
-use super::blocks::*;
+use super::blocks::STONE_BLOCK_NAME;
 
 const GLOBAL_SCALE_MOD: f64 = 2.0;
 const GLOBAL_BIOME_SCALE: f64 = 256.0;
@@ -159,57 +159,6 @@ impl CellGen {
         nf(pos.as_dvec2() / scale_factor)
     }
 
-    fn moisture_noise(&self, pos: IVec2) -> f64 {
-        let nf = |p: DVec2| (self.moisture_map_gen.get([p.x, p.y]) + 1.0) / 2.0;
-        let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
-        nf(pos.as_dvec2() / scale_factor)
-    }
-
-    fn temperature_noise(&self, pos: IVec2) -> f64 {
-        let nf = |p: DVec2| (self.temperature_map_gen.get([p.x, p.y]) + 1.0) / 2.0;
-        let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
-        nf(pos.as_dvec2() / scale_factor)
-    }
-
-    /// 0..=1 height noise
-    fn h_n(&self, i: usize, p: DVec2) -> f64 {
-        let point: [f64; 2] = [p.x as f64, p.y as f64];
-        (self.height_map_gen[i].get(point) + 1.0) / 2.0
-    }
-
-    /// 0..=1 ridge noise
-    fn h_rn(&self, i: usize, p: DVec2) -> f64 {
-        2.0 * (0.5 - ((0.5 - self.h_n(i, p)) as f64).abs())
-    }
-
-    fn plains_height_noise(&self, pos: IVec2) -> f64 {
-        let scale_factor = GLOBAL_SCALE_MOD * 20.0;
-        let p = pos.as_dvec2() / scale_factor;
-
-        (0.75 * self.h_n(0, p) + 0.25 * self.h_n(1, p * 2.0)) * 5.0 + 10.0
-    }
-
-    fn hills_height_noise(&self, pos: IVec2) -> f64 {
-        let scale_factor = GLOBAL_SCALE_MOD * 40.0;
-        let p = pos.as_dvec2() / scale_factor;
-
-        (0.60 * self.h_n(0, p) + 0.25 * self.h_n(1, p * 1.5) + 0.15 * self.h_n(2, p * 3.0)) * 30.0
-            + 15.0
-    }
-
-    fn mountains_height_noise(&self, pos: IVec2) -> f64 {
-        let scale_factor = GLOBAL_SCALE_MOD * 80.0;
-        let p = pos.as_dvec2() / scale_factor;
-
-        let h0 = 0.50 * self.h_rn(0, p);
-        let h01 = 0.25 * self.h_rn(1, p * 2.0) + h0;
-
-        (h01 + (h01 / 0.75) * 0.15 * self.h_n(2, p * 5.0)
-            + (h01 / 0.75) * 0.05 * self.h_rn(3, p * 9.0))
-            * 150.0
-            + 40.0
-    }
-
     fn calc_voxel_params(&mut self, biome: &BiomeDefinition, pos: IVec2) -> VoxelParams {
         self.find_nearest_cell_points(pos, 1);
 
@@ -237,6 +186,7 @@ pub struct StdGenerator {
     seed: u64,
     biome_gen: BiomeGenerator,
     biome_map: RefCell<BiomeMap>,
+    noises: Noises,
     cell_gen: ThreadLocal<RefCell<CellGen>>,
 }
 
@@ -251,6 +201,11 @@ impl StdGenerator {
         Self {
             seed,
             biome_gen: biome_generator,
+            noises: Noises {
+                elevation_noise: Box::new(Fbm::<SuperSimplex>::default()),
+                temperature_noise: Box::new(Fbm::<SuperSimplex>::default()),
+                moisture_noise: Box::new(Fbm::<SuperSimplex>::default()),
+            },
             biome_map: RefCell::new(biome_map),
             cell_gen: ThreadLocal::default(),
         }
@@ -260,16 +215,10 @@ impl StdGenerator {
         let mut biomemap = self
             .biome_map
             .borrow_mut();
-        self.biome_gen.generate_area_biomes(area, &mut biomemap, biome_registry);
+        self.biome_gen.generate_area_biomes(area, &mut biomemap, biome_registry, &self.noises);
     }
 
     pub fn generate_chunk(&mut self, pos: AbsChunkPos, chunk: &mut PaletteStorage<BlockEntry>, block_registry: &Registry<BlockDefinition>, biome_registry: &Registry<BiomeDefinition>) {
-        let (i_air, _) = block_registry.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
-        let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
-        let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
-        let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
-        let (i_snow_grass, _) = block_registry.lookup_name_to_object(SNOWY_GRASS_BLOCK_NAME.as_ref()).unwrap();
-
         let mut cellgen = self
             .cell_gen
             .get_or(|| RefCell::new(CellGen::new(self.seed)))
@@ -279,7 +228,7 @@ impl StdGenerator {
             .biome_map
             .borrow_mut();
 
-        let current_biome = biomemap.get_biomes_near(pos)[1 + 1 * 3 + 0 * 3 * 3].unwrap().lookup(biome_registry).unwrap();
+        let current_biome = biomemap.get_biomes_near(pos)[1 + 1 * 3 + 1 * 3 * 3].expect("Invalid biome at center!").lookup(biome_registry).unwrap();
 
         let vparams: [VoxelParams; CHUNK_DIMZ * CHUNK_DIMZ] = {
             let mut vparams: [MaybeUninit<VoxelParams>; CHUNK_DIMZ * CHUNK_DIMZ] =
@@ -298,14 +247,14 @@ impl StdGenerator {
         for (pos_x, pos_y, pos_z) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM, 0..CHUNK_DIM) {
             let b_pos = InChunkPos::try_new(pos_x, pos_y, pos_z).unwrap();
             let g_pos = <IVec3>::from(b_pos) + (<IVec3>::from(pos) * CHUNK_DIM);
-            let y = (pos.y * CHUNK_DIM) + pos_y;
             let vp = vparams[(pos_x + pos_z * (CHUNK_DIM)) as usize];
 
-            let h = vp.height - (pos.y * CHUNK_DIM);
+            let h = vp.height;
 
-            if h >= 0 {
-                let ctx = Context { biome_generator: &self.biome_gen, chunk: chunk, random: PositionalRandomFactory::default(), ground_y: h };
-                chunk.put(b_pos, current_biome.rule_source.place(&g_pos, &ctx, block_registry).unwrap());
+            let ctx = Context { biome_generator: &self.biome_gen, chunk: chunk, random: PositionalRandomFactory::default(), ground_y: h, sea_level: 0 /* hardcoded for now... */ };
+            let result = current_biome.rule_source.place(&g_pos, &ctx, block_registry);
+            if result.is_some() {
+                chunk.put(b_pos, result.unwrap());
             }
         }
     }

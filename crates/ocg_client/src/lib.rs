@@ -120,7 +120,6 @@ mod debug_window {
         setup_basic_biomes(&block_reg, &mut biome_reg);
         let biome_reg = biome_reg;
 
-        let mut biome_map = BiomeMap::default();
         let mut generator = StdGenerator::new(0, BiomeMap::default(), BiomeGenerator::new(0));
         generator.generate_area_biome_map(AbsChunkRange::from_corners(AbsChunkPos::new(-8, -8, -8), AbsChunkPos::new(8, 8, 8)), &biome_reg);
 
