@@ -58,10 +58,10 @@ features = [
 
     # Extra Bevy functionality:
     "serialize",            # Support for `serde` Serialize/Deserialize
-    "bevy_dynamic_plugin",  # Support for loading of `DynamicPlugin`s
+    # "bevy_dynamic_plugin",  # Support for loading of `DynamicPlugin`s
 
     # Development/Debug features:
-    "dynamic_linking", # Dynamic linking for faster compile-times
+    # "dynamic_linking", # Dynamic linking for faster compile-times
     "trace",           # Enable tracing for performance measurement
     # "detailed_trace",  # Make traces more verbose
     "trace_tracy",     # Tracing using `tracy`
