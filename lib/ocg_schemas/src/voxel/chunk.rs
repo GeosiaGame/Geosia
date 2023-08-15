@@ -20,3 +20,14 @@ pub struct Chunk<ExtraChunkData> {
     /// Any extra per-chunk data needed by the API user
     pub extra_data: ExtraChunkData,
 }
+
+impl<ECD> Chunk<ECD> {
+    /// Creates a new chunk filled with fill_block and the given extra data.
+    pub fn new(fill_block: BlockEntry, extra_data: ECD) -> Self {
+        Self {
+            blocks: PaletteStorage::new(fill_block),
+            light_level: ArrayStorage::default(),
+            extra_data,
+        }
+    }
+}

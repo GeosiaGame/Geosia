@@ -12,4 +12,5 @@ rust-version.workspace = true
 # Local
 ocg_schemas.workspace = true
 # Remote
+anyhow.workspace = true
 bevy.workspace = true

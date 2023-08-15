@@ -116,11 +116,53 @@ macro_rules! impl_simple_ivec3_newtype {
                 value.into_ivec3()
             }
         }
-        impl Deref for $T {
+        impl std::ops::Deref for $T {
             type Target = IVec3;
 
             fn deref(&self) -> &Self::Target {
                 &self.0
+            }
+        }
+    };
+}
+
+macro_rules! impl_rel_abs_pair {
+    ($Rel:ident, $Abs:ident) => {
+        impl std::ops::Add<$Rel> for $Rel {
+            type Output = $Rel;
+            fn add(self, rhs: Self) -> Self::Output {
+                $Rel(self.0 + rhs.0)
+            }
+        }
+        impl std::ops::Add<$Abs> for $Rel {
+            type Output = $Abs;
+            fn add(self, rhs: $Abs) -> Self::Output {
+                $Abs(self.0 + rhs.0)
+            }
+        }
+        impl std::ops::Add<$Rel> for $Abs {
+            type Output = $Abs;
+            fn add(self, rhs: $Rel) -> Self::Output {
+                $Abs(self.0 + rhs.0)
+            }
+        }
+
+        impl std::ops::Sub<$Rel> for $Rel {
+            type Output = $Rel;
+            fn sub(self, rhs: Self) -> Self::Output {
+                $Rel(self.0 - rhs.0)
+            }
+        }
+        impl std::ops::Sub<$Abs> for $Rel {
+            type Output = $Abs;
+            fn sub(self, rhs: $Abs) -> Self::Output {
+                $Abs(self.0 - rhs.0)
+            }
+        }
+        impl std::ops::Sub<$Rel> for $Abs {
+            type Output = $Abs;
+            fn sub(self, rhs: $Rel) -> Self::Output {
+                $Abs(self.0 - rhs.0)
             }
         }
     };
@@ -285,9 +327,53 @@ impl InChunkRange {
 
 // === AbsChunkPos
 impl_simple_ivec3_newtype!(AbsChunkPos);
+
+impl From<AbsBlockPos> for AbsChunkPos {
+    fn from(value: AbsBlockPos) -> Self {
+        Self::new(
+            value.x.div_euclid(CHUNK_DIM),
+            value.y.div_euclid(CHUNK_DIM),
+            value.z.div_euclid(CHUNK_DIM),
+        )
+    }
+}
+
 // === RelChunkPos
 impl_simple_ivec3_newtype!(RelChunkPos);
+impl_rel_abs_pair!(RelChunkPos, AbsChunkPos);
 // === AbsBlockPos
 impl_simple_ivec3_newtype!(AbsBlockPos);
+
+impl From<AbsChunkPos> for AbsBlockPos {
+    fn from(value: AbsChunkPos) -> Self {
+        Self(value.0 * IVec3::splat(CHUNK_DIM))
+    }
+}
+
+impl AbsBlockPos {
+    /// Splits the block position into the coordinate of the chunk and coordinate of the block within that chunk
+    pub fn split_chunk_component(self) -> (AbsChunkPos, InChunkPos) {
+        (
+            AbsChunkPos::new(
+                self.x.div_euclid(CHUNK_DIM),
+                self.y.div_euclid(CHUNK_DIM),
+                self.z.div_euclid(CHUNK_DIM),
+            ),
+            InChunkPos(IVec3::new(
+                self.x.rem_euclid(CHUNK_DIM),
+                self.y.rem_euclid(CHUNK_DIM),
+                self.z.rem_euclid(CHUNK_DIM),
+            )),
+        )
+    }
+}
+
 // === RelBlockPos
 impl_simple_ivec3_newtype!(RelBlockPos);
+impl_rel_abs_pair!(RelBlockPos, AbsBlockPos);
+
+impl From<RelChunkPos> for RelBlockPos {
+    fn from(value: RelChunkPos) -> Self {
+        Self(value.0 * IVec3::splat(CHUNK_DIM))
+    }
+}
