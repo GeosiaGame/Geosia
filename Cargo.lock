@@ -3169,11 +3169,13 @@ dependencies = [
  "anyhow",
  "bevy",
  "bevy_math",
+ "lazy_static",
  "lru",
  "noise",
  "ocg_schemas",
  "rand 0.8.5",
  "rand_xoshiro",
+ "serde",
  "thread_local",
 ]
 

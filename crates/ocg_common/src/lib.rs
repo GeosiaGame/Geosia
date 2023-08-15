@@ -1,7 +1,7 @@
 #![warn(missing_docs)]
 #![deny(clippy::disallowed_types)]
 
-#![feature(const_for)]
+#![feature(arc_unwrap_or_clone)]
 //! The common client&server code for OpenCubeGame
 
 pub mod voxel;

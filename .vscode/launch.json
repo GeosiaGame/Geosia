@@ -80,6 +80,7 @@
             "cargo": {
                 "args": [
                     "build",
+                    "-r",
                     "--bin=ocg_client",
                     "--package=ocg_client"
                 ],
@@ -92,7 +93,8 @@
             "cwd": "${workspaceFolder}",
             "env": {
                 "CARGO_MANIFEST_DIR": "${workspaceFolder}",
-                "PATH": "${env:USERPROFILE}/.rustup/toolchains/nightly-2023-08-08-x86_64-pc-windows-msvc/bin;${workspaceFolder}/target/debug/deps;${env:PATH}",
+                "PATH": "${env:USERPROFILE}/.rustup/toolchains/nightly-2023-08-08-x86_64-pc-windows-msvc/bin;${workspaceFolder}/target/release/deps;${env:PATH}",
+                "RUST_BACKTRACE": "1"
             }
         },
         {

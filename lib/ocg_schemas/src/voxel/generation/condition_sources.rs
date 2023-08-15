@@ -11,6 +11,7 @@ pub struct AlwaysTrueCondition();
 
 #[typetag::serde]
 impl ConditionSource for AlwaysTrueCondition {
+    #[inline(never)]
     fn test(&self, _pos: &IVec3, _context: &Context) -> bool {
         true
     }
@@ -32,6 +33,7 @@ impl YLevelCondition {
 
 #[typetag::serde]
 impl ConditionSource for YLevelCondition {
+    #[inline(never)]
     fn test(&self, pos: &IVec3, _context: &Context) -> bool {
         pos.y >= self.min_y
     }
@@ -53,6 +55,7 @@ impl NotCondition {
 
 #[typetag::serde]
 impl ConditionSource for NotCondition {
+    #[inline(never)]
     fn test(&self, pos: &IVec3, context: &Context) -> bool {
         !self.condition.test(pos, context)
     }
@@ -64,6 +67,7 @@ pub struct GroundLevelCondition();
 
 #[typetag::serde]
 impl ConditionSource for GroundLevelCondition {
+    #[inline(never)]
     fn test(&self, pos: &IVec3, context: &Context) -> bool {
         context.ground_y == pos.y
     }
@@ -75,6 +79,7 @@ pub struct UnderGroundLevelCondition();
 
 #[typetag::serde]
 impl ConditionSource for UnderGroundLevelCondition {
+    #[inline(never)]
     fn test(&self, pos: &IVec3, context: &Context) -> bool {
         context.ground_y > pos.y
     }
@@ -86,6 +91,7 @@ pub struct UnderSeaLevelCondition();
 
 #[typetag::serde]
 impl ConditionSource for UnderSeaLevelCondition {
+    #[inline(never)]
     fn test(&self, pos: &IVec3, context: &Context) -> bool {
         context.sea_level > pos.y
     }
@@ -108,6 +114,7 @@ impl OffsetGroundLevelCondition {
 
 #[typetag::serde]
 impl ConditionSource for OffsetGroundLevelCondition {
+    #[inline(never)]
     fn test(self: &Self, pos: &IVec3, context: &Context) -> bool {
         pos.y <= context.ground_y && pos.y > context.ground_y - self.offset
     }
@@ -129,6 +136,7 @@ impl ChainCondition {
 
 #[typetag::serde]
 impl ConditionSource for ChainCondition {
+    #[inline(never)]
     fn test(self: &Self, pos: &IVec3, context: &Context) -> bool {
         self.conditions.iter().all(|x| x.test(pos, context))
     }

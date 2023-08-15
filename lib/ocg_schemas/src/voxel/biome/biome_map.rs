@@ -6,9 +6,9 @@ use hashbrown::HashMap;
 use itertools::iproduct;
 use serde::{Serialize, Deserialize};
 
-use crate::coordinates::{AbsChunkPos, RelChunkPos};
+use crate::coordinates::{AbsChunkPos, RelChunkPos, AbsChunkRange};
 
-use super::BiomeEntry;
+use super::{BiomeEntry, biome_picker::BiomeGenerator, BiomeRegistry, Noises};
 
 /// The per-planet biome map.
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -29,6 +29,14 @@ impl BiomeMap {
             }
         }
         <[Option<&BiomeEntry>; 27]>::try_from(new_arr).unwrap()
+    }
+
+    /// Gets a biome for a chunk, or if nonexistent, generates a new one.
+    pub fn get_or_new<'a>(&'a mut self, pos: &AbsChunkPos, generator: &'a mut BiomeGenerator, registry: &BiomeRegistry, noises: &Noises) -> Option<&BiomeEntry> {
+        if !self.contains_key(pos) {
+            generator.generate_area_biomes(AbsChunkRange::from_corners(*pos, AbsChunkPos::new(pos.x + 1, pos.y + 1, pos.z + 1)), self, registry, noises);
+        }
+        return self.get(pos);
     }
 }
 

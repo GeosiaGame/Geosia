@@ -13,6 +13,7 @@ pub struct EmptyRuleSource();
 
 #[typetag::serde]
 impl RuleSource for EmptyRuleSource {
+    #[inline(never)]
     fn place(self: &Self, _pos: &bevy_math::IVec3, _context: &super::Context, _block_registry: &crate::voxel::voxeltypes::BlockRegistry) -> Option<BlockEntry> {
         None
     }
@@ -39,6 +40,7 @@ impl ConditionRuleSource {
 
 #[typetag::serde]
 impl RuleSource for ConditionRuleSource {
+    #[inline(never)]
     fn place(self: &Self, pos: &bevy_math::IVec3, context: &super::Context, block_registry: &crate::voxel::voxeltypes::BlockRegistry) -> Option<BlockEntry> {
         if self.condition.test(pos, context) {
             self.result.place(pos, context, block_registry)
@@ -66,6 +68,7 @@ impl ChainRuleSource {
 
 #[typetag::serde]
 impl RuleSource for ChainRuleSource {
+    #[inline(never)]
     fn place(self: &Self, pos: &bevy_math::IVec3, context: &super::Context, block_registry: &crate::voxel::voxeltypes::BlockRegistry) -> Option<BlockEntry> {
         for rule in self.rules.iter() {
             let result = rule.place(pos, context, block_registry);
@@ -95,6 +98,7 @@ impl BlockRuleSource {
 
 #[typetag::serde]
 impl RuleSource for BlockRuleSource {
+    #[inline(never)]
     fn place(self: &Self, _pos: &bevy_math::IVec3, _context: &super::Context, _block_registry: &crate::voxel::voxeltypes::BlockRegistry) -> Option<BlockEntry> {
         Some(self.entry)
     }

@@ -1,6 +1,7 @@
 //! Random biome picker
 
-use crate::{voxel::biome::{BiomeRegistry, biome_map::BiomeMap, BiomeEntry}, coordinates::{AbsChunkRange, AbsChunkPos, RelChunkPos}, registry::RegistryId};
+use crate::{voxel::biome::{BiomeRegistry, biome_map::BiomeMap, BiomeEntry}, coordinates::{AbsChunkRange, AbsChunkPos, RelChunkPos, InChunkRange, CHUNK_DIM, AbsBlockPos}, registry::RegistryId};
+use bevy_math::IVec3;
 use noise::NoiseFn;
 use rand::{SeedableRng, RngCore};
 use rand_xoshiro::Xoshiro256StarStar;
@@ -71,7 +72,7 @@ impl BiomeGenerator {
         }
     }
 
-    fn pick_biome(&mut self, center: AbsChunkPos, pos: RelChunkPos, map: &BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> BiomeEntry {
+    fn pick_biome(&mut self, center: AbsChunkPos, pos: RelChunkPos, _map: &BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> BiomeEntry {
         let get_id = |id: RegistryId| registry.lookup_id_to_object(id);
 
         let pos_d = (center + pos).as_dvec3();
@@ -81,7 +82,7 @@ impl BiomeGenerator {
         let temp = noises.temperature_noise.get(pos_d);
 
         let height = BiomeGenerator::get_elevation(height);
-        let wetness = BiomeGenerator::get_moisture(wetness);
+        let moisture = BiomeGenerator::get_moisture(wetness);
         let temp = BiomeGenerator::get_temperature(temp);
 
         let mut final_id: RegistryId = *registry.get_ids()[0];
