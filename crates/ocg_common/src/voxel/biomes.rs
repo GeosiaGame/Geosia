@@ -2,7 +2,7 @@
 //! Most of this will be moved to a "base" mod at some point in the future.
 
 use noise::SuperSimplex;
-use ocg_schemas::{voxel::{biome::{BiomeRegistry, BiomeDefinition, VPElevation, VPTemperature, VPMoisture, Mul2, Add2}, generation::{rule_sources::{ChainRuleSource, ConditionRuleSource, BlockRuleSource}, fbm_noise::Fbm, condition_sources::{YLevelCondition, OffsetGroundLevelCondition, GroundLevelCondition, UnderGroundLevelCondition, UnderSeaLevelCondition, NotCondition}}, voxeltypes::{BlockRegistry, BlockEntry, EMPTY_BLOCK_NAME}}, registry::RegistryName, dependencies::rgb::RGBA8};
+use ocg_schemas::{voxel::{biome::{BiomeRegistry, BiomeDefinition, VPElevation, VPTemperature, VPMoisture, Mul2, Add2}, generation::{rule_sources::{ChainRuleSource, ConditionRuleSource, BlockRuleSource}, fbm_noise::Fbm, condition_sources::{YLevelCondition, OffsetGroundLevelCondition, GroundLevelCondition, UnderGroundLevelCondition, UnderSeaLevelCondition, NotCondition, AlwaysTrueCondition}}, voxeltypes::{BlockRegistry, BlockEntry, EMPTY_BLOCK_NAME}}, registry::RegistryName, dependencies::rgb::RGBA8};
 
 use super::blocks::{SNOWY_GRASS_BLOCK_NAME, DIRT_BLOCK_NAME, GRASS_BLOCK_NAME, STONE_BLOCK_NAME, WATER_BLOCK_NAME};
 
@@ -102,7 +102,7 @@ pub fn setup_basic_biomes(block_registry: &BlockRegistry, biome_registry: &mut B
             temperature: VPTemperature::MedTemp,
             moisture: VPMoisture::MedMoist,
             rule_source: plains_rule_source.clone(),
-            surface_noise: Box::new(noise_func.clone()),
+            surface_noise: Box::new(Mul2(noise::Multiply::new(noise_func.clone(), noise::Constant { value: 10.0 }))),
         })
         .unwrap();
 
@@ -117,8 +117,8 @@ pub fn setup_basic_biomes(block_registry: &BlockRegistry, biome_registry: &mut B
             elevation: VPElevation::Mountain,
             temperature: VPTemperature::Freezing,
             moisture: VPMoisture::LowMoist,
-            rule_source: Box::new(ConditionRuleSource::new(Box::new(NotCondition::new(Box::new(UnderSeaLevelCondition()))), plains_rule_source.clone())),
-            surface_noise: Box::new(Add2(noise::Add::new(Mul2(noise::Multiply::new(noise_func.clone(), noise::Constant { value: 150.0 })), noise::Constant::new(0.0)))),
+            rule_source: Box::new(ConditionRuleSource::new(Box::new(AlwaysTrueCondition() /*NotCondition::new(Box::new(UnderSeaLevelCondition())) */), plains_rule_source.clone())),
+            surface_noise: Box::new(Add2(noise::Add::new(Mul2(noise::Multiply::new(noise_func.clone(), noise::Constant { value: 25.0 })), noise::Constant::new(40.0)))),
         })
         .unwrap();
 }

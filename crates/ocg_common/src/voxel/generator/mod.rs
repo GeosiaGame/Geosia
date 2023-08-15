@@ -202,9 +202,9 @@ impl StdGenerator {
             seed,
             biome_gen: biome_generator,
             noises: Noises {
-                elevation_noise: Box::new(Fbm::<SuperSimplex>::default()),
-                temperature_noise: Box::new(Fbm::<SuperSimplex>::default()),
-                moisture_noise: Box::new(Fbm::<SuperSimplex>::default()),
+                elevation_noise: Box::new(Fbm::<SuperSimplex>::new(1)),
+                temperature_noise: Box::new(Fbm::<SuperSimplex>::new(2)),
+                moisture_noise: Box::new(Fbm::<SuperSimplex>::new(3)),
             },
             biome_map: RefCell::new(biome_map),
             cell_gen: ThreadLocal::default(),

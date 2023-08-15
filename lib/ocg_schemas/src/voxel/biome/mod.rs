@@ -133,9 +133,9 @@ impl Default for VPTemperature {
 }
 
 pub struct Noises {
-    pub elevation_noise: Box<dyn NoiseFn<f64, 3>>, 
-    pub temperature_noise: Box<dyn NoiseFn<f64, 3>>, 
-    pub moisture_noise: Box<dyn NoiseFn<f64, 3>>,
+    pub elevation_noise: Box<dyn NoiseFn<f64, 2>>, 
+    pub temperature_noise: Box<dyn NoiseFn<f64, 2>>, 
+    pub moisture_noise: Box<dyn NoiseFn<f64, 2>>,
 }
 
 ///

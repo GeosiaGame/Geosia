@@ -60,20 +60,21 @@ impl BiomeGenerator {
     }
 
     fn get_elevation(fl: f64) -> VPElevation {
-        if fl < 0.4 {
+        if fl < 0.35 {
             VPElevation::Ocean
-        } else if fl < 0.55 {
+        } else if fl < 0.5 {
             VPElevation::LowLand
-        } else if fl < 0.8 {
+        } else if fl < 0.75 {
             VPElevation::Hill
         } else {
             VPElevation::Mountain
         }
     }
 
-    fn pick_biome<'a>(&'a mut self, center: AbsChunkPos, pos: RelChunkPos, map: &BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> BiomeEntry {
+    fn pick_biome(&mut self, center: AbsChunkPos, pos: RelChunkPos, map: &BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> BiomeEntry {
         let get_id = |id: RegistryId| registry.lookup_id_to_object(id);
 
+        /*
         let nearby = map.get_biomes_near(center + pos);
         if nearby.iter().any(|e| e.is_some()) {
             let center_chunk = nearby.get(1 + 1 * 3 + 1 * 3 * 3).unwrap();
@@ -84,10 +85,13 @@ impl BiomeGenerator {
                 }
             }
         }
+        */
 
-        let height = noises.elevation_noise.get((center + pos).as_dvec3().to_array());
-        let wetness = noises.moisture_noise.get((center + pos).as_dvec3().to_array());
-        let temp = noises.temperature_noise.get((center + pos).as_dvec3().to_array());
+        let pos_d = (center + pos).as_dvec3();
+        let pos_d = [pos_d.x, pos_d.z];
+        let height = noises.elevation_noise.get(pos_d);
+        let wetness = noises.moisture_noise.get(pos_d);
+        let temp = noises.temperature_noise.get(pos_d);
 
         let height = BiomeGenerator::get_elevation(height);
         let wetness = BiomeGenerator::get_moisture(wetness);
@@ -95,10 +99,10 @@ impl BiomeGenerator {
 
         let objects = registry.get_ids();
         for id in objects.iter() {
-            let obj = registry.lookup_id_to_object(**id);
+            let obj = get_id(**id);
             if obj.is_some() {
                 let obj = obj.unwrap();
-                if obj.elevation >= height && obj.moisture >= wetness && obj.temperature >= temp {
+                if obj.elevation >= height &&/* obj.moisture >= wetness*/ && obj.temperature >= &&temp {
                     return BiomeEntry::new(**id);
                 }
             }
