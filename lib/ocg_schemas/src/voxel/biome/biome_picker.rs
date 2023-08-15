@@ -46,13 +46,13 @@ impl BiomeGenerator {
     }
 
     fn get_moisture(fl: f64) -> VPMoisture {
-        if fl < 0.0 {
+        if fl < 0.05 {
             VPMoisture::Deadland
-        } else if fl < 0.2 {
+        } else if fl < 0.3 {
             VPMoisture::Desert
-        } else if fl < 0.4 {
+        } else if fl < 0.55 {
             VPMoisture::LowMoist
-        } else if fl < 0.6 {
+        } else if fl < 0.8 {
             VPMoisture::MedMoist
         } else {
             VPMoisture::HiMoist
@@ -74,19 +74,6 @@ impl BiomeGenerator {
     fn pick_biome(&mut self, center: AbsChunkPos, pos: RelChunkPos, map: &BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> BiomeEntry {
         let get_id = |id: RegistryId| registry.lookup_id_to_object(id);
 
-        /*
-        let nearby = map.get_biomes_near(center + pos);
-        if nearby.iter().any(|e| e.is_some()) {
-            let center_chunk = nearby.get(1 + 1 * 3 + 1 * 3 * 3).unwrap();
-            if center_chunk.is_some() {
-                let chunk_size = get_id(center_chunk.unwrap().id).unwrap().size_chunks;
-                if (chunk_size * chunk_size) as i32 <= (center + pos).length_squared() {
-                    return center_chunk.unwrap().clone();
-                }
-            }
-        }
-        */
-
         let pos_d = (center + pos).as_dvec3();
         let pos_d = [pos_d.x, pos_d.z];
         let height = noises.elevation_noise.get(pos_d);
@@ -97,17 +84,20 @@ impl BiomeGenerator {
         let wetness = BiomeGenerator::get_moisture(wetness);
         let temp = BiomeGenerator::get_temperature(temp);
 
+        let mut final_id: RegistryId = *registry.get_ids()[0];
+
         let objects = registry.get_ids();
         for id in objects.iter() {
             let obj = get_id(**id);
             if obj.is_some() {
                 let obj = obj.unwrap();
-                if obj.elevation >= height &&/* obj.moisture >= wetness*/ && obj.temperature >= &&temp {
-                    return BiomeEntry::new(**id);
+                if obj.elevation >= height &&/* obj.moisture >= wetness*/ obj.temperature >= temp {
+                    final_id = **id;
+                    break;
                 }
             }
         }
-        BiomeEntry::new(**objects.get(self.rand.next_u32() as usize % (objects.len())).unwrap())
+        BiomeEntry::new_base(final_id, 1.0)
     }
 
     /// Gets biomes from a range of positions.

@@ -1,6 +1,6 @@
 //! All Biome-related types
 
-use std::fmt::Debug;
+use std::{fmt::Debug, rc::Rc};
 
 use dyn_clone::DynClone;
 use noise::{NoiseFn, SuperSimplex, Perlin, Constant, Multiply, Add, Max, Min, Power};
@@ -16,18 +16,33 @@ pub mod biome_map;
 pub mod biome_picker;
 
 /// A biome entry stored in the per-planet biome map.
-#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialOrd, PartialEq, Serialize, Deserialize)]
 #[repr(C)]
 pub struct BiomeEntry {
     /// The biome ID in registry.
     pub id: RegistryId,
+    /// Weight map
+    pub weights: Option<Vec<f64>>,
+    #[serde(skip)]
+    /// Next element for the blender.
+    pub next: Rc<Option<BiomeEntry>>,
 }
 
 impl BiomeEntry {
     /// Helper to construct a new biome entry.
-    pub fn new(id: RegistryId) -> Self {
+    pub fn new_base(id: RegistryId, chunk_column_count: f64) -> Self {
         Self {
             id: id,
+            weights: Some(vec![chunk_column_count]),
+            next: Rc::new(None),
+        }
+    }
+
+    pub fn new_next(id: RegistryId, next: Option<BiomeEntry>) -> Self {
+        Self {
+            id: id,
+            weights: None,
+            next: Rc::new(next)
         }
     }
 
@@ -132,9 +147,13 @@ impl Default for VPTemperature {
     }
 }
 
+/// Different noise layers for biome generation.
 pub struct Noises {
+    /// Height noise
     pub elevation_noise: Box<dyn NoiseFn<f64, 2>>, 
+    /// Temperature noise
     pub temperature_noise: Box<dyn NoiseFn<f64, 2>>, 
+    /// Moisture noise
     pub moisture_noise: Box<dyn NoiseFn<f64, 2>>,
 }
 

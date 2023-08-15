@@ -1,5 +1,7 @@
 //! Default world generator
 
+mod biome_blender;
+
 use bevy::math::{ivec2, IVec2, DVec2};
 use bevy_math::IVec3;
 use lru::LruCache;
