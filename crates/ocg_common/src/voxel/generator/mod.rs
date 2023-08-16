@@ -6,7 +6,7 @@ use bevy::math::{ivec2, IVec2, DVec2};
 use bevy_math::IVec3;
 use lru::LruCache;
 use noise::{NoiseFn, SuperSimplex};
-use ocg_schemas::{voxel::{chunk_storage::{PaletteStorage, ChunkStorage}, voxeltypes::{BlockEntry, BlockDefinition}, biome::{VPElevation, VPMoisture, VPTemperature, BiomeDefinition, biome_map::BiomeMap, biome_picker::BiomeGenerator, Noises, BiomeEntry, BiomeRegistry}, generation::{fbm_noise::Fbm, Context, positional_random::PositionalRandomFactory}}, coordinates::{AbsChunkPos, InChunkPos, AbsChunkRange, AbsBlockPos}, registry::Registry, dependencies::itertools::iproduct};
+use ocg_schemas::{voxel::{chunk_storage::{PaletteStorage, ChunkStorage}, voxeltypes::{BlockEntry, BlockDefinition}, biome::{VPElevation, VPMoisture, VPTemperature, BiomeDefinition, biome_map::BiomeMap, biome_picker::BiomeGenerator, Noises, BiomeEntry, BiomeRegistry}, generation::{fbm_noise::Fbm, Context, positional_random::PositionalRandomFactory}}, coordinates::{AbsChunkPos, InChunkPos, AbsChunkRange, AbsBlockPos, CHUNK_DIM2Z, CHUNK_DIM2}, registry::Registry, dependencies::itertools::iproduct};
 use rand::prelude::*;
 use rand_xoshiro::{Xoshiro256StarStar, rand_core::le};
 use std::{cell::RefCell, rc::Rc};
@@ -184,27 +184,27 @@ impl CellGen {
         self.nearest_buf.resize(num, (0, CellPoint::default()));
     }
 
-    fn elevation_noise(&self, pos: IVec2, biome_registry: &BiomeRegistry, mut biome_blender: impl FnMut(IVec2) -> BiomeEntry) -> f64 {
+    fn elevation_noise(&self, pos: IVec2, c_pos: IVec2, biome_registry: &BiomeRegistry, mut biome_blender: impl FnMut(IVec2) -> BiomeEntry) -> f64 {
         let nf = |p: DVec2, b: &BiomeDefinition| (b.surface_noise.get([p.x, p.y]) + 1.0) / 2.0;
         let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
         let mut height: f64 = 0.0;
         let mut entry = Some(biome_blender(pos));
         while let Some(e) = entry {
-            let mut weight = 1.0;
-            let e_cloned = e.clone();
-            if e_cloned.weights.is_some() {
-                weight = e.weights.unwrap()[(pos.x + pos.y * CHUNK_DIM) as usize];
+            let mut weights = 1.0;
+            if let Some(w) = e.get_weights() {
+                let pos = pos - (c_pos * CHUNK_DIM);
+                weights = w[(pos.x + pos.y * CHUNK_DIM) as usize];
             }
-            height += nf(pos.as_dvec2() / scale_factor, e_cloned.lookup(biome_registry).unwrap()) * weight;
+            height += nf(pos.as_dvec2() / scale_factor, e.lookup(biome_registry).unwrap()) * weights;
             entry = Rc::unwrap_or_clone(e.next);
         }
         height
     }
 
-    fn calc_voxel_params(&mut self, biome: &BiomeDefinition, pos: IVec2, biome_registry: &BiomeRegistry, biome_blender: impl FnMut(IVec2) -> BiomeEntry) -> i32 {
+    fn calc_voxel_params(&mut self, pos: IVec2, c_pos: IVec2, biome_registry: &BiomeRegistry, biome_blender: impl FnMut(IVec2) -> BiomeEntry) -> i32 {
         self.find_nearest_cell_points(pos, 1);
 
-        let height = self.elevation_noise(pos, biome_registry, biome_blender);
+        let height = self.elevation_noise(pos, c_pos, biome_registry, biome_blender);
 
         height.round() as i32
     }
@@ -257,15 +257,13 @@ impl StdGenerator {
             .get_or(|| RefCell::new(CellGen::new(self.seed)))
             .borrow_mut();
 
-        let current_biome = self.biome_map.get_biomes_near(c_pos)[1 + 1 * 3 + 1 * 3 * 3].expect("Invalid biome at center!").clone().lookup(biome_registry).unwrap();
-
         let vparams: [i32; CHUNK_DIMZ * CHUNK_DIMZ] = {
             let mut vparams: [MaybeUninit<i32>; CHUNK_DIMZ * CHUNK_DIMZ] =
                 unsafe { std::mem::MaybeUninit::uninit().assume_init() };
             for (i, v) in vparams[..].iter_mut().enumerate() {
                 let x = (i % CHUNK_DIMZ) as i32 + (c_pos.x * CHUNK_DIM);
                 let z = ((i / CHUNK_DIMZ) % CHUNK_DIMZ) as i32 + (c_pos.z * CHUNK_DIM);
-                let p = cellgen.calc_voxel_params(current_biome, IVec2::new(x, z), biome_registry, |pos| self.biome_blender.borrow_mut().get_blend_for_block(self.seed, pos.x, pos.y, biome_registry, |x, z| self.biome_map.get_or_new(&AbsChunkPos::new(x as i32, 0, z as i32), &mut self.biome_gen, biome_registry, &self.noises).map(|x| x.to_owned()).unwrap_or_else(|| BiomeEntry::new_base(biome_registry.lookup_name_to_object(PLAINS_BIOME_NAME.as_ref()).unwrap().0, 0.0)).id));
+                let p = cellgen.calc_voxel_params(IVec2::new(x, z), IVec2::new(c_pos.x, c_pos.z), biome_registry, |pos| self.biome_blender.borrow_mut().get_blend_for_block(self.seed, pos.x, pos.y, biome_registry, |x, z| self.biome_map.get_or_new(&AbsChunkPos::new(x as i32, 0, z as i32), &mut self.biome_gen, biome_registry, &self.noises).map(|x| x.to_owned()).unwrap_or_else(|| biome_registry.lookup_name_to_object(PLAINS_BIOME_NAME.as_ref()).map(|f| (f.0, f.1.to_owned())).unwrap())));
                 //|b_pos: IVec2| self.biome_blender.get_blend_for_block(self.seed, (b_pos.x + (c_pos.x * CHUNK_DIM)) as f64, (b_pos.y + (c_pos.z * CHUNK_DIM)) as f64, biome_registry, |x, z| {
                 //    let key = &AbsBlockPos::new(x as i32, 0, z as i32);
                 //    if biomemap.contains_key(key) {
@@ -281,13 +279,15 @@ impl StdGenerator {
             unsafe { std::mem::transmute(vparams) }
         };
 
+        let mut biomegen_cloned = self.biome_gen;
+        let current_biome = self.biome_map.get_or_new(&c_pos, &mut biomegen_cloned, biome_registry, &self.noises).expect("Invalid biome at pos!");
         for (pos_x, pos_y, pos_z) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM, 0..CHUNK_DIM) {
             let b_pos = InChunkPos::try_new(pos_x, pos_y, pos_z).unwrap();
             let g_pos = <IVec3>::from(b_pos) + (<IVec3>::from(c_pos) * CHUNK_DIM);
             let height = vparams[(pos_x + pos_z * (CHUNK_DIM)) as usize];
 
             let ctx = Context { biome_generator: &self.biome_gen, chunk: chunk, random: PositionalRandomFactory::default(), ground_y: height, sea_level: 0 /* hardcoded for now... */ };
-            let result = current_biome.rule_source.place(&g_pos, &ctx, block_registry);
+            let result = current_biome.1.rule_source.place(&g_pos, &ctx, block_registry);
             if result.is_some() {
                 chunk.put(b_pos, result.unwrap());
             }

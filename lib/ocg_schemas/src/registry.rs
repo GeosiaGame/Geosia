@@ -260,6 +260,17 @@ impl<Object: RegistryObject> Registry<Object> {
         self.id_to_obj.iter().map(|x| x.as_ref()).collect()
     }
 
+    pub fn get_objects_ids(&self) -> Vec<Option<(&RegistryId, &Object)>> {
+        let mut result = Vec::new();
+        for id in self.name_to_id.values().into_iter() {
+            let obj = self.lookup_id_to_object(*id);
+            if let Some(o) = obj {
+                result.push(Some((id, o)));
+            }
+        }
+        result
+    }
+
     /// Get all registry IDs in this registry, in no particular oder.
     pub fn get_ids(&self) -> Vec<&RegistryId> {
         self.name_to_id.values().collect()
@@ -277,7 +288,7 @@ mod test {
         fn registry_name(&self) -> RegistryNameRef {
             self.0.as_ref()
         }
-    }
+    } 
 
     #[test]
     pub fn simple_registry() {

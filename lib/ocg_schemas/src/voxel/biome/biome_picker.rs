@@ -1,24 +1,23 @@
 //! Random biome picker
 
-use crate::{voxel::biome::{BiomeRegistry, biome_map::BiomeMap, BiomeEntry}, coordinates::{AbsChunkRange, AbsChunkPos, RelChunkPos, InChunkRange, CHUNK_DIM, AbsBlockPos}, registry::RegistryId};
-use bevy_math::IVec3;
+use crate::{voxel::biome::{BiomeRegistry, biome_map::BiomeMap}, coordinates::{AbsChunkRange, AbsChunkPos, RelChunkPos}, registry::RegistryId};
 use noise::NoiseFn;
-use rand::{SeedableRng, RngCore};
+use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256StarStar;
+use serde::{Serialize, Deserialize};
 
-use super::{Noises, VPTemperature, VPMoisture, VPElevation};
+use super::{Noises, VPTemperature, VPMoisture, VPElevation, BiomeDefinition, VOID_BIOME_NAME};
 
 /// The generic biome selector.
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct BiomeGenerator {
     seed: u64,
-    rand: Xoshiro256StarStar,
 }
 
 impl Default for BiomeGenerator {
     fn default() -> Self {
         Self { 
             seed: 0,
-            rand: Xoshiro256StarStar::seed_from_u64(0),
         }
     }
 }
@@ -28,7 +27,6 @@ impl BiomeGenerator {
     pub fn new(seed: u64) -> Self {
         Self {
             seed: seed,
-            rand: Xoshiro256StarStar::seed_from_u64(seed),
         }
     }
 
@@ -72,9 +70,7 @@ impl BiomeGenerator {
         }
     }
 
-    fn pick_biome(&mut self, center: AbsChunkPos, pos: RelChunkPos, _map: &BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> BiomeEntry {
-        let get_id = |id: RegistryId| registry.lookup_id_to_object(id);
-
+    fn pick_biome<'a>(&'a mut self, center: AbsChunkPos, pos: RelChunkPos, _map: &BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) -> (RegistryId, BiomeDefinition) {
         let pos_d = (center + pos).as_dvec3();
         let pos_d = [pos_d.x, pos_d.z];
         let height = noises.elevation_noise.get(pos_d);
@@ -82,32 +78,37 @@ impl BiomeGenerator {
         let temp = noises.temperature_noise.get(pos_d);
 
         let height = BiomeGenerator::get_elevation(height);
-        let moisture = BiomeGenerator::get_moisture(wetness);
+        let wetness = BiomeGenerator::get_moisture(wetness);
         let temp = BiomeGenerator::get_temperature(temp);
 
-        let mut final_id: RegistryId = *registry.get_ids()[0];
+        let mut final_id: Option<(RegistryId, BiomeDefinition)> = None;
 
-        let objects = registry.get_ids();
+        let objects = registry.get_objects_ids();
         for id in objects.iter() {
-            let obj = get_id(**id);
-            if obj.is_some() {
-                let obj = obj.unwrap();
+            if let Some(obj) = id {
+                let id = obj.0;
+                let obj = obj.1;
                 if obj.elevation >= height &&/* obj.moisture >= wetness*/ obj.temperature >= temp {
-                    final_id = **id;
+                    final_id = Some((*id, obj.to_owned()));
                     break;
                 }
             }
         }
-        BiomeEntry::new_base(final_id, 1.0)
+        final_id.unwrap_or_else(|| registry.lookup_name_to_object(VOID_BIOME_NAME.as_ref()).map(|f| (f.0, f.1.to_owned())).unwrap())
     }
 
     /// Gets biomes from a range of positions.
     pub fn generate_area_biomes<'a>(&'a mut self, area: AbsChunkRange, biome_map: &mut BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) {
         let center = area.max() - RelChunkPos::from(area.min().into_ivec3() / 2);
         for pos in area.iter_xzy() {
-            let biome_entry = self.pick_biome(center, pos.into(), &biome_map, registry, noises);
-            biome_map.insert(pos, biome_entry);
+            let biome_def = self.pick_biome(center, pos.into(), &biome_map, registry, noises);
+            biome_map.base_map.insert(pos, biome_def);
         }
+    }
+
+    pub fn generate_biome<'a>(&'a mut self, pos: &AbsChunkPos, biome_map: &mut BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) {
+        let biome_def = self.pick_biome(*pos, RelChunkPos::splat(0), &biome_map, registry, noises);
+        biome_map.base_map.insert(*pos, biome_def);
     }
 
     /// Sets the seed of this biome generator.

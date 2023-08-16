@@ -2,12 +2,13 @@
 
 use std::{fmt::Debug, rc::Rc};
 
+use lazy_static::lazy_static;
 use dyn_clone::DynClone;
-use noise::{NoiseFn, SuperSimplex, Perlin, Constant, Multiply, Add, Max, Min, Power};
+use noise::{NoiseFn, Constant, SuperSimplex, Perlin, Multiply, Add, Max, Min, Power};
 use rgb::RGBA8;
 use serde::{Serialize, Deserialize};
 
-use crate::registry::{Registry, RegistryName, RegistryObject, RegistryId};
+use crate::{registry::{Registry, RegistryName, RegistryObject, RegistryId}, voxel::generation::rule_sources::EmptyRuleSource};
 
 use super::generation::{RuleSource, ConditionSource, fbm_noise::Fbm};
 
@@ -23,21 +24,22 @@ pub struct BiomeEntry {
     pub id: RegistryId,
     /// Weight map
     pub weights: Option<Vec<f64>>,
-    #[serde(skip)]
     /// Next element for the blender.
+    #[serde(skip)]
     pub next: Rc<Option<BiomeEntry>>,
 }
 
 impl BiomeEntry {
     /// Helper to construct a new biome entry.
-    pub fn new_base(id: RegistryId, chunk_column_count: f64) -> Self {
+    pub fn new_base(id: RegistryId, chunk_column_count: usize) -> Self {
         Self {
             id: id,
-            weights: Some(vec![chunk_column_count]),
+            weights: Some(vec![0.0; chunk_column_count]),
             next: Rc::new(None),
         }
     }
 
+    /// Helper to construct a new biome entry with the chosen element as the next one in this linked list.
     pub fn new_next(id: RegistryId, next: Option<BiomeEntry>) -> Self {
         Self {
             id: id,
@@ -47,8 +49,13 @@ impl BiomeEntry {
     }
 
     /// Helper to look up the biome definition corresponding to this ID
-    pub fn lookup(self, registry: &BiomeRegistry) -> Option<&BiomeDefinition> {
+    pub fn lookup<'a>(&'a self, registry: &'a BiomeRegistry) -> Option<&BiomeDefinition> {
         registry.lookup_id_to_object(self.id)
+    }
+
+    /// Gets the weights of this entry via reference.
+    pub fn get_weights(&self) -> &Option<Vec<f64>> {
+        &self.weights
     }
 }
 
@@ -64,7 +71,11 @@ pub type NoiseFn2 = dyn NoiseFn2Trait;
 /// Helper trait for NoiseFn<f64, 2> + required extras
 pub trait NoiseFn2Trait: NoiseFn<f64, 2> + DynClone + Sync + Send {}
 dyn_clone::clone_trait_object!(NoiseFn2Trait);
-
+impl Default for dyn NoiseFn2Trait where (dyn NoiseFn2Trait): Default + Sized {
+    fn default() -> Self {
+        Self::default()
+    }
+}
 
 /// A named registry of block definitions.
 pub type BiomeRegistry = Registry<BiomeDefinition>;
@@ -88,6 +99,12 @@ pub struct BiomeDefinition {
     pub rule_source: Box<RuleSrc>,
     /// The noise function for this biome.
     pub surface_noise: Box<NoiseFn2>,
+}
+
+impl PartialEq for BiomeDefinition {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
 }
 
 impl BiomeDefinition {}
@@ -157,11 +174,25 @@ pub struct Noises {
     pub moisture_noise: Box<dyn NoiseFn<f64, 2>>,
 }
 
-///
-/// NOISE FUNCTION WRAPPERS
-/// 
+/// Name of the default void biome.
+pub const VOID_BIOME_NAME: RegistryName = RegistryName::ocg_const("void");
+
+lazy_static! {
+    /// Registration for said biome.
+    pub static ref VOID_BIOME: BiomeDefinition = BiomeDefinition {
+        name: VOID_BIOME_NAME,
+        representative_color: RGBA8::new(0, 0, 0, 0),
+        size_chunks: 0,
+        elevation: VPElevation::LowLand,
+        temperature: VPTemperature::MedTemp,
+        moisture: VPMoisture::MedMoist,
+        rule_source: Box::new(EmptyRuleSource()),
+        surface_noise: Box::new(Constant::new(0.0)),
+    };
+}
+
 impl NoiseFn2Trait for Constant {}
-impl NoiseFn2Trait for Fbm<SuperSimplex> {}
+impl<T> NoiseFn2Trait for Fbm<T> where T: NoiseFn<f64, 2> + Clone + Send + Sync {}
 impl NoiseFn2Trait for SuperSimplex {}
 impl NoiseFn2Trait for Perlin {}
 

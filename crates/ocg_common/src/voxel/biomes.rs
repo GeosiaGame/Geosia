@@ -2,7 +2,7 @@
 //! Most of this will be moved to a "base" mod at some point in the future.
 
 use noise::SuperSimplex;
-use ocg_schemas::{voxel::{biome::{BiomeRegistry, BiomeDefinition, VPElevation, VPTemperature, VPMoisture, Mul2, Add2}, generation::{rule_sources::{ChainRuleSource, ConditionRuleSource, BlockRuleSource}, fbm_noise::Fbm, condition_sources::{YLevelCondition, OffsetGroundLevelCondition, GroundLevelCondition, UnderGroundLevelCondition, UnderSeaLevelCondition, NotCondition, AlwaysTrueCondition}}, voxeltypes::{BlockRegistry, BlockEntry, EMPTY_BLOCK_NAME}}, registry::RegistryName, dependencies::rgb::RGBA8};
+use ocg_schemas::{voxel::{biome::{BiomeRegistry, BiomeDefinition, VPElevation, VPTemperature, VPMoisture, VOID_BIOME, Mul2, Add2}, generation::{rule_sources::{ChainRuleSource, ConditionRuleSource, BlockRuleSource}, fbm_noise::Fbm, condition_sources::{YLevelCondition, OffsetGroundLevelCondition, GroundLevelCondition, UnderGroundLevelCondition, UnderSeaLevelCondition, NotCondition, AlwaysTrueCondition}}, voxeltypes::{BlockRegistry, BlockEntry, EMPTY_BLOCK_NAME}}, registry::RegistryName, dependencies::rgb::RGBA8};
 
 use super::blocks::{SNOWY_GRASS_BLOCK_NAME, DIRT_BLOCK_NAME, GRASS_BLOCK_NAME, STONE_BLOCK_NAME, WATER_BLOCK_NAME};
 
@@ -31,16 +31,7 @@ pub fn setup_basic_biomes(block_registry: &BlockRegistry, biome_registry: &mut B
     let noise_func = Fbm::<SuperSimplex>::new(0);
     let noise_func = noise_func.set_octaves(vec![1.0, 2.0, 2.0, 1.0]);
 
-    /*biome_registry.push_object(BiomeDefinition {
-        name: EMPTY_BIOME_NAME,
-        representative_color: RGBA8::new(0, 0, 0, 0),
-        size_chunks: 0,
-        elevation: VPElevation::LowLand,
-        temperature: VPTemperature::MedTemp,
-        moisture: VPMoisture::MedMoist,
-        rule_source: Box::new(EmptyRuleSource()),
-        surface_noise: Box::new(noise::Constant {value: 0.0}),
-    }).unwrap();*/
+    biome_registry.push_object(VOID_BIOME.clone()).unwrap();
 
     let plains_rule_source = Box::new(ChainRuleSource::new(vec![
         Box::new(ConditionRuleSource::new(on_surface, 

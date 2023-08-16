@@ -6,16 +6,19 @@ use hashbrown::HashMap;
 use itertools::iproduct;
 use serde::{Serialize, Deserialize};
 
-use crate::coordinates::{AbsChunkPos, RelChunkPos, AbsChunkRange};
+use crate::{coordinates::{AbsChunkPos, RelChunkPos, AbsChunkRange}, registry::RegistryId};
 
-use super::{BiomeEntry, biome_picker::BiomeGenerator, BiomeRegistry, Noises};
+use super::{BiomeEntry, biome_picker::BiomeGenerator, BiomeRegistry, Noises, BiomeDefinition};
 
 /// The per-planet biome map.
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[repr(C)]
 pub struct BiomeMap {
     /// Map of Chunk position to biome.
-    map: HashMap<AbsChunkPos, BiomeEntry>
+    map: HashMap<AbsChunkPos, BiomeEntry>,
+    /// Map of Chunk position to biome definition.
+    #[serde(skip)]
+    pub base_map: HashMap<AbsChunkPos, (RegistryId, BiomeDefinition)>,
 }
 
 impl BiomeMap {
@@ -32,11 +35,11 @@ impl BiomeMap {
     }
 
     /// Gets a biome for a chunk, or if nonexistent, generates a new one.
-    pub fn get_or_new<'a>(&'a mut self, pos: &AbsChunkPos, generator: &'a mut BiomeGenerator, registry: &BiomeRegistry, noises: &Noises) -> Option<&BiomeEntry> {
+    pub fn get_or_new<'a>(&'a mut self, pos: &AbsChunkPos, generator: &'a mut BiomeGenerator, registry: &BiomeRegistry, noises: &Noises) -> Option<&(RegistryId, BiomeDefinition)> {
         if !self.contains_key(pos) {
-            generator.generate_area_biomes(AbsChunkRange::from_corners(*pos, AbsChunkPos::new(pos.x + 1, pos.y + 1, pos.z + 1)), self, registry, noises);
+            generator.generate_biome(pos, self, registry, noises);
         }
-        return self.get(pos);
+        return self.base_map.get(pos);
     }
 }
 
