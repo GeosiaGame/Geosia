@@ -182,12 +182,10 @@ impl ScatteredBiomeBlender {
             // Normalize so all weights in a column add up to 1.
             let inverse_total_weight = 1.0 / column_total_weight;
             let mut entry = linked_biome_map_start_entry.clone();
-            if let Some(ref mut e) = entry {
+            while let Some(mut e) = entry {
                 if e.weights.is_none() {
                     e.weights = Some(vec![0.0; self.chunk_column_count as usize]);
                 }
-            }
-            while let Some(e) = entry {
                 e.weights.unwrap()[i as usize] *= inverse_total_weight;
                 entry = Rc::unwrap_or_clone(e.next);
             }
