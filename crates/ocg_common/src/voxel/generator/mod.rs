@@ -184,7 +184,7 @@ impl CellGen {
         self.nearest_buf.resize(num, (0, CellPoint::default()));
     }
 
-    fn elevation_noise(&self, pos: IVec2, c_pos: IVec2, biome_registry: &BiomeRegistry, mut biome_blender: impl FnMut(IVec2) -> BiomeEntry) -> f64 {
+    fn elevation_noise<'a>(&self, pos: IVec2, c_pos: IVec2, biome_registry: &BiomeRegistry, mut biome_blender: impl FnMut(IVec2) -> &'a BiomeEntry<'a>) -> f64 {
         let nf = |p: DVec2, b: &BiomeDefinition| (b.surface_noise.get([p.x, p.y]) + 1.0) / 2.0;
         let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
         let mut height: f64 = 0.0;
@@ -196,12 +196,12 @@ impl CellGen {
                 weights = w[(pos.x + pos.y * CHUNK_DIM) as usize];
             }
             height += nf(pos.as_dvec2() / scale_factor, e.lookup(biome_registry).unwrap()) * weights;
-            entry = Rc::unwrap_or_clone(e.next);
+            entry = Rc::unwrap_or_clone(e.next.clone());
         }
         height
     }
 
-    fn calc_voxel_params(&mut self, pos: IVec2, c_pos: IVec2, biome_registry: &BiomeRegistry, biome_blender: impl FnMut(IVec2) -> BiomeEntry) -> i32 {
+    fn calc_voxel_params<'a>(&mut self, pos: IVec2, c_pos: IVec2, biome_registry: &BiomeRegistry, biome_blender: impl FnMut(IVec2) -> &'a BiomeEntry<'a>) -> i32 {
         self.find_nearest_cell_points(pos, 1);
 
         let height = self.elevation_noise(pos, c_pos, biome_registry, biome_blender);
@@ -216,23 +216,23 @@ impl Default for CellGen {
     }
 }
 
-pub struct StdGenerator {
+pub struct StdGenerator<'a> {
     seed: u64,
     biome_gen: BiomeGenerator,
-    biome_map: BiomeMap,
-    biome_blender: RefCell<ScatteredBiomeBlender>,
+    biome_map: BiomeMap<'a>,
+    biome_blender: RefCell<ScatteredBiomeBlender<'a>>,
     noises: Noises,
     cell_gen: ThreadLocal<RefCell<CellGen>>,
 }
 
-impl Default for StdGenerator {
+impl<'a> Default for StdGenerator<'a> {
     fn default() -> Self {
         Self::new(0, BiomeMap::default(), BiomeGenerator::new(0))
     }
 }
 
-impl StdGenerator {
-    pub fn new(seed: u64, biome_map: BiomeMap, biome_generator: BiomeGenerator) -> Self {
+impl<'a> StdGenerator<'a> {
+    pub fn new(seed: u64, biome_map: BiomeMap<'a>, biome_generator: BiomeGenerator) -> Self {
         Self {
             seed,
             biome_gen: biome_generator,
@@ -251,7 +251,7 @@ impl StdGenerator {
         self.biome_gen.generate_area_biomes(area, &mut self.biome_map, biome_registry, &self.noises);
     }
 
-    pub fn generate_chunk(&mut self, c_pos: AbsChunkPos, chunk: &mut PaletteStorage<BlockEntry>, block_registry: &Registry<BlockDefinition>, biome_registry: &Registry<BiomeDefinition>) {
+    pub fn generate_chunk(&'a mut self, c_pos: AbsChunkPos, chunk: &mut PaletteStorage<BlockEntry>, block_registry: &Registry<BlockDefinition>, biome_registry: &Registry<BiomeDefinition>) {
         let mut cellgen = self
             .cell_gen
             .get_or(|| RefCell::new(CellGen::new(self.seed)))
@@ -279,7 +279,7 @@ impl StdGenerator {
             unsafe { std::mem::transmute(vparams) }
         };
 
-        let mut biomegen_cloned = self.biome_gen;
+        let mut biomegen_cloned = self.biome_gen.clone();
         let current_biome = self.biome_map.get_or_new(&c_pos, &mut biomegen_cloned, biome_registry, &self.noises).expect("Invalid biome at pos!");
         for (pos_x, pos_y, pos_z) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM, 0..CHUNK_DIM) {
             let b_pos = InChunkPos::try_new(pos_x, pos_y, pos_z).unwrap();

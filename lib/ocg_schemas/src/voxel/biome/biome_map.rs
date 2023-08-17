@@ -13,15 +13,15 @@ use super::{BiomeEntry, biome_picker::BiomeGenerator, BiomeRegistry, Noises, Bio
 /// The per-planet biome map.
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[repr(C)]
-pub struct BiomeMap {
+pub struct BiomeMap<'a> {
     /// Map of Chunk position to biome.
-    map: HashMap<AbsChunkPos, BiomeEntry>,
+    map: HashMap<AbsChunkPos, BiomeEntry<'a>>,
     /// Map of Chunk position to biome definition.
     #[serde(skip)]
     pub base_map: HashMap<AbsChunkPos, (RegistryId, BiomeDefinition)>,
 }
 
-impl BiomeMap {
+impl<'a> BiomeMap<'a> {
     /// Gets biomes near the supplied position, in all cardinal directions (with strides of X=1, Z=3, Y=3²).
     pub fn get_biomes_near(&self, pos: AbsChunkPos) -> [Option<&BiomeEntry>; 27] {
         let mut new_arr = Vec::from_iter(repeat(Option::None).take(27));
@@ -35,7 +35,7 @@ impl BiomeMap {
     }
 
     /// Gets a biome for a chunk, or if nonexistent, generates a new one.
-    pub fn get_or_new<'a>(&'a mut self, pos: &AbsChunkPos, generator: &'a mut BiomeGenerator, registry: &BiomeRegistry, noises: &Noises) -> Option<&(RegistryId, BiomeDefinition)> {
+    pub fn get_or_new(&'a mut self, pos: &AbsChunkPos, generator: &'a mut BiomeGenerator, registry: &BiomeRegistry, noises: &Noises) -> Option<&(RegistryId, BiomeDefinition)> {
         if !self.contains_key(pos) {
             generator.generate_biome(pos, self, registry, noises);
         }
@@ -43,15 +43,15 @@ impl BiomeMap {
     }
 }
 
-impl Deref for BiomeMap {
-    type Target = HashMap<AbsChunkPos, BiomeEntry>;
+impl<'a> Deref for BiomeMap<'a> {
+    type Target = HashMap<AbsChunkPos, BiomeEntry<'a>>;
 
     fn deref(&self) -> &Self::Target {
         &self.map
     }
 }
 
-impl DerefMut for BiomeMap {
+impl<'a> DerefMut for BiomeMap<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.map
     }

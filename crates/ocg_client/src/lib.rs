@@ -121,10 +121,9 @@ mod debug_window {
         let biome_reg = biome_reg;
 
         let mut generator = StdGenerator::new(0, BiomeMap::default(), BiomeGenerator::new(0));
-        generator.generate_area_biome_map(AbsChunkRange::from_corners(AbsChunkPos::new(-8, -8, -8), AbsChunkPos::new(8, 8, 8)), &biome_reg);
 
         let mut test_chunks = ClientChunkGroup::new();
-        for (cx, cy, cz) in iproduct!(-8..=8, -8..=8, -8..=8) {
+        for (cx, cy, cz) in iproduct!(-4..=4, -4..=4, -4..=4) {
             let cpos = AbsChunkPos::new(cx, cy, cz);
             let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
             generator.generate_chunk(cpos, &mut chunk.blocks, &block_reg, &biome_reg);
