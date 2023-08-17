@@ -3,7 +3,7 @@
 use std::{f64::consts::PI, marker::PhantomData, rc::Rc};
 
 use lazy_static::lazy_static;
-use ocg_schemas::{voxel::biome::{BiomeEntry, BiomeRegistry, BiomeDefinition}, coordinates::{CHUNK_DIM, CHUNK_DIM2}, registry::RegistryId, dependencies::smallvec::smallvec};
+use ocg_schemas::{voxel::biome::{BiomeEntry, BiomeRegistry, BiomeDefinition}, coordinates::{CHUNK_DIM, CHUNK_DIM2}, registry::RegistryId, dependencies::smallvec::{smallvec, SmallVec}};
 use serde::{Deserialize, Serialize};
 
 
@@ -65,23 +65,23 @@ lazy_static! {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[repr(C)]
-pub struct ScatteredBiomeBlender<'a> {
+pub struct ScatteredBiomeBlender {
     chunk_column_count: i32,
     blend_radius_bound_array_center: i32,
     chunk_width_minus_one: i32,
     blend_radius: f64,
     blend_radius_sq: f64,
     blend_radius_bound: Vec<f64>,
-    chunk_point_gatherer: ChunkPointGatherer<BiomeEntry<'a>>,
+    chunk_point_gatherer: ChunkPointGatherer<SmallVec<[BiomeEntry; 16]>>,
 }
 
-impl<'a> ScatteredBiomeBlender<'a> {
+impl ScatteredBiomeBlender {
     pub fn new(sampling_frequency: f64, blend_radius_padding: f64) -> Self {
         let chunk_width_minus_one = CHUNK_DIM - 1;
         let chunk_column_count = CHUNK_DIM2;
         let blend_radius = blend_radius_padding + ScatteredBiomeBlender::get_internal_min_blend_radius_for_frequency(sampling_frequency);
         let blend_radius_sq = blend_radius * blend_radius;
-        let gatherer = ChunkPointGatherer::<BiomeEntry>::new(sampling_frequency, blend_radius);
+        let gatherer = ChunkPointGatherer::<SmallVec<[BiomeEntry; 16]>>::new(sampling_frequency, blend_radius);
         
         let blend_radius_bound_array_center = blend_radius.ceil() as i32 - 1;
         let mut blend_radius_bound = Vec::with_capacity(blend_radius_bound_array_center as usize * 2 + 1);
@@ -102,47 +102,40 @@ impl<'a> ScatteredBiomeBlender<'a> {
         }
     }
     
-    pub fn get_blend_for_block(&mut self, seed: u64, chunk_base_world_x: i32, chunk_base_world_z: i32, registry: &BiomeRegistry, mut callback: impl FnMut(f64, f64) -> (RegistryId, BiomeDefinition)) -> &BiomeEntry {
+    pub fn get_blend_for_block(&mut self, seed: u64, chunk_base_world_x: i32, chunk_base_world_z: i32, registry: &BiomeRegistry, biome: &(RegistryId, BiomeDefinition)) -> SmallVec<[BiomeEntry; 16]> {
         
         // Get the list of data points in range.
         let mut points = self.chunk_point_gatherer.get_points(seed, chunk_base_world_x as f64, chunk_base_world_z as f64);
         
         // Evaluate and aggregate all biomes to be blended in this chunk.
-        let mut linked_biome_map_start_entry: Option<&BiomeEntry> = None;
+        let mut linked_biome_map_start_entries: SmallVec<[BiomeEntry; 16]> = smallvec![];
         for point in points.iter_mut() {
-            
-            // Get the biome for this data point from the callback.
-            let biome = callback(point.x, point.z);
-            
+                        
             // Find or create the chunk biome blend weight layer entry for this biome.
-            let mut entry = linked_biome_map_start_entry.clone();
-            while let Some(e) = entry {
+            let mut entries = linked_biome_map_start_entries.clone();
+            for e in entries.iter_mut() {
                 if e.lookup(registry).is_some_and(|f| *f == biome.1) {
                     break;
                 }
-                entry = Rc::unwrap_or_clone(e.clone().next);
             }
-            if entry.is_none() {
-                let c_entry = Some(&BiomeEntry::new_next(biome.0, linked_biome_map_start_entry));
-                entry = c_entry;
-                linked_biome_map_start_entry = c_entry;
+            if entries.is_empty() {
+                BiomeEntry::new_next(biome.0, &mut entries);
+                linked_biome_map_start_entries = entries.clone();
             }
 
             
-            point.tag = entry;
+            point.tag = Some(entries);
         }
         
         // If there is only one biome in range here, we can skip the actual blending step.
-        if let Some(e) = linked_biome_map_start_entry.clone() {
-            if let None = Rc::unwrap_or_clone(e.next) {
-                return e;
+        if let Some(e) = linked_biome_map_start_entries.get(0) {
+            if linked_biome_map_start_entries.get(1).is_none() {
+                return linked_biome_map_start_entries;
             }
         }
         
-        let mut entry = linked_biome_map_start_entry.clone(); 
-        while let Some(mut e) = entry {
+        for e in linked_biome_map_start_entries.iter_mut() {
             e.weights = Some(smallvec![0.0; self.chunk_column_count as usize]);
-            entry = Rc::unwrap_or_clone(e.next);
         }
         
         let mut z = chunk_base_world_z as f64;
@@ -166,20 +159,18 @@ impl<'a> ScatteredBiomeBlender<'a> {
                     let mut weight = self.blend_radius_sq - dist_sq;
                     weight *= weight;
                     
-                    if point.tag.as_mut().unwrap().weights.as_mut().is_none() {
-                        point.tag.as_mut().unwrap().weights = Some(smallvec![0.0; self.chunk_column_count as usize]);
+                    if point.tag.as_mut().unwrap()[0].weights.as_mut().is_none() {
+                        point.tag.as_mut().unwrap()[0].weights = Some(smallvec![1.0; self.chunk_column_count as usize]);
                     }
-                    point.tag.as_mut().unwrap().weights.as_mut().expect("Weights for point.tag were NONE")[i as usize] += weight;
+                    point.tag.as_mut().unwrap()[0].weights.as_mut().expect("Weights for point.tag were NONE")[i as usize] += weight;
                     column_total_weight += weight;
                 }
             }
             
             // Normalize so all weights in a column add up to 1.
             let inverse_total_weight = 1.0 / column_total_weight;
-            let mut entry = linked_biome_map_start_entry.clone();
-            while let Some(mut e) = entry {
-                e.weights.unwrap()[i as usize] *= inverse_total_weight;
-                entry = Rc::unwrap_or_clone(e.next);
+            for e in linked_biome_map_start_entries.iter_mut() {
+                e.weights.as_mut().unwrap()[i as usize] *= inverse_total_weight;
             }
             
             // A double can fully represent an int, so no precision loss to worry about here.
@@ -191,7 +182,7 @@ impl<'a> ScatteredBiomeBlender<'a> {
             }
         }
         
-        return linked_biome_map_start_entry.unwrap();
+        return linked_biome_map_start_entries;
     }
 
     pub fn get_internal_min_blend_radius_for_frequency(sampling_frequency: f64) -> f64 {
@@ -209,10 +200,7 @@ struct ChunkPointGatherer<TTag> {
 }
 
 impl<TTag> ChunkPointGatherer<TTag> {
-    pub fn new(frequency: f64, max_point_contribution_radius: f64) -> Self {
-        let frequency = frequency;
-        let inverse_frequency = 1.0 / frequency;
-        
+    pub fn new(frequency: f64, max_point_contribution_radius: f64) -> Self {        
         // How far out in the jittered hex grid we need to look for points.
         // Assumes the jitter can go any angle, which should only very occasionally
         // cause us to search one more layer out than we need.
@@ -284,7 +272,7 @@ impl<TTag> ChunkPointGatherer<TTag> {
 
         Self {
             frequency: frequency,
-            inverse_frequency: inverse_frequency,
+            inverse_frequency: 1.0 / frequency,
             points_to_search: points_to_search,
             phantom: PhantomData,
         }
@@ -404,14 +392,14 @@ impl LatticePoint {
     }
 }
 
-pub struct GatheredPoint<'a, TTag> {
+pub struct GatheredPoint<TTag> {
     x: f64,
     z: f64,
     hash: i32,
-    tag: Option<&'a TTag>,
+    tag: Option<TTag>,
 }
 
-impl<'a, TTag> GatheredPoint<'a, TTag> {
+impl<TTag> GatheredPoint<TTag> {
     pub fn new(x: f64, z: f64, hash: i32) -> Self {
         Self {
             x: x,

@@ -70,7 +70,7 @@ impl BiomeGenerator {
         }
     }
 
-    fn pick_biome<'a>(&'a mut self, center: AbsChunkPos, pos: RelChunkPos, _map: &BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) -> (RegistryId, BiomeDefinition) {
+    fn pick_biome<'a>(center: AbsChunkPos, pos: RelChunkPos, _map: &BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) -> (RegistryId, &'a BiomeDefinition) {
         let pos_d = (center + pos).as_dvec3();
         let pos_d = [pos_d.x, pos_d.z];
         let height = noises.elevation_noise.get(pos_d);
@@ -81,7 +81,7 @@ impl BiomeGenerator {
         let wetness = BiomeGenerator::get_moisture(wetness);
         let temp = BiomeGenerator::get_temperature(temp);
 
-        let mut final_id: Option<(RegistryId, BiomeDefinition)> = None;
+        let mut final_id: Option<(RegistryId, &BiomeDefinition)> = None;
 
         let objects = registry.get_objects_ids();
         for id in objects.iter() {
@@ -89,26 +89,26 @@ impl BiomeGenerator {
                 let id = obj.0;
                 let obj = obj.1;
                 if obj.elevation >= height &&/* obj.moisture >= wetness*/ obj.temperature >= temp {
-                    final_id = Some((*id, obj.to_owned()));
+                    final_id = Some((*id, obj));
                     break;
                 }
             }
         }
-        final_id.unwrap_or_else(|| registry.lookup_name_to_object(VOID_BIOME_NAME.as_ref()).map(|f| (f.0, f.1.to_owned())).unwrap())
+        final_id.unwrap_or_else(|| registry.lookup_name_to_object(VOID_BIOME_NAME.as_ref()).unwrap())
     }
 
     /// Gets biomes from a range of positions.
-    pub fn generate_area_biomes<'a>(&'a mut self, area: AbsChunkRange, biome_map: &mut BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) {
+    pub fn generate_area_biomes(&mut self, area: AbsChunkRange, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) {
         let center = area.max() - RelChunkPos::from(area.min().into_ivec3() / 2);
         for pos in area.iter_xzy() {
-            let biome_def = self.pick_biome(center, pos.into(), &biome_map, registry, noises);
-            biome_map.base_map.insert(pos, biome_def);
+            let biome_def = BiomeGenerator::pick_biome(center, pos.into(), &biome_map, registry, noises);
+            biome_map.base_map.insert(pos, (biome_def.0, biome_def.1.to_owned()));
         }
     }
 
-    pub fn generate_biome<'a>(&'a mut self, pos: &AbsChunkPos, biome_map: &mut BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) {
-        let biome_def = self.pick_biome(*pos, RelChunkPos::splat(0), &biome_map, registry, noises);
-        biome_map.base_map.insert(*pos, biome_def);
+    pub fn generate_biome(&mut self, pos: &AbsChunkPos, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) {
+        let biome_def: (RegistryId, &BiomeDefinition) = BiomeGenerator::pick_biome(*pos, RelChunkPos::splat(0), &biome_map, registry, noises);
+        biome_map.base_map.insert(*pos, (biome_def.0, biome_def.1.to_owned()));
     }
 
     /// Sets the seed of this biome generator.

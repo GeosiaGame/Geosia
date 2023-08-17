@@ -20,37 +20,34 @@ pub mod biome_picker;
 /// A biome entry stored in the per-planet biome map.
 #[derive(Clone, Debug, PartialOrd, PartialEq, Serialize, Deserialize)]
 #[repr(C)]
-pub struct BiomeEntry<'a> {
+pub struct BiomeEntry {
     /// The biome ID in registry.
     pub id: RegistryId,
     /// Weight map
     pub weights: Option<SmallVec<[f64; CHUNK_DIMZ]>>,
-    /// Next element for the blender.
-    #[serde(skip)]
-    pub next: Rc<Option<&'a BiomeEntry<'a>>>,
 }
 
-impl<'a> BiomeEntry<'a> {
+impl BiomeEntry {
     /// Helper to construct a new biome entry.
     pub fn new_base(id: RegistryId, chunk_column_count: usize) -> Self {
         Self {
             id: id,
             weights: Some(smallvec![0.0; chunk_column_count]),
-            next: Rc::new(None),
         }
     }
 
     /// Helper to construct a new biome entry with the chosen element as the next one in this linked list.
-    pub fn new_next(id: RegistryId, next: Option<&'a BiomeEntry>) -> Self {
-        Self {
+    pub fn new_next(id: RegistryId, list: &mut SmallVec<[BiomeEntry; 16]>) -> &Self {
+        let this = Self {
             id: id,
             weights: None,
-            next: Rc::new(next)
-        }
+        };
+        list.insert(0, this);
+        list.get(0).unwrap()
     }
 
     /// Helper to look up the biome definition corresponding to this ID
-    pub fn lookup(&self, registry: &'a BiomeRegistry) -> Option<&BiomeDefinition> {
+    pub fn lookup<'a>(&'a self, registry: &'a BiomeRegistry) -> Option<&BiomeDefinition> {
         registry.lookup_id_to_object(self.id)
     }
 
