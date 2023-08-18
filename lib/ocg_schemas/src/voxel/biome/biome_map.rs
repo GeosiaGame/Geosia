@@ -1,14 +1,14 @@
 //! World biome map implementation
 
-use std::{iter::repeat, ops::{Deref, DerefMut}, cell::RefCell};
+use std::{ops::{Deref, DerefMut}, cell::RefCell};
 
 use hashbrown::HashMap;
-use itertools::iproduct;
 use serde::{Serialize, Deserialize};
+use smallvec::{SmallVec, smallvec};
 
-use crate::{coordinates::{AbsChunkPos, RelChunkPos, AbsBlockPos, RelBlockPos}, registry::RegistryId};
+use crate::{coordinates::AbsChunkPos, registry::RegistryId};
 
-use super::{BiomeEntry, biome_picker::BiomeGenerator, BiomeRegistry, Noises, BiomeDefinition};
+use super::{BiomeEntry, biome_picker::BiomeGenerator, BiomeRegistry, Noises, BiomeDefinition, VOID_BIOME_NAME, VOID_BIOME};
 
 
 pub const CACHE_MAX_ENTRIES: i32 = 12;
@@ -16,6 +16,7 @@ pub const CACHE_MAX_ENTRIES: i32 = 12;
 pub const REGION_SIZE_EXPONENT: i32 = 8; // SIZExSIZE, SIZE=2^EXPONENT; 2^7=128
 pub const CHUNK_SIZE_EXPONENT: i32 = 5; // SIZExSIZE, SIZE=2^EXPONENT; 2^5=32
 pub const BLEND_RADIUS: i32 = 16;
+pub const BLEND_CIRCUMFERENCE: i32 = BLEND_RADIUS * 2 + 1;
 
 pub const REGION_SIZE: i32 = 1 << REGION_SIZE_EXPONENT;
 pub const CHUNK_SIZE: i32 = 1 << CHUNK_SIZE_EXPONENT;
@@ -26,36 +27,43 @@ pub const PADDED_REGION_SIZE_SQZ: usize = (PADDED_REGION_SIZE * PADDED_REGION_SI
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct BiomeMap {
     /// Map of Chunk position to biome.
-    map: HashMap<AbsBlockPos, BiomeEntry>,
+    map: HashMap<AbsChunkPos, BiomeEntry>,
     /// Map of Chunk position to biome definition.
     #[serde(skip)]
-    pub base_map: HashMap<AbsBlockPos, (RegistryId, BiomeDefinition)>,
+    pub base_map: HashMap<AbsChunkPos, (RegistryId, BiomeDefinition)>,
 }
 
 impl BiomeMap {
-    /// Gets biomes near the supplied position, in all cardinal directions (with strides of X=1, Z=3, Y=3²).
-    pub fn get_biomes_near(&self, pos: AbsBlockPos) -> [Option<&BiomeEntry>; 27] {
-        let mut new_arr = Vec::from_iter(repeat(Option::None).take(27));
-        for (o_x, o_z, o_y) in iproduct!(0..=2, 0..=2, 0..=2) {
-            let obj = self.map.get(&(pos + RelBlockPos::new(o_x - 1, o_y - 1, o_z - 1)));
-            if obj.is_some() {
-                new_arr[(o_x + (o_z * 3) + (o_y * 3 * 3)) as usize] = Option::Some(obj.unwrap());
-            }
-        }
-        <[Option<&BiomeEntry>; 27]>::try_from(new_arr).unwrap()
-    }
 
     /// Gets a biome for a chunk, or if nonexistent, generates a new one.
-    pub fn get_or_new<'a>(&'a mut self, pos: &AbsBlockPos, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &Noises, biome_map: &mut Option<[&'a BiomeDefinition; PADDED_REGION_SIZE_SQZ]>) -> Option<&(RegistryId, BiomeDefinition)> {
+    pub fn get_or_new<'a>(&'a mut self, pos: &AbsChunkPos, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &Noises) -> Option<&(RegistryId, BiomeDefinition)> {
         if !self.contains_key(pos) {
-            generator.borrow_mut().generate_biome(pos, self, registry, noises);
+            let mut gen = generator.borrow_mut();
+            let gen = gen.generate_biome(pos, self, registry, noises);
+            self.base_map.insert(*pos, (gen.0, gen.1.to_owned()));
         }
-        return ret_val;
+        return self.base_map.get(pos);
+    }
+
+    pub fn generate_region(&mut self, region_x: i32, region_z: i32, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &Noises) -> SmallVec<[(RegistryId, BiomeDefinition); PADDED_REGION_SIZE_SQZ]> {
+        let mut biome_map = smallvec![registry.lookup_name_to_object(VOID_BIOME_NAME.as_ref()).map(|x| (x.0, x.1.to_owned())).unwrap(); PADDED_REGION_SIZE_SQZ];
+        for rx in 0..PADDED_REGION_SIZE {
+            let x = (rx - BLEND_RADIUS) + (region_x << REGION_SIZE_EXPONENT);
+            for rz in 0..PADDED_REGION_SIZE {
+                let z = (rz - BLEND_RADIUS) + (region_z << REGION_SIZE_EXPONENT);
+
+                let biome = generator.borrow_mut().generate_biome(&AbsChunkPos::new(x, 0, z), self, registry, noises);
+                self.base_map.insert(AbsChunkPos::new(x, 0, z), biome.clone());
+
+                biome_map[(rx + rz * PADDED_REGION_SIZE) as usize] = biome;
+            }
+        }
+        biome_map
     }
 }
 
 impl Deref for BiomeMap {
-    type Target = HashMap<AbsBlockPos, BiomeEntry>;
+    type Target = HashMap<AbsChunkPos, BiomeEntry>;
 
     fn deref(&self) -> &Self::Target {
         &self.map

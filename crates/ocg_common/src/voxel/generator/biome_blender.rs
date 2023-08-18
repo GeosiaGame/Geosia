@@ -1,9 +1,9 @@
 //! Biome blender.
 
-use std::{f64::consts::PI, marker::PhantomData};
+use std::{f64::consts::PI, marker::PhantomData, cell::RefCell};
 
 use lazy_static::lazy_static;
-use ocg_schemas::{voxel::biome::{BiomeEntry, BiomeRegistry, BiomeDefinition, self, biome_map::{PADDED_REGION_SIZE_SQZ, BLEND_RADIUS, self, BiomeMap}}, coordinates::{CHUNK_DIM, CHUNK_DIM2}, registry::RegistryId, dependencies::smallvec::{smallvec, SmallVec}};
+use ocg_schemas::{voxel::biome::{BiomeEntry, BiomeRegistry, BiomeDefinition, self, biome_map::{PADDED_REGION_SIZE_SQZ, BLEND_RADIUS, BLEND_CIRCUMFERENCE, REGION_SIZE, BiomeMap, CACHE_MAX_ENTRIES, REGION_SIZE_EXPONENT, CHUNK_SIZE_EXPONENT}, biome_picker::BiomeGenerator, Noises}, coordinates::{CHUNK_DIM, CHUNK_DIM2, CHUNK_DIMZ, CHUNK_DIM2Z}, registry::RegistryId, dependencies::{smallvec::{smallvec, SmallVec}, bitvec::macros::internal::funty::Floating, itertools::iproduct}};
 use serde::{Deserialize, Serialize};
 
 
@@ -63,20 +63,20 @@ lazy_static! {
         jitter_sincos
     };
 
-    static ref BLUR_KERNEL: [f64; ((BLEND_RADIUS*2+1) * (BLEND_RADIUS*2+1)) as usize] = {
-		let weight_total = 0.0;
-        let mut ret_val = [0.0; ((BLEND_RADIUS*2+1) * (BLEND_RADIUS*2+1)) as usize];
-		for iz in 0..BLEND_RADIUS*2+1 {
+    static ref BLUR_KERNEL: [f64; ((BLEND_CIRCUMFERENCE) * (BLEND_CIRCUMFERENCE)) as usize] = {
+		let mut weight_total = 0.0;
+        let mut ret_val = [0.0; ((BLEND_CIRCUMFERENCE) * (BLEND_CIRCUMFERENCE)) as usize];
+		for iz in 0..BLEND_CIRCUMFERENCE {
 			let idz = iz - BLEND_RADIUS;
-			for ix in 0..BLEND_RADIUS*2+1 {
+			for ix in 0..BLEND_CIRCUMFERENCE {
 				let idx = ix - BLEND_RADIUS;
-				let this_weight = BLEND_RADIUS * BLEND_RADIUS - idx * idx - idz * idz;
+				let mut this_weight = BLEND_RADIUS * BLEND_RADIUS - idx * idx - idz * idz;
 				if this_weight <= 0 { // We only compute for the circle of positive values of the blending function.
                     continue;
                 }
 				this_weight *= this_weight; // Make transitions smoother.
-				weight_total += this_weight;
-				ret_val[(iz * (BLEND_RADIUS*2+1) + ix) as usize] = this_weight as f64;
+				weight_total += this_weight as f64;
+				ret_val[(iz * (BLEND_CIRCUMFERENCE) + ix) as usize] = this_weight as f64;
 			}
 		}
 		
@@ -99,56 +99,95 @@ impl SimpleBiomeBlender {
         }
     }
 
-    pub fn get_blended(seed: u64, block_x: f64, block_z: f64, registry: &BiomeRegistry) -> f64 {
-        let mut total_height = 0.0;
-        let mut total_weight = 0.0;
-        let mut weights: Vec<f64> = vec![];
-        for biome in registry.get_objects_ids() {
-            if let Some((id, biome)) = biome {
-                let height = biome.surface_noise.get([block_x, block_z]);
-                let weight = (biome.influence - (height - biome.elevation).abs()) / biome.influence;
-                
-                let weight = weight.max(0.0);
-                weights.push(weight);
-                total_weight += weight;
+    pub fn get_blended_for_chunk(&mut self, chunk_x: i32, chunk_z: i32, biome_map: &mut BiomeMap, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &Noises) -> SmallVec<[SmallVec<[BiomeEntry; 3]>; CHUNK_DIM2Z]> {
+        let region_x = chunk_x >> (REGION_SIZE_EXPONENT - CHUNK_SIZE_EXPONENT);
+        let region_z = chunk_z >> (REGION_SIZE_EXPONENT - CHUNK_SIZE_EXPONENT);
+        let biomes = self.get_biomes_for_region(region_x, region_z, biome_map, generator, registry, noises);
 
-                let height = height * weight;
-                total_height += height;
+        let mut chunk_results: SmallVec<[SmallVec<[BiomeEntry; 3]>; CHUNK_DIM2Z]> = SmallVec::new();
+
+        for (cx, cz) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM) {
+            chunk_results[(cx + cz * CHUNK_DIM) as usize] = SimpleBiomeBlender::get_blended((chunk_x << CHUNK_SIZE_EXPONENT) + cx, (chunk_z << CHUNK_SIZE_EXPONENT) + cz, biomes);
+        }
+        chunk_results
+    }
+
+    pub fn get_blended(x: i32, z: i32, biome_map: &SmallVec<[(RegistryId, BiomeDefinition); PADDED_REGION_SIZE_SQZ]>) -> SmallVec<[BiomeEntry; 3]> {
+        let mut results: SmallVec<[BiomeEntry; 3]> = smallvec![];
+
+		// Mod the world coordinate by the region size.
+		let x_masked = x & (REGION_SIZE - 1);
+		let z_masked = z & (REGION_SIZE - 1);
+
+        for ix in 0..BLEND_CIRCUMFERENCE {
+            for iz in 0..BLEND_CIRCUMFERENCE {
+
+                let this_weight = BLUR_KERNEL[(ix + iz * BLEND_CIRCUMFERENCE) as usize];
+                if this_weight <= 0.0 {
+                    continue;
+                }
+                
+                let this_biome = &biome_map[((x_masked + ix) + (z_masked + iz) * PADDED_REGION_SIZE_SQZ as i32) as usize];
+
+                let mut found_entry = false;
+                for entry in results.iter_mut() {
+                    if entry.id == this_biome.0 {
+                        entry.weight += this_weight;
+                        found_entry = true;
+                        break;
+                    }
+                }
+
+                if !found_entry {
+                    let mut entry = BiomeEntry::new(this_biome.0);
+                    entry.weight = this_weight;
+                    results.push(entry);
+                }
             }
         }
 
-        total_height / total_weight
+        results
     }
 
-    fn get_biomes_for_region(&mut self, region_x: i32, region_z: i32, biome_map: &BiomeMap) -> [f64; PADDED_REGION_SIZE_SQZ] {
+    fn get_biomes_for_region(&mut self, region_x: i32, region_z: i32, biome_map: &mut BiomeMap, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &Noises) -> &SmallVec<[(RegistryId, BiomeDefinition); PADDED_REGION_SIZE_SQZ]> {
         let mut correct_cache_entry: Option<BiomeCacheEntry> = None;
         self.biome_map_cache.retain(|obj| {
             if obj.region_x == region_x && obj.region_z == region_z {
-                correct_cache_entry = obj;
+                correct_cache_entry = Some(obj.to_owned());
                 return false;
             }
             return true;
         });
 
         if correct_cache_entry.is_none() {
-            let mut cache_entry = BiomeCacheEntry::new(region_x, region_z, [0.0; PADDED_REGION_SIZE_SQZ]);
-            biome_map.get_or_new(pos, generator, registry, noises, biome_map)
+            let mut entry = BiomeCacheEntry::new(region_x, region_z);
+            entry.cache = Some(biome_map.generate_region(region_x, region_z, generator, registry, noises));
+            correct_cache_entry = Some(entry);
         }
+
+        self.biome_map_cache.insert(0, correct_cache_entry.unwrap());
+
+        if self.biome_map_cache.len() > CACHE_MAX_ENTRIES as usize {
+            self.biome_map_cache.remove(self.biome_map_cache.len() - 1);
+        }
+
+        self.biome_map_cache.get(0).unwrap().cache.as_ref().unwrap()
     }
 }
 
-struct BiomeCacheEntry {
-    pub cache: [i32; PADDED_REGION_SIZE_SQZ],
+#[derive(Clone)]
+pub struct BiomeCacheEntry {
+    pub cache: Option<SmallVec<[(RegistryId, BiomeDefinition); PADDED_REGION_SIZE_SQZ]>>,
     region_x: i32,
     region_z: i32,
 }
 
 impl BiomeCacheEntry {
-    pub fn new(region_x: i32, region_z: i32, map: [i32; PADDED_REGION_SIZE_SQZ]) -> Self {
+    pub fn new(region_x: i32, region_z: i32) -> Self {
         Self {
             region_x: region_x,
             region_z: region_z,
-            cache: map,
+            cache: None,
         }
     }
 }
