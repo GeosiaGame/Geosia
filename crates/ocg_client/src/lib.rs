@@ -79,7 +79,6 @@ mod debug_window {
     use ocg_common::voxel::blocks::setup_basic_blocks;
     use ocg_common::voxel::generator::StdGenerator;
     use ocg_schemas::coordinates::AbsChunkPos;
-    use ocg_schemas::coordinates::AbsChunkRange;
     use ocg_schemas::dependencies::itertools::iproduct;
     use ocg_schemas::voxel::biome::BiomeRegistry;
     use ocg_schemas::voxel::biome::biome_map::BiomeMap;
@@ -120,7 +119,9 @@ mod debug_window {
         setup_basic_biomes(&block_reg, &mut biome_reg);
         let biome_reg = biome_reg;
 
-        let mut generator = StdGenerator::new(0, BiomeGenerator::new(0));
+        let biome_map = BiomeMap::default();
+
+        let mut generator = StdGenerator::new(0, biome_map, BiomeGenerator::new(0));
 
         let mut test_chunks = ClientChunkGroup::new();
         for (cx, cy, cz) in iproduct!(-8..=8, -8..=8, -8..=8) {
@@ -148,7 +149,7 @@ mod debug_window {
                 });
             }
         }
-
+        
         commands.spawn(DirectionalLightBundle {
             directional_light: DirectionalLight {
                 shadows_enabled: false,

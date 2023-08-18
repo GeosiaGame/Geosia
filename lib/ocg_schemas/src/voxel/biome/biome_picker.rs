@@ -1,6 +1,6 @@
 //! Random biome picker
 
-use crate::{voxel::biome::{BiomeRegistry, biome_map::BiomeMap}, coordinates::{AbsChunkRange, AbsChunkPos, RelChunkPos}, registry::RegistryId};
+use crate::{voxel::biome::{BiomeRegistry, biome_map::BiomeMap}, coordinates::{AbsChunkRange, AbsChunkPos, RelChunkPos, InChunkRange, CHUNK_DIM, RelBlockPos, AbsBlockPos}, registry::RegistryId};
 use noise::NoiseFn;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256StarStar;
@@ -32,54 +32,50 @@ impl BiomeGenerator {
 
     fn get_temperature(fl: f64) -> VPTemperature {
         if fl < 0.0 {
-            VPTemperature::Freezing
+            VPTemperature::Freezing(fl)
         } else if fl < 0.2 {
-            VPTemperature::LowTemp
+            VPTemperature::LowTemp(fl)
         } else if fl < 0.4 {
-            VPTemperature::MedTemp
+            VPTemperature::MedTemp(fl)
         } else if fl < 0.6 {
-            VPTemperature::HiTemp
+            VPTemperature::HiTemp(fl)
         } else {
-            VPTemperature::Desert
+            VPTemperature::Desert(fl)
         }
     }
 
     fn get_moisture(fl: f64) -> VPMoisture {
         if fl < 0.05 {
-            VPMoisture::Deadland
+            VPMoisture::Deadland(fl)
         } else if fl < 0.3 {
-            VPMoisture::Desert
+            VPMoisture::Desert(fl)
         } else if fl < 0.55 {
-            VPMoisture::LowMoist
+            VPMoisture::LowMoist(fl)
         } else if fl < 0.8 {
-            VPMoisture::MedMoist
+            VPMoisture::MedMoist(fl)
         } else {
-            VPMoisture::HiMoist
+            VPMoisture::HiMoist(fl)
         }
     }
 
     fn get_elevation(fl: f64) -> VPElevation {
-        if fl < 0.35 {
-            VPElevation::Ocean
-        } else if fl < 0.5 {
-            VPElevation::LowLand
-        } else if fl < 0.75 {
-            VPElevation::Hill
+        if fl < 0.15 {
+            VPElevation::Ocean(fl)
+        } else if fl < 0.4 {
+            VPElevation::LowLand(fl)
+        } else if fl < 0.65 {
+            VPElevation::Hill(fl)
         } else {
-            VPElevation::Mountain
+            VPElevation::Mountain(fl)
         }
     }
 
-    fn pick_biome<'a>(center: AbsChunkPos, pos: RelChunkPos, _map: &BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) -> (RegistryId, &'a BiomeDefinition) {
+    fn pick_biome<'a>(center: AbsBlockPos, pos: RelBlockPos, _map: &BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) -> (RegistryId, &'a BiomeDefinition) {
         let pos_d = (center + pos).as_dvec3();
         let pos_d = [pos_d.x, pos_d.z];
         let height = noises.elevation_noise.get(pos_d);
         let wetness = noises.moisture_noise.get(pos_d);
         let temp = noises.temperature_noise.get(pos_d);
-
-        let height = BiomeGenerator::get_elevation(height);
-        let wetness = BiomeGenerator::get_moisture(wetness);
-        let temp = BiomeGenerator::get_temperature(temp);
 
         let mut final_id: Option<(RegistryId, &BiomeDefinition)> = None;
 
@@ -101,13 +97,15 @@ impl BiomeGenerator {
     pub fn generate_area_biomes(&mut self, area: AbsChunkRange, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) {
         let center = area.max() - RelChunkPos::from(area.min().into_ivec3() / 2);
         for pos in area.iter_xzy() {
-            let biome_def = BiomeGenerator::pick_biome(center, pos.into(), &biome_map, registry, noises);
-            biome_map.base_map.insert(pos, (biome_def.0, biome_def.1.to_owned()));
+            for b_pos in InChunkRange::WHOLE_CHUNK.iter_xzy() {
+                let biome_def = BiomeGenerator::pick_biome(AbsBlockPos::from_ivec3(center.0 * CHUNK_DIM), RelBlockPos::from_ivec3(b_pos.0 + pos.0), &biome_map, registry, noises);
+                biome_map.base_map.insert(AbsBlockPos::from_ivec3(b_pos.0 + pos.into_ivec3() * CHUNK_DIM), (biome_def.0, biome_def.1.to_owned()));   
+            }
         }
     }
 
-    pub fn generate_biome(&mut self, pos: &AbsChunkPos, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) {
-        let biome_def: (RegistryId, &BiomeDefinition) = BiomeGenerator::pick_biome(*pos, RelChunkPos::splat(0), &biome_map, registry, noises);
+    pub fn generate_biome(&mut self, pos: &AbsBlockPos, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) {
+        let biome_def: (RegistryId, &BiomeDefinition) = BiomeGenerator::pick_biome(*pos, RelBlockPos::splat(0), &biome_map, registry, noises);
         biome_map.base_map.insert(*pos, (biome_def.0, biome_def.1.to_owned()));
     }
 

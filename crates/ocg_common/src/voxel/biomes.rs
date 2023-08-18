@@ -55,61 +55,65 @@ pub fn setup_basic_biomes(block_registry: &BlockRegistry, biome_registry: &mut B
             name: PLAINS_BIOME_NAME,
             representative_color: RGBA8::new(20, 180, 10, 255),
             size_chunks: 6,
-            elevation: VPElevation::LowLand,
-            temperature: VPTemperature::MedTemp,
-            moisture: VPMoisture::MedMoist,
+            elevation: 0.4,
+            temperature: 0.4,
+            moisture: 0.8,
             rule_source: plains_rule_source.clone(),
             surface_noise: Box::new(noise_func.clone()),
+            influence: 1.0,
         })
         .unwrap();
 
-    let noise_func = Fbm::<SuperSimplex>::new(0);
+    let noise_func = Fbm::<SuperSimplex>::new(1);
     let noise_func = noise_func.set_octaves(vec![0.1, 0.5, 0.0, 1.5]);
     biome_registry
         .push_object(BiomeDefinition {
             name: OCEAN_BIOME_NAME,
             representative_color: RGBA8::new(10, 120, 180, 255),
             size_chunks: 6,
-            elevation: VPElevation::Ocean,
-            temperature: VPTemperature::MedTemp,
-            moisture: VPMoisture::HiMoist,
+            elevation: 0.0,
+            temperature: 0.4,
+            moisture: 1.0,
             rule_source: Box::new(ChainRuleSource::new(vec![
                 Box::new(ConditionRuleSource::new(under_surface.clone(), Box::new(BlockRuleSource::new(BlockEntry::new(i_stone, 0))))),
                 Box::new(ConditionRuleSource::new(Box::new(UnderSeaLevelCondition()), Box::new(BlockRuleSource::new(BlockEntry::new(i_water, 0)))))
             ])),
             surface_noise: Box::new(noise_func.clone()),
+            influence: 1.0,
         })
         .unwrap();
 
-    let noise_func = Fbm::<SuperSimplex>::new(0);
-    let noise_func = noise_func.set_octaves(vec![0.1, 0.5, 0.0, 1.5]);
+    let noise_func = Fbm::<SuperSimplex>::new(2);
+    let noise_func = noise_func.set_octaves(vec![1.0, 2.5, 2.5, 1.5]);
     let noise_func = noise_func.set_persistence(0.75);
     biome_registry
         .push_object(BiomeDefinition {
             name: HILLS_BIOME_NAME,
             representative_color: RGBA8::new(15, 110, 10, 255),
             size_chunks: 5,
-            elevation: VPElevation::Hill,
-            temperature: VPTemperature::MedTemp,
-            moisture: VPMoisture::MedMoist,
+            elevation: 0.6,
+            temperature: 0.4,
+            moisture: 0.8,
             rule_source: plains_rule_source.clone(),
             surface_noise: Box::new(Mul2(noise::Multiply::new(noise_func.clone(), noise::Constant { value: 10.0 }))),
+            influence: 0.85,
         })
         .unwrap();
 
-    let noise_func = Fbm::<SuperSimplex>::new(0);
-    let noise_func = noise_func.set_octaves(vec![1.0, 1.5, 1.0, 1.5]);
+    let noise_func = Fbm::<SuperSimplex>::new(3);
+    let noise_func = noise_func.set_octaves(vec![1.0, 4.5, 2.0, 1.5]);
     let noise_func = noise_func.set_persistence(1.0);
     biome_registry
         .push_object(BiomeDefinition {
             name: MOUNTAINS_BIOME_NAME,
             representative_color: RGBA8::new(220, 220, 220, 255),
             size_chunks: 4,
-            elevation: VPElevation::Mountain,
-            temperature: VPTemperature::Freezing,
-            moisture: VPMoisture::LowMoist,
+            elevation: 0.8,
+            temperature: 0.0,
+            moisture: 0.2,
             rule_source: Box::new(ConditionRuleSource::new(Box::new(AlwaysTrueCondition() /*NotCondition::new(Box::new(UnderSeaLevelCondition())) */), plains_rule_source.clone())),
             surface_noise: Box::new(Add2(noise::Add::new(Mul2(noise::Multiply::new(noise_func.clone(), noise::Constant { value: 25.0 })), noise::Constant::new(40.0)))),
+            influence: 1.5,
         })
         .unwrap();
 }

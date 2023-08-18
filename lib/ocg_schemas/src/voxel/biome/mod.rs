@@ -24,36 +24,21 @@ pub struct BiomeEntry {
     /// The biome ID in registry.
     pub id: RegistryId,
     /// Weight map
-    pub weights: Option<SmallVec<[f64; CHUNK_DIMZ]>>,
+    pub weight: f64,
 }
 
 impl BiomeEntry {
     /// Helper to construct a new biome entry.
-    pub fn new_base(id: RegistryId, chunk_column_count: usize) -> Self {
+    pub fn new(id: RegistryId) -> Self {
         Self {
             id: id,
-            weights: Some(smallvec![0.0; chunk_column_count]),
+            weight: 0.0,
         }
-    }
-
-    /// Helper to construct a new biome entry with the chosen element as the next one in this linked list.
-    pub fn new_next(id: RegistryId, list: &mut SmallVec<[BiomeEntry; 16]>) -> &Self {
-        let this = Self {
-            id: id,
-            weights: None,
-        };
-        list.insert(0, this);
-        list.get(0).unwrap()
     }
 
     /// Helper to look up the biome definition corresponding to this ID
     pub fn lookup<'a>(&'a self, registry: &'a BiomeRegistry) -> Option<&BiomeDefinition> {
         registry.lookup_id_to_object(self.id)
-    }
-
-    /// Gets the weights of this entry via reference.
-    pub fn get_weights(&self) -> &Option<SmallVec<[f64; CHUNK_DIMZ]>> {
-        &self.weights
     }
 }
 
@@ -88,15 +73,17 @@ pub struct BiomeDefinition {
     /// Size of this biome, in blocks.
     pub size_chunks: u32,
     /// Elevation of this biome.
-    pub elevation: VPElevation,
+    pub elevation: f64,
     /// Temperature of this biome.
-    pub temperature: VPTemperature,
+    pub temperature: f64,
     /// Moisture of this biome.
-    pub moisture: VPMoisture,
+    pub moisture: f64,
     /// The block placement rule source for this biome.
     pub rule_source: Box<RuleSrc>,
     /// The noise function for this biome.
     pub surface_noise: Box<NoiseFn2>,
+    /// The strength of this biome in the blending step.
+    pub influence: f64,
 }
 
 impl PartialEq for BiomeDefinition {
@@ -114,62 +101,62 @@ impl RegistryObject for BiomeDefinition {
 }
 
 /// Height variance "areas".
-#[derive(Copy, Clone, Hash, Debug, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub enum VPElevation {
-    Underground,
-    Ocean,
-    LowLand,
-    Hill,
-    Mountain,
-    Sky,
+    Underground(f64),
+    Ocean(f64),
+    LowLand(f64),
+    Hill(f64),
+    Mountain(f64),
+    Sky(f64),
 }
 
 /// Temperature variance "areas".
-#[derive(Copy, Clone, Hash, Debug, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub enum VPTemperature {
-    Freezing,
-    LowTemp,
-    MedTemp,
-    HiTemp,
-    Desert,
+    Freezing(f64),
+    LowTemp(f64),
+    MedTemp(f64),
+    HiTemp(f64),
+    Desert(f64),
 }
 
 /// Moisture variation "areas".
-#[derive(Copy, Clone, Hash, Debug, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub enum VPMoisture {
-    Deadland,
-    Desert,
-    LowMoist,
-    MedMoist,
-    HiMoist,
+    Deadland(f64),
+    Desert(f64),
+    LowMoist(f64),
+    MedMoist(f64),
+    HiMoist(f64),
 }
 
 impl Default for VPElevation {
     fn default() -> Self {
-        VPElevation::LowLand
+        VPElevation::LowLand(0.4)
     }
 }
 
 impl Default for VPMoisture {
     fn default() -> Self {
-        VPMoisture::MedMoist
+        VPMoisture::MedMoist(0.8)
     }
 }
 
 impl Default for VPTemperature {
     fn default() -> Self {
-        VPTemperature::MedTemp
+        VPTemperature::MedTemp(0.4)
     }
 }
 
 /// Different noise layers for biome generation.
 pub struct Noises {
     /// Height noise
-    pub elevation_noise: Box<dyn NoiseFn<f64, 2>>, 
+    pub elevation_noise: Box<dyn NoiseFn<f64, 2> + Send + Sync>, 
     /// Temperature noise
-    pub temperature_noise: Box<dyn NoiseFn<f64, 2>>, 
+    pub temperature_noise: Box<dyn NoiseFn<f64, 2> + Send + Sync>, 
     /// Moisture noise
-    pub moisture_noise: Box<dyn NoiseFn<f64, 2>>,
+    pub moisture_noise: Box<dyn NoiseFn<f64, 2> + Send + Sync>,
 }
 
 /// Name of the default void biome.
@@ -181,11 +168,12 @@ lazy_static! {
         name: VOID_BIOME_NAME,
         representative_color: RGBA8::new(0, 0, 0, 0),
         size_chunks: 0,
-        elevation: VPElevation::LowLand,
-        temperature: VPTemperature::MedTemp,
-        moisture: VPMoisture::MedMoist,
+        elevation: -1.0,
+        temperature: -1.0,
+        moisture: -1.0,
         rule_source: Box::new(EmptyRuleSource()),
         surface_noise: Box::new(Constant::new(0.0)),
+        influence: 0.0,
     };
 }
 
