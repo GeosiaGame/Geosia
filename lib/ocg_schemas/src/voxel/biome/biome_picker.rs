@@ -94,12 +94,17 @@ impl BiomeGenerator {
     }
 
     /// Gets biomes from a range of positions.
-    pub fn generate_area_biomes(&mut self, area: AbsChunkRange, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) {
+    pub fn generate_area_biomes(&mut self, area: AbsChunkRange, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises, ) {
         let center = area.max() - RelChunkPos::from(area.min().into_ivec3() / 2);
         for pos in area.iter_xzy() {
             for b_pos in InChunkRange::WHOLE_CHUNK.iter_xzy() {
                 let biome_def = BiomeGenerator::pick_biome(AbsBlockPos::from_ivec3(center.0 * CHUNK_DIM), RelBlockPos::from_ivec3(b_pos.0 + pos.0), &biome_map, registry, noises);
-                biome_map.base_map.insert(AbsBlockPos::from_ivec3(b_pos.0 + pos.into_ivec3() * CHUNK_DIM), (biome_def.0, biome_def.1.to_owned()));   
+                biome_map.base_map.insert(AbsBlockPos::from_ivec3(b_pos.0 + pos.into_ivec3() * CHUNK_DIM), (biome_def.0, biome_def.1.to_owned()));
+                
+                let ret_val = self.base_map.get(pos);
+                if let Some(map) = biome_map {
+                    map[(pos.x + pos.z * PADDED_REGION_SIZE) as usize] = &ret_val.unwrap().1;
+                }
             }
         }
     }

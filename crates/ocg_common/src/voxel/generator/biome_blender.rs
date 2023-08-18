@@ -3,7 +3,7 @@
 use std::{f64::consts::PI, marker::PhantomData};
 
 use lazy_static::lazy_static;
-use ocg_schemas::{voxel::biome::{BiomeEntry, BiomeRegistry, BiomeDefinition, self}, coordinates::{CHUNK_DIM, CHUNK_DIM2}, registry::RegistryId, dependencies::smallvec::{smallvec, SmallVec}};
+use ocg_schemas::{voxel::biome::{BiomeEntry, BiomeRegistry, BiomeDefinition, self, biome_map::{PADDED_REGION_SIZE_SQZ, BLEND_RADIUS, self, BiomeMap}}, coordinates::{CHUNK_DIM, CHUNK_DIM2}, registry::RegistryId, dependencies::smallvec::{smallvec, SmallVec}};
 use serde::{Deserialize, Serialize};
 
 
@@ -62,13 +62,43 @@ lazy_static! {
         }
         jitter_sincos
     };
+
+    static ref BLUR_KERNEL: [f64; ((BLEND_RADIUS*2+1) * (BLEND_RADIUS*2+1)) as usize] = {
+		let weight_total = 0.0;
+        let mut ret_val = [0.0; ((BLEND_RADIUS*2+1) * (BLEND_RADIUS*2+1)) as usize];
+		for iz in 0..BLEND_RADIUS*2+1 {
+			let idz = iz - BLEND_RADIUS;
+			for ix in 0..BLEND_RADIUS*2+1 {
+				let idx = ix - BLEND_RADIUS;
+				let this_weight = BLEND_RADIUS * BLEND_RADIUS - idx * idx - idz * idz;
+				if this_weight <= 0 { // We only compute for the circle of positive values of the blending function.
+                    continue;
+                }
+				this_weight *= this_weight; // Make transitions smoother.
+				weight_total += this_weight;
+				ret_val[(iz * (BLEND_RADIUS*2+1) + ix) as usize] = this_weight as f64;
+			}
+		}
+		
+		// Rescale the weights, so they all add up to 1.
+		for i in 0..ret_val.len() {
+            ret_val[i] /= weight_total;
+        }
+        ret_val
+    };
 }
 
 pub struct SimpleBiomeBlender {
-
+    pub biome_map_cache: Vec<BiomeCacheEntry>
 }
 
 impl SimpleBiomeBlender {
+    pub fn new() -> Self {
+        Self {
+            biome_map_cache: vec![],
+        }
+    }
+
     pub fn get_blended(seed: u64, block_x: f64, block_z: f64, registry: &BiomeRegistry) -> f64 {
         let mut total_height = 0.0;
         let mut total_weight = 0.0;
@@ -88,6 +118,38 @@ impl SimpleBiomeBlender {
         }
 
         total_height / total_weight
+    }
+
+    fn get_biomes_for_region(&mut self, region_x: i32, region_z: i32, biome_map: &BiomeMap) -> [f64; PADDED_REGION_SIZE_SQZ] {
+        let mut correct_cache_entry: Option<BiomeCacheEntry> = None;
+        self.biome_map_cache.retain(|obj| {
+            if obj.region_x == region_x && obj.region_z == region_z {
+                correct_cache_entry = obj;
+                return false;
+            }
+            return true;
+        });
+
+        if correct_cache_entry.is_none() {
+            let mut cache_entry = BiomeCacheEntry::new(region_x, region_z, [0.0; PADDED_REGION_SIZE_SQZ]);
+            biome_map.get_or_new(pos, generator, registry, noises, biome_map)
+        }
+    }
+}
+
+struct BiomeCacheEntry {
+    pub cache: [i32; PADDED_REGION_SIZE_SQZ],
+    region_x: i32,
+    region_z: i32,
+}
+
+impl BiomeCacheEntry {
+    pub fn new(region_x: i32, region_z: i32, map: [i32; PADDED_REGION_SIZE_SQZ]) -> Self {
+        Self {
+            region_x: region_x,
+            region_z: region_z,
+            cache: map,
+        }
     }
 }
 

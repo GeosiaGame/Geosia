@@ -263,7 +263,7 @@ impl StdGenerator {
         for (pos_x, pos_y, pos_z) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM, 0..CHUNK_DIM) {
             let b_pos = InChunkPos::try_new(pos_x, pos_y, pos_z).unwrap();
             let blended = SimpleBiomeBlender::get_blended(self.seed, (pos_x + c_pos.x * CHUNK_DIM) as f64,  (pos_z + c_pos.z * CHUNK_DIM) as f64, biome_registry/*, |x, z| self.biome_map.get_or_new(&AbsBlockPos::from_ivec3(IVec3::new(x as i32, 0, z as i32) + c_pos.into_ivec3()), &mut self.biome_gen, &biome_registry, &self.noises).unwrap_or_else(|| &default_biome).to_owned()*/);
-            let biome = self.biome_map.get_or_new(&AbsBlockPos::from_ivec3(<IVec3>::from(b_pos) + c_pos.into_ivec3()), &mut self.biome_gen, &biome_registry, &self.noises).unwrap_or_else(|| &default_biome);
+            let biome = self.biome_map.get_or_new(&AbsBlockPos::from_ivec3(<IVec3>::from(b_pos) + c_pos.into_ivec3()), &mut self.biome_gen, &biome_registry, &self.noises, None).unwrap_or_else(|| &default_biome);
 
             let g_pos = <IVec3>::from(b_pos) + (<IVec3>::from(c_pos) * CHUNK_DIM);
             let height = blended.round() as i32; //vparams[(pos_x + pos_z * (CHUNK_DIM)) as usize];
