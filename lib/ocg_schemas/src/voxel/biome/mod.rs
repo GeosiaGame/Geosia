@@ -1,15 +1,14 @@
 //! All Biome-related types
 
-use std::{fmt::Debug, rc::Rc};
+use std::fmt::Debug;
 
 use lazy_static::lazy_static;
 use dyn_clone::DynClone;
-use noise::{NoiseFn, Constant, SuperSimplex, Perlin, Multiply, Add, Max, Min, Power};
+use noise::{NoiseFn, Constant, SuperSimplex, Perlin, Multiply, Add, Max, Min, Power, Seedable};
 use rgb::RGBA8;
 use serde::{Serialize, Deserialize};
-use smallvec::{SmallVec, smallvec};
 
-use crate::{registry::{Registry, RegistryName, RegistryObject, RegistryId}, voxel::generation::rule_sources::EmptyRuleSource, coordinates::{CHUNK_DIM2Z, CHUNK_DIMZ}};
+use crate::{registry::{Registry, RegistryName, RegistryObject, RegistryId}, voxel::generation::rule_sources::EmptyRuleSource, range::{Range, range}};
 
 use super::generation::{RuleSource, ConditionSource, fbm_noise::Fbm};
 
@@ -42,29 +41,12 @@ impl BiomeEntry {
     }
 }
 
-
-/// God save my soul from the hell that is Rust generic types.
-/// You NEED to use this type alias everywhere where one is required, by the way. FUN.
-pub type RuleSrc = dyn RuleSource;
-/// Holy shit another one
-pub type ConditionSrc = dyn ConditionSource;
-/// WHERE DO THESE KEEP APPEARING FROM
-pub type NoiseFn2 = dyn NoiseFn2Trait;
-
-/// Helper trait for NoiseFn<f64, 2> + required extras
-pub trait NoiseFn2Trait: NoiseFn<f64, 2> + DynClone + Sync + Send {}
-dyn_clone::clone_trait_object!(NoiseFn2Trait);
-impl Default for dyn NoiseFn2Trait where (dyn NoiseFn2Trait): Default + Sized {
-    fn default() -> Self {
-        Self::default()
-    }
-}
-
 /// A named registry of block definitions.
 pub type BiomeRegistry = Registry<BiomeDefinition>;
 
 /// A definition of a biome type, specifying properties such as registry name, shape, textures.
 #[derive(Clone)]
+// TODO fix serialization of `BiomeDefinition`
 pub struct BiomeDefinition {
     /// The unique registry name
     pub name: RegistryName,
@@ -73,11 +55,11 @@ pub struct BiomeDefinition {
     /// Size of this biome, in blocks.
     pub size_chunks: u32,
     /// Elevation of this biome.
-    pub elevation: f64,
+    pub elevation: Range<f64>,
     /// Temperature of this biome.
-    pub temperature: f64,
+    pub temperature: Range<f64>,
     /// Moisture of this biome.
-    pub moisture: f64,
+    pub moisture: Range<f64>,
     /// The block placement rule source for this biome.
     pub rule_source: Box<RuleSrc>,
     /// The noise function for this biome.
@@ -92,73 +74,72 @@ impl PartialEq for BiomeDefinition {
     }
 }
 
-impl BiomeDefinition {}
-
 impl RegistryObject for BiomeDefinition {
     fn registry_name(&self) -> crate::registry::RegistryNameRef {
         self.name.as_ref()
     }
 }
 
-/// Height variance "areas".
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
-pub enum VPElevation {
-    Underground(f64),
-    Ocean(f64),
-    LowLand(f64),
-    Hill(f64),
-    Mountain(f64),
-    Sky(f64),
-}
+impl BiomeDefinition {}
 
-/// Temperature variance "areas".
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
-pub enum VPTemperature {
-    Freezing(f64),
-    LowTemp(f64),
-    MedTemp(f64),
-    HiTemp(f64),
-    Desert(f64),
-}
+/// God save my soul from the hell that is Rust generic types.
+/// You NEED to use this type alias everywhere where one is required, by the way. FUN.
+pub type RuleSrc = dyn RuleSource;
+/// Holy shit another one
+pub type ConditionSrc = dyn ConditionSource;
+/// WHERE DO THESE KEEP APPEARING FROM
+pub type NoiseFn2 = dyn NoiseFn2Trait;
 
-/// Moisture variation "areas".
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
-pub enum VPMoisture {
-    Deadland(f64),
-    Desert(f64),
-    LowMoist(f64),
-    MedMoist(f64),
-    HiMoist(f64),
-}
-
-impl Default for VPElevation {
+/// Helper trait for NoiseFn<f64, 2> + required extras
+pub trait NoiseFn2Trait: NoiseFn<f64, 2> + SeedableGetter + DynClone + Sync + Send {}
+dyn_clone::clone_trait_object!(NoiseFn2Trait);
+#[allow(trivial_bounds)]
+impl Default for dyn NoiseFn2Trait where (dyn NoiseFn2Trait): Default + Sized {
     fn default() -> Self {
-        VPElevation::LowLand(0.4)
+        Self::default()
     }
 }
 
-impl Default for VPMoisture {
-    fn default() -> Self {
-        VPMoisture::MedMoist(0.8)
+/// A getter for `Seedable` for setting a new seed for a trait NoiseFn.
+pub trait SeedableGetter: Sync + Send {
+    /// Gets a boxed `SeedableWrapper` from this object, if it's `Seedable`.
+    fn get_seedable(self: &Self) -> Option<Box<dyn SeedableWrapper>> {
+        None
     }
 }
 
-impl Default for VPTemperature {
-    fn default() -> Self {
-        VPTemperature::MedTemp(0.4)
+/// Wraps a `Seedable` in a trait object-safe way.
+pub trait SeedableWrapper: Sync + Send {
+    /// Set the seed for the function implementing the `Seedable` trait
+    fn set_seed(self: &mut Self, seed: u32) -> Box<dyn SeedableWrapper>;
+
+    /// Getter to retrieve the seed from the function
+    fn seed(self: &Self) -> u32;
+}
+
+#[allow(trivial_bounds)]
+impl Seedable for (dyn SeedableWrapper) where (dyn SeedableWrapper): Sized {
+    fn set_seed(mut self, seed: u32) -> Self {
+        *SeedableWrapper::set_seed(&mut self, seed)
+    }
+
+    fn seed(&self) -> u32 {
+        SeedableWrapper::seed(self)
     }
 }
 
 /// Different noise layers for biome generation.
 pub struct Noises {
     /// Height noise
-    pub elevation_noise: Box<dyn NoiseFn<f64, 2> + Send + Sync>, 
+    pub elevation_noise: Box<NoiseFn2>, 
     /// Temperature noise
-    pub temperature_noise: Box<dyn NoiseFn<f64, 2> + Send + Sync>, 
+    pub temperature_noise: Box<NoiseFn2>, 
     /// Moisture noise
-    pub moisture_noise: Box<dyn NoiseFn<f64, 2> + Send + Sync>,
+    pub moisture_noise: Box<NoiseFn2>,
 }
 
+/// Name of the default-er plains biome.
+pub const PLAINS_BIOME_NAME: RegistryName = RegistryName::ocg_const("plains");
 /// Name of the default void biome.
 pub const VOID_BIOME_NAME: RegistryName = RegistryName::ocg_const("void");
 
@@ -168,9 +149,9 @@ lazy_static! {
         name: VOID_BIOME_NAME,
         representative_color: RGBA8::new(0, 0, 0, 0),
         size_chunks: 0,
-        elevation: -1.0,
-        temperature: -1.0,
-        moisture: -1.0,
+        elevation: range(-1.0..-1.0),
+        temperature: range(-1.0..-1.0),
+        moisture: range(-1.0..-1.0),
         rule_source: Box::new(EmptyRuleSource()),
         surface_noise: Box::new(Constant::new(0.0)),
         influence: 0.0,
@@ -178,9 +159,57 @@ lazy_static! {
 }
 
 impl NoiseFn2Trait for Constant {}
-impl<T> NoiseFn2Trait for Fbm<T> where T: NoiseFn<f64, 2> + Clone + Send + Sync {}
+impl SeedableGetter for Constant {
+    fn get_seedable(self: &Self) -> Option<Box<dyn SeedableWrapper>> {
+        None
+    }
+}
+impl<T> NoiseFn2Trait for Fbm<T> where T: NoiseFn<f64, 2> + Clone + Send + Sync + Default + Seedable + 'static {}
+impl<'a, T> SeedableWrapper for Fbm<T> where T: NoiseFn<f64, 2> + Clone + Send + Sync + Default + Seedable + 'static {
+    fn set_seed(&mut self, seed: u32) -> Box<dyn SeedableWrapper> {
+        let result = Seedable::set_seed(self.to_owned(), seed);
+        Box::new(result)
+    }
+
+    fn seed(self: &Self) -> u32 {
+        Seedable::seed(self)
+    }
+}
+impl<T> SeedableGetter for Fbm<T> where T: NoiseFn<f64, 2> + Clone + Send + Sync + Default + Seedable + 'static {
+    fn get_seedable(self: &Self) -> Option<Box<dyn SeedableWrapper>> {
+        Some(Box::new(self.to_owned()))
+    }
+}
 impl NoiseFn2Trait for SuperSimplex {}
+impl SeedableWrapper for SuperSimplex {
+    fn set_seed(&mut self, seed: u32) -> Box<dyn SeedableWrapper> {
+        Box::new(Seedable::set_seed(*self, seed))
+    }
+
+    fn seed(self: &Self) -> u32 {
+        Seedable::seed(self)
+    }
+}
+impl SeedableGetter for SuperSimplex {
+    fn get_seedable(self: &Self) -> Option<Box<dyn SeedableWrapper>> {
+        Some(Box::new(*self))
+    }
+}
 impl NoiseFn2Trait for Perlin {}
+impl SeedableWrapper for Perlin {
+    fn set_seed(&mut self, seed: u32) -> Box<dyn SeedableWrapper> {
+        Box::new(Seedable::set_seed(*self, seed))
+    }
+
+    fn seed(self: &Self) -> u32 {
+        Seedable::seed(self)
+    }
+}
+impl SeedableGetter for Perlin {
+    fn get_seedable(self: &Self) -> Option<Box<dyn SeedableWrapper>> {
+        Some(Box::new(*self))
+    }
+}
 
 /// newtype wrapper
 pub struct Mul2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub Multiply<f64, S1, S2, 2>);
@@ -190,6 +219,11 @@ impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Mul2<S1, S2> 
     }
 }
 impl<S1, S2> NoiseFn2Trait for Mul2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {}
+impl<S1, S2> SeedableGetter for Mul2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone  {
+    fn get_seedable(self: &Self) -> Option<Box<dyn SeedableWrapper>> {
+        None
+    }
+}
 impl<S1, S2> Clone for Mul2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
     fn clone(&self) -> Self {
         Self(Multiply::new(self.0.source1.clone(), self.0.source2.clone()))
@@ -203,6 +237,11 @@ impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Add2<S1, S2> 
     }
 }
 impl<S1, S2> NoiseFn2Trait for Add2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {}
+impl<S1, S2> SeedableGetter for Add2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone  {
+    fn get_seedable(self: &Self) -> Option<Box<dyn SeedableWrapper>> {
+        None
+    }
+}
 impl<S1, S2> Clone for Add2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
     fn clone(&self) -> Self {
         Self(Add::new(self.0.source1.clone(), self.0.source2.clone()))
@@ -216,6 +255,11 @@ impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Max2<S1, S2> 
     }
 }
 impl<S1, S2> NoiseFn2Trait for Max2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {}
+impl<S1, S2> SeedableGetter for Max2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone  {
+    fn get_seedable(self: &Self) -> Option<Box<dyn SeedableWrapper>> {
+        None
+    }
+}
 impl<S1, S2> Clone for Max2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
     fn clone(&self) -> Self {
         Self(Max::new(self.0.source1.clone(), self.0.source2.clone()))
@@ -229,6 +273,11 @@ impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Min2<S1, S2> 
     }
 }
 impl<S1, S2> NoiseFn2Trait for Min2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {}
+impl<S1, S2> SeedableGetter for Min2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone  {
+    fn get_seedable(self: &Self) -> Option<Box<dyn SeedableWrapper>> {
+        None
+    }
+}
 impl<S1, S2> Clone for Min2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
     fn clone(&self) -> Self {
         Self(Min::new(self.0.source1.clone(), self.0.source2.clone()))
@@ -242,6 +291,11 @@ impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Pow2<S1, S2> 
     }
 }
 impl<S1, S2> NoiseFn2Trait for Pow2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {}
+impl<S1, S2> SeedableGetter for Pow2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone  {
+    fn get_seedable(self: &Self) -> Option<Box<dyn SeedableWrapper>> {
+        None
+    }
+}
 impl<S1, S2> Clone for Pow2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
     fn clone(&self) -> Self {
         Self(Power::new(self.0.source1.clone(), self.0.source2.clone()))

@@ -8,7 +8,6 @@
 use bevy::ecs::event::{Events, ManualEventReader};
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
-use bevy::render::Render;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 
 pub mod prelude {

@@ -12,6 +12,7 @@ pub mod physics;
 pub mod registry;
 pub mod schemas;
 pub mod voxel;
+pub mod range;
 
 /// Re-exported dependencies used in API types
 pub mod dependencies {

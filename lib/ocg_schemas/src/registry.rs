@@ -140,7 +140,7 @@ impl<'a> Display for RegistryNameRef<'a> {
 }
 
 /// Needs to be implemented on any object that can be a part of a Registry
-pub trait RegistryObject {
+pub trait RegistryObject: PartialEq {
     /// Should be trivial
     fn registry_name(&self) -> RegistryNameRef;
 }
@@ -254,12 +254,13 @@ impl<Object: RegistryObject> Registry<Object> {
     pub fn lookup_id_to_object(&self, id: RegistryId) -> Option<&Object> {
         self.id_to_obj.get(id.0.get() as usize)?.as_ref()
     }
-
-    /// Get all objects in this registry, in no particular order.
-    pub fn get_objects(&self) -> Vec<Option<&Object>> {
-        self.id_to_obj.iter().map(|x| x.as_ref()).collect()
+    
+    /// Given a registry object, find look up its ID, or return `None` if it's not found.
+    pub fn lookup_object_to_id(&self, object: &Object) -> Option<RegistryId> {
+        self.id_to_obj.iter().position(|r| r.as_ref().is_some_and(|o| o == object)).map(|i| RegistryId(NonZeroU32::new(i as u32).unwrap()))
     }
 
+    /// Gets a `Vec` of all the ID -> Object mappings in this registry.
     pub fn get_objects_ids(&self) -> Vec<Option<(&RegistryId, &Object)>> {
         let mut result = Vec::new();
         for id in self.name_to_id.values().into_iter() {
@@ -269,11 +270,6 @@ impl<Object: RegistryObject> Registry<Object> {
             }
         }
         result
-    }
-
-    /// Get all registry IDs in this registry, in no particular oder.
-    pub fn get_ids(&self) -> Vec<&RegistryId> {
-        self.name_to_id.values().collect()
     }
 }
 

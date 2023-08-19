@@ -3,24 +3,28 @@
 use std::{ops::{Deref, DerefMut}, cell::RefCell};
 
 use hashbrown::HashMap;
+use itertools::iproduct;
 use serde::{Serialize, Deserialize};
-use smallvec::{SmallVec, smallvec};
 
-use crate::{coordinates::AbsChunkPos, registry::RegistryId};
+use crate::{coordinates::{AbsChunkPos, CHUNK_DIM}, registry::RegistryId};
 
-use super::{BiomeEntry, biome_picker::BiomeGenerator, BiomeRegistry, Noises, BiomeDefinition, VOID_BIOME_NAME, VOID_BIOME};
+use super::{BiomeEntry, biome_picker::BiomeGenerator, BiomeRegistry, Noises, BiomeDefinition, PLAINS_BIOME_NAME};
 
 
-pub const CACHE_MAX_ENTRIES: i32 = 12;
-	
-pub const REGION_SIZE_EXPONENT: i32 = 8; // SIZExSIZE, SIZE=2^EXPONENT; 2^7=128
-pub const CHUNK_SIZE_EXPONENT: i32 = 5; // SIZExSIZE, SIZE=2^EXPONENT; 2^5=32
-pub const BLEND_RADIUS: i32 = 16;
+/// SIZExSIZE, SIZE=2^EXPONENT; 2^8=256
+pub const SUPERGRID_DIM_EXPONENT: i32 = 8;
+/// SIZExSIZE, SIZE=2^EXPONENT; 2^5=32
+pub const CHUNK_SIZE_EXPONENT: i32 = 5;
+/// Blend radius in blocks.
+pub const BLEND_RADIUS: i32 = 6;
+/// Blend circumference in blocks.
 pub const BLEND_CIRCUMFERENCE: i32 = BLEND_RADIUS * 2 + 1;
 
-pub const REGION_SIZE: i32 = 1 << REGION_SIZE_EXPONENT;
-pub const CHUNK_SIZE: i32 = 1 << CHUNK_SIZE_EXPONENT;
-pub const PADDED_REGION_SIZE: i32 = REGION_SIZE + BLEND_RADIUS*2;
+/// Size of a single region.
+pub const SUPERGRID_DIM: i32 = 4 * CHUNK_DIM;
+/// Padded region size.
+pub const PADDED_REGION_SIZE: i32 = SUPERGRID_DIM + BLEND_RADIUS*2;
+/// Square of the padded region size, as `usize`.
 pub const PADDED_REGION_SIZE_SQZ: usize = (PADDED_REGION_SIZE * PADDED_REGION_SIZE) as usize;
 
 /// The per-planet biome map.
@@ -29,7 +33,7 @@ pub struct BiomeMap {
     /// Map of Chunk position to biome.
     map: HashMap<AbsChunkPos, BiomeEntry>,
     /// Map of Chunk position to biome definition.
-    #[serde(skip)]
+    #[serde(skip)] // TODO fix serialization of `BiomeDefinition`
     pub base_map: HashMap<AbsChunkPos, (RegistryId, BiomeDefinition)>,
 }
 
@@ -45,18 +49,17 @@ impl BiomeMap {
         return self.base_map.get(pos);
     }
 
-    pub fn generate_region(&mut self, region_x: i32, region_z: i32, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &Noises) -> SmallVec<[(RegistryId, BiomeDefinition); PADDED_REGION_SIZE_SQZ]> {
-        let mut biome_map = smallvec![registry.lookup_name_to_object(VOID_BIOME_NAME.as_ref()).map(|x| (x.0, x.1.to_owned())).unwrap(); PADDED_REGION_SIZE_SQZ];
-        for rx in 0..PADDED_REGION_SIZE {
-            let x = (rx - BLEND_RADIUS) + (region_x << REGION_SIZE_EXPONENT);
-            for rz in 0..PADDED_REGION_SIZE {
-                let z = (rz - BLEND_RADIUS) + (region_z << REGION_SIZE_EXPONENT);
+    /// Generates a region of biomes.
+    pub fn generate_region(&mut self, region_x: i32, region_z: i32, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &Noises) -> Vec<(RegistryId, BiomeDefinition)> {
+        let mut biome_map = vec![registry.lookup_name_to_object(PLAINS_BIOME_NAME.as_ref()).map(|x| (x.0, x.1.to_owned())).unwrap(); PADDED_REGION_SIZE_SQZ];
+        for (rx, rz) in iproduct!(0..PADDED_REGION_SIZE, 0..PADDED_REGION_SIZE) {
+            let x = (rx - BLEND_RADIUS) + (region_x * SUPERGRID_DIM);
+            let z = (rz - BLEND_RADIUS) + (region_z * SUPERGRID_DIM);
 
-                let biome = generator.borrow_mut().generate_biome(&AbsChunkPos::new(x, 0, z), self, registry, noises);
-                self.base_map.insert(AbsChunkPos::new(x, 0, z), biome.clone());
+            let biome = generator.borrow_mut().generate_biome(&AbsChunkPos::new(x, 0, z), self, registry, noises);
+            self.base_map.insert(AbsChunkPos::new(x, 0, z), biome.clone());
 
-                biome_map[(rx + rz * PADDED_REGION_SIZE) as usize] = biome;
-            }
+            biome_map[(rx + rz * PADDED_REGION_SIZE) as usize] = biome;
         }
         biome_map
     }

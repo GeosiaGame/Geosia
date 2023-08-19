@@ -1,12 +1,11 @@
 //! Random biome picker
 
-use crate::{voxel::biome::{BiomeRegistry, biome_map::BiomeMap}, coordinates::{AbsChunkRange, AbsChunkPos, RelChunkPos, InChunkRange, CHUNK_DIM, RelBlockPos, AbsBlockPos}, registry::RegistryId};
+use crate::{voxel::biome::{BiomeRegistry, biome_map::BiomeMap}, coordinates::{AbsChunkRange, AbsChunkPos, RelChunkPos, CHUNK_DIM}, registry::RegistryId};
 use noise::NoiseFn;
-use rand::SeedableRng;
-use rand_xoshiro::Xoshiro256StarStar;
 use serde::{Serialize, Deserialize};
+use bevy_math::IVec3;
 
-use super::{Noises, VPTemperature, VPMoisture, VPElevation, BiomeDefinition, VOID_BIOME_NAME};
+use super::{Noises, BiomeDefinition, PLAINS_BIOME_NAME};
 
 /// The generic biome selector.
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -30,70 +29,33 @@ impl BiomeGenerator {
         }
     }
 
-    fn get_temperature(fl: f64) -> VPTemperature {
-        if fl < 0.0 {
-            VPTemperature::Freezing(fl)
-        } else if fl < 0.2 {
-            VPTemperature::LowTemp(fl)
-        } else if fl < 0.4 {
-            VPTemperature::MedTemp(fl)
-        } else if fl < 0.6 {
-            VPTemperature::HiTemp(fl)
-        } else {
-            VPTemperature::Desert(fl)
-        }
-    }
-
-    fn get_moisture(fl: f64) -> VPMoisture {
-        if fl < 0.05 {
-            VPMoisture::Deadland(fl)
-        } else if fl < 0.3 {
-            VPMoisture::Desert(fl)
-        } else if fl < 0.55 {
-            VPMoisture::LowMoist(fl)
-        } else if fl < 0.8 {
-            VPMoisture::MedMoist(fl)
-        } else {
-            VPMoisture::HiMoist(fl)
-        }
-    }
-
-    fn get_elevation(fl: f64) -> VPElevation {
-        if fl < 0.15 {
-            VPElevation::Ocean(fl)
-        } else if fl < 0.4 {
-            VPElevation::LowLand(fl)
-        } else if fl < 0.65 {
-            VPElevation::Hill(fl)
-        } else {
-            VPElevation::Mountain(fl)
-        }
+    fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {
+        to_range.0 + (s - from_range.0) * (to_range.1 - to_range.0) / (from_range.1 - from_range.0)
     }
 
     fn pick_biome<'a>(center: AbsChunkPos, pos: RelChunkPos, _map: &BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) -> (RegistryId, &'a BiomeDefinition) {
         let pos_d = (center + pos).as_dvec3();
         let pos_d = [pos_d.x, pos_d.z];
-        let height = noises.elevation_noise.get(pos_d);
-        let wetness = noises.moisture_noise.get(pos_d);
-        let temp = noises.temperature_noise.get(pos_d);
+        let height = noises.elevation_noise.get(pos_d); // Self::map_range((-1.0, 1.0), (0.0, 1.0), noises.elevation_noise.get(pos_d));
+        let wetness = noises.moisture_noise.get(pos_d); //Self::map_range((-1.0, 1.0), (0.0, 1.0), noises.moisture_noise.get(pos_d));
+        let temp = noises.temperature_noise.get(pos_d); //Self::map_range((-1.0, 1.0), (0.0, 1.0), noises.temperature_noise.get(pos_d));
 
-        let mut final_id: Option<(RegistryId, &BiomeDefinition)> = None;
+        let mut final_id = None;
 
-        let objects = registry.get_objects_ids();
+        let objects = registry.get_objects_ids(); // TODO change from looping the registry to getting a list of generatable biomes from somewhere (BiomeMap?)
         for id in objects.iter() {
             if let Some(obj) = id {
                 let id = obj.0;
                 let obj = obj.1;
-                if obj.elevation >= height &&/* obj.moisture >= wetness*/ obj.temperature >= temp {
+                if obj.elevation.contains(height) && obj.moisture.contains(wetness) && obj.temperature.contains(temp) {
                     final_id = Some((*id, obj));
-                    break;
                 }
             }
         }
-        final_id.unwrap_or_else(|| registry.lookup_name_to_object(VOID_BIOME_NAME.as_ref()).unwrap())
+        final_id.unwrap_or_else(|| registry.lookup_name_to_object(PLAINS_BIOME_NAME.as_ref()).unwrap())
     }
 
-    /// Gets biomes from a range of positions.
+    /// Generates biomes for a range of positions.
     pub fn generate_area_biomes(&mut self, area: AbsChunkRange, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) {
         let center = area.max() - RelChunkPos::from(area.min().into_ivec3() / 2);
         for pos in area.iter_xzy() {
@@ -102,6 +64,7 @@ impl BiomeGenerator {
         }
     }
 
+    /// Generates a single biome at `pos`.
     pub fn generate_biome(&mut self, pos: &AbsChunkPos, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> (RegistryId, BiomeDefinition) {
         let biome_def: (RegistryId, &BiomeDefinition) = BiomeGenerator::pick_biome(*pos, RelChunkPos::splat(0), &biome_map, registry, noises);
         //biome_map.base_map.insert(*pos, (biome_def.0, biome_def.1.to_owned()));

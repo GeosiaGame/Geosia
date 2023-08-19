@@ -85,4 +85,10 @@ impl RegistryObject for BlockDefinition {
     }
 }
 
+impl PartialEq for BlockDefinition {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
 impl BlockDefinition {}

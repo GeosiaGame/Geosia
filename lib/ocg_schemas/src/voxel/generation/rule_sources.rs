@@ -36,6 +36,11 @@ impl ConditionRuleSource {
             result: result
         }
     }
+
+    /// Boxes a new `ConditionRuleSource` automatically
+    pub fn new_boxed(condition: Box<ConditionSrc>, result: Box<RuleSrc>) -> Box<Self> {
+        Box::new(Self::new(condition, result))
+    }
 }
 
 #[typetag::serde]
@@ -63,6 +68,11 @@ impl ChainRuleSource {
         Self {
             rules: rules
         }
+    }
+
+    /// Boxes a new `ChainRuleSource` automatically
+    pub fn new_boxed(rules: Vec<Box<RuleSrc>>) -> Box<Self> {
+        Box::new(Self::new(rules))
     }
 }
 
@@ -93,6 +103,11 @@ impl BlockRuleSource {
         Self {
             entry: entry
         }
+    }
+
+    /// Boxes a new `ChainRuleSource` automatically
+    pub fn new_boxed(entry: BlockEntry) -> Box<Self> {
+        Box::new(Self::new(entry))
     }
 }
 

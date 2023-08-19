@@ -9,6 +9,13 @@ use crate::voxel::{generation::{ConditionSource, Context}, biome::ConditionSrc};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AlwaysTrueCondition();
 
+impl AlwaysTrueCondition {
+    /// Boxes a new `AlwaysTrueCondition` automatically
+    pub fn new_boxed() -> Box<Self> {
+        Box::new(Self())
+    }
+}
+
 #[typetag::serde]
 impl ConditionSource for AlwaysTrueCondition {
     #[inline(never)]
@@ -23,11 +30,16 @@ pub struct YLevelCondition {
     min_y: i32
 }
 impl YLevelCondition {
-    /// Helper for creating new `YLeelCondition`s
+    /// Helper for creating new `YLevelCondition`s
     pub fn new(min_y: i32) -> Self {
         Self {
             min_y: min_y,
         }
+    }
+
+    /// Boxes a new `YLevelCondition` automatically
+    pub fn new_boxed(min_y: i32) -> Box<Self> {
+        Box::new(Self::new(min_y))
     }
 }
 
@@ -51,6 +63,11 @@ impl NotCondition {
             condition: condition,
         }
     }
+
+    /// Boxes a new `NotCondition` automatically
+    pub fn new_boxed(condition: Box<ConditionSrc>) -> Box<Self> {
+        Box::new(Self::new(condition))
+    }
 }
 
 #[typetag::serde]
@@ -65,6 +82,13 @@ impl ConditionSource for NotCondition {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GroundLevelCondition();
 
+impl GroundLevelCondition {
+    /// Boxes a new `GroundLevelCondition` automatically
+    pub fn new_boxed() -> Box<Self> {
+        Box::new(Self())
+    }
+}
+
 #[typetag::serde]
 impl ConditionSource for GroundLevelCondition {
     #[inline(never)]
@@ -77,6 +101,13 @@ impl ConditionSource for GroundLevelCondition {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnderGroundLevelCondition();
 
+impl UnderGroundLevelCondition {
+    /// Boxes a new `UnderGroundLevelCondition` automatically
+    pub fn new_boxed() -> Box<Self> {
+        Box::new(Self())
+    }
+}
+
 #[typetag::serde]
 impl ConditionSource for UnderGroundLevelCondition {
     #[inline(never)]
@@ -88,6 +119,13 @@ impl ConditionSource for UnderGroundLevelCondition {
 /// Under ground Y level condition. Exclusive.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnderSeaLevelCondition();
+
+impl UnderSeaLevelCondition {
+    /// Boxes a new `UnderSeaLevelCondition` automatically
+    pub fn new_boxed() -> Box<Self> {
+        Box::new(Self())
+    }
+}
 
 #[typetag::serde]
 impl ConditionSource for UnderSeaLevelCondition {
@@ -110,6 +148,11 @@ impl OffsetGroundLevelCondition {
             offset: offset
         }
     }
+
+    /// Boxes a new `OffsetGroundLevelCondition` automatically
+    pub fn new_boxed(offset: i32) -> Box<Self> {
+        Box::new(Self::new(offset))
+    }
 }
 
 #[typetag::serde]
@@ -131,6 +174,11 @@ impl ChainCondition {
         Self {
             conditions: conditions
         }
+    }
+
+    /// Boxes a new `ChainCondition` automatically
+    pub fn new_boxed(conditions: Vec<Box<ConditionSrc>>) -> Box<Self> {
+        Box::new(Self::new(conditions))
     }
 }
 
