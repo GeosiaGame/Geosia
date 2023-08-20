@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use lazy_static::lazy_static;
 use ocg_schemas::{voxel::biome::{BiomeEntry, BiomeRegistry, BiomeDefinition, biome_map::{BLEND_RADIUS, BLEND_CIRCUMFERENCE, SUPERGRID_DIM, BiomeMap, SUPERGRID_DIM_EXPONENT, CHUNK_SIZE_EXPONENT, PADDED_REGION_SIZE}, biome_picker::BiomeGenerator, Noises}, coordinates::{CHUNK_DIM, CHUNK_DIM2Z}, registry::RegistryId, dependencies::{smallvec::SmallVec, itertools::iproduct}};
 
-pub const CACHE_MAX_ENTRIES: i32 = 12;
+pub const CACHE_MAX_ENTRIES: i32 = 24;
 
 lazy_static! {
 
@@ -54,12 +54,12 @@ impl SimpleBiomeBlender {
         chunk_results.resize(CHUNK_DIM2Z, SmallVec::default());
 
         for (cx, cz) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM) {
-            SimpleBiomeBlender::get_blended_from_region((chunk_x * CHUNK_DIM) + cx, (chunk_z * CHUNK_DIM) + cz, biomes, &mut chunk_results[(cx + cz * CHUNK_DIM) as usize]);
+            SimpleBiomeBlender::get_blended_from_region((chunk_x * CHUNK_DIM) + cx, (chunk_z * CHUNK_DIM) + cz, biome_map, biomes, &mut chunk_results[(cx + cz * CHUNK_DIM) as usize]);
         }
         chunk_results
     }
 
-    pub fn get_blended_from_region(x: i32, z: i32, biome_map: &Vec<(RegistryId, BiomeDefinition)>, results: &mut SmallVec<[BiomeEntry; 3]>) {
+    pub fn get_blended_from_region(x: i32, z: i32, biome_map: &mut BiomeMap, biomes: &Vec<(RegistryId, BiomeDefinition)>, results: &mut SmallVec<[BiomeEntry; 3]>) {
 		// Mod the world coordinate by the region size.
 		let x_masked = x & (SUPERGRID_DIM - 1);
 		let z_masked = z & (SUPERGRID_DIM - 1);
@@ -70,7 +70,7 @@ impl SimpleBiomeBlender {
                 continue;
             }
             
-            let this_biome = &biome_map[((x_masked + ix) + ((z_masked + iz) * PADDED_REGION_SIZE)) as usize];
+            let this_biome = &biomes[((x_masked + ix) + ((z_masked + iz) * PADDED_REGION_SIZE)) as usize];
 
             let mut found_entry = false;
             for entry in results.iter_mut() {
@@ -87,6 +87,7 @@ impl SimpleBiomeBlender {
                 results.push(entry);
             }
         }
+        biome_map.final_map.insert([x, z], results.clone());
     }
 
     fn get_biomes_for_region(&mut self, region_x: i32, region_z: i32, biome_map: &mut BiomeMap, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &Noises) -> &Vec<(RegistryId, BiomeDefinition)> {

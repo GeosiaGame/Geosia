@@ -23,6 +23,7 @@ bytemuck.workspace = true
 bitflags.workspace = true
 bitvec.workspace = true
 bevy_math.workspace = true
+bevy.workspace = true
 capnp.workspace = true
 either.workspace = true
 hashbrown.workspace = true

@@ -2,6 +2,7 @@
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroU32, TryFromIntError};
 
+use bevy::prelude::Resource;
 use bytemuck::{PodInOption, TransparentWrapper, ZeroableInOption};
 use hashbrown::{Equivalent, HashMap};
 use kstring::{KString, KStringRef};
@@ -146,7 +147,7 @@ pub trait RegistryObject: PartialEq {
 }
 
 /// A data structure for keeping track of a stable mapping between: namespaced strings, numerical IDs and objects.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Resource)]
 pub struct Registry<Object: RegistryObject> {
     next_free_id: NonZeroU32,
     id_to_obj: Vec<Option<Object>>,

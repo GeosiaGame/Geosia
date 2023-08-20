@@ -92,13 +92,17 @@ mod debug_window {
 
     impl Plugin for DebugWindow {
         fn build(&self, app: &mut App) {
-            app.add_systems(Startup, debug_window_setup);
+            app.insert_resource(BiomeMap::default())
+                .insert_resource(BiomeRegistry::default())
+                .add_systems(Startup, debug_window_setup);
         }
     }
 
     fn debug_window_setup(
         mut commands: Commands,
         asset_server: Res<AssetServer>,
+        biome_map: ResMut<BiomeMap>,
+        mut biome_reg: ResMut<BiomeRegistry>,
         mut meshes: ResMut<Assets<Mesh>>,
         mut materials: ResMut<Assets<StandardMaterial>>,
     ) {
@@ -115,11 +119,8 @@ mod debug_window {
         let block_reg = block_reg;
         let (empty, _) = block_reg.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
 
-        let mut biome_reg = BiomeRegistry::default();
         setup_basic_biomes(&block_reg, &mut biome_reg);
         //let biome_reg = biome_reg;
-
-        let biome_map = BiomeMap::default();
 
         let mut generator = StdGenerator::new(0, biome_map, BiomeGenerator::new(0));
 

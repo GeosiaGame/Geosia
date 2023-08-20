@@ -1,6 +1,6 @@
 //! All Biome-related types
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use lazy_static::lazy_static;
 use dyn_clone::DynClone;
@@ -52,8 +52,6 @@ pub struct BiomeDefinition {
     pub name: RegistryName,
     /// A color that can represent the biome on maps, debug views, etc.
     pub representative_color: RGBA8,
-    /// Size of this biome, in blocks.
-    pub size_chunks: u32,
     /// Elevation of this biome.
     pub elevation: Range<f64>,
     /// Temperature of this biome.
@@ -65,7 +63,21 @@ pub struct BiomeDefinition {
     /// The noise function for this biome.
     pub surface_noise: Box<NoiseFn2>,
     /// The strength of this biome in the blending step.
-    pub influence: f64,
+    pub blend_influence: f64,
+    /// The strength of this biome in the block placement step.
+    pub block_influence: f64,
+}
+
+impl Debug for BiomeDefinition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BiomeDefinition").field("id", &self.name).finish()
+    }
+}
+
+impl Display for BiomeDefinition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BiomeDefinition").field("id", &self.name).finish()
+    }
 }
 
 impl PartialEq for BiomeDefinition {
@@ -130,11 +142,11 @@ impl Seedable for (dyn SeedableWrapper) where (dyn SeedableWrapper): Sized {
 
 /// Different noise layers for biome generation.
 pub struct Noises {
-    /// Height noise
+    /// Height noise (0~5)
     pub elevation_noise: Box<NoiseFn2>, 
-    /// Temperature noise
+    /// Temperature noise (0~5)
     pub temperature_noise: Box<NoiseFn2>, 
-    /// Moisture noise
+    /// Moisture noise (0~5)
     pub moisture_noise: Box<NoiseFn2>,
 }
 
@@ -148,13 +160,13 @@ lazy_static! {
     pub static ref VOID_BIOME: BiomeDefinition = BiomeDefinition {
         name: VOID_BIOME_NAME,
         representative_color: RGBA8::new(0, 0, 0, 0),
-        size_chunks: 0,
         elevation: range(-1.0..-1.0),
         temperature: range(-1.0..-1.0),
         moisture: range(-1.0..-1.0),
         rule_source: Box::new(EmptyRuleSource()),
         surface_noise: Box::new(Constant::new(0.0)),
-        influence: 0.0,
+        blend_influence: 0.0,
+        block_influence: 0.0,
     };
 }
 

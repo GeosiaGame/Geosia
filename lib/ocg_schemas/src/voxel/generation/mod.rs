@@ -6,7 +6,7 @@ use dyn_clone::DynClone;
 use bevy_math::IVec3;
 use noise::Seedable;
 
-use crate::voxel::{biome::biome_picker::BiomeGenerator, chunk::Chunk};
+use crate::voxel::biome::biome_picker::BiomeGenerator;
 
 use self::positional_random::PositionalRandomFactory;
 
@@ -16,9 +16,6 @@ pub mod fbm_noise;
 pub mod positional_random;
 pub mod rule_sources;
 pub mod condition_sources;
-
-/// Worldgen Chunk type.
-pub type GenerationChunk = Chunk<GenerationChunkData>;
 
 /// Context data for world generation.
 pub struct Context<'a> {
@@ -52,12 +49,6 @@ pub trait ConditionSource: Sync + Send + Debug + DynClone {
 
 dyn_clone::clone_trait_object!(ConditionSource);
 
-
-/// Worldgen-only per-chunk data storage
-#[derive(Clone, Default)]
-pub struct GenerationChunkData {
-    //
-}
 
 fn build_sources<Source>(seed: u32, octaves: &Vec<f64>) -> Vec<Source>
 where

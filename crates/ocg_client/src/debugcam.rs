@@ -9,6 +9,8 @@ use bevy::ecs::event::{Events, ManualEventReader};
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
+use ocg_schemas::voxel::biome::BiomeRegistry;
+use ocg_schemas::voxel::biome::biome_map::BiomeMap;
 
 pub mod prelude {
     pub use crate::*;
@@ -67,6 +69,12 @@ impl Default for KeyBindings {
 #[derive(Component)]
 pub struct FlyCam;
 
+#[derive(Component)]
+pub struct BiomeText;
+
+#[derive(Component)]
+pub struct PositionText;
+
 /// Grabs/ungrabs mouse cursor
 fn toggle_grab_cursor(window: &mut Window) {
     match window.cursor.grab_mode {
@@ -108,10 +116,14 @@ fn player_move(
     primary_window: Query<&Window, With<PrimaryWindow>>,
     settings: Res<MovementSettings>,
     key_bindings: Res<KeyBindings>,
-    mut query: Query<(&FlyCam, &mut Transform)>, //    mut query: Query<&mut Transform, With<FlyCam>>,
+    biome_map: Res<BiomeMap>,
+    biome_registry: Res<BiomeRegistry>,
+    mut camera_query: Query<(&FlyCam, &mut Transform)>, //    mut query: Query<&mut Transform, With<FlyCam>>,
+    mut set: ParamSet<(Query<&mut Text, With<BiomeText>>, Query<&mut Text, With<PositionText>>)>,
 ) {
     if let Ok(window) = primary_window.get_single() {
-        for (_camera, mut transform) in query.iter_mut() {
+        let mut camera_pos = Vec3::ZERO;
+        for (_camera, mut transform) in camera_query.iter_mut() {
             let mut velocity = Vec3::ZERO;
             let local_z = transform.local_z();
             let forward = -Vec3::new(local_z.x, 0., local_z.z);
@@ -140,8 +152,23 @@ fn player_move(
 
                 velocity = velocity.normalize_or_zero();
 
-                transform.translation += velocity * time.delta_seconds() * settings.speed
+                transform.translation += velocity * time.delta_seconds() * settings.speed;
             }
+            camera_pos = transform.translation;
+        }
+        for mut text in &mut set.p0() {
+            let i_camera_pos = camera_pos.as_ivec3();
+            let biomes = biome_map.final_map.get(&[i_camera_pos.x, i_camera_pos.z]);
+            if biomes.is_some() {
+                let mut t = String::new();
+                for (i, biome) in biomes.unwrap().iter().enumerate() {
+                    t += format!("\n  biome #{i}:{{id: {0}, weight: {1}}}", biome.lookup(&biome_registry).unwrap(), biome.weight).as_str();
+                }
+                text.sections[1].value = t;
+            }
+        }
+        for mut text in &mut set.p1() {
+            text.sections[1].value = camera_pos.to_string();
         }
     } else {
         warn!("Primary window not found for `player_move`!");
@@ -154,10 +181,10 @@ fn player_look(
     primary_window: Query<&Window, With<PrimaryWindow>>,
     mut state: ResMut<InputState>,
     motion: Res<Events<MouseMotion>>,
-    mut query: Query<&mut Transform, With<FlyCam>>,
+    mut camera_query: Query<&mut Transform, With<FlyCam>>,
 ) {
     if let Ok(window) = primary_window.get_single() {
-        for mut transform in query.iter_mut() {
+        for mut transform in camera_query.iter_mut() {
             for ev in state.reader_motion.iter(&motion) {
                 let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
                 match window.cursor.grab_mode {
@@ -212,6 +239,49 @@ fn initial_grab_on_flycam_spawn(
     }
 }
 
+fn spawn_debug_text(
+    asset_server: Res<AssetServer>,
+    mut commands: Commands,
+) {
+    let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
+    commands.spawn((
+        TextBundle::from_sections([
+            TextSection::new(
+            "Current Biome:", 
+            TextStyle {
+                font: font.clone(),
+                font_size: 15.0,
+                color: Color::rgb(0.9, 0.9, 0.9),
+            }),
+            TextSection::from_style(
+                TextStyle {
+                font: font.clone(),
+                font_size: 15.0,
+                color: Color::rgb(0.9, 0.9, 0.9),
+            })
+        ]),
+        BiomeText
+    ));
+    commands.spawn((
+        TextBundle::from_sections([
+            TextSection::new(
+            "Current Position:", 
+            TextStyle {
+                font: font.clone(),
+                font_size: 15.0,
+                color: Color::rgb(0.9, 0.9, 0.9),
+            }),
+            TextSection::from_style(
+                TextStyle {
+                font: font.clone(),
+                font_size: 15.0,
+                color: Color::rgb(0.9, 0.9, 0.9),
+            })
+        ]),
+        PositionText
+    ));
+}
+
 /// Contains everything needed to add first-person fly camera behavior to your game
 pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
@@ -221,6 +291,7 @@ impl Plugin for PlayerPlugin {
             .init_resource::<KeyBindings>()
             .add_systems(Startup, setup_player)
             .add_systems(Startup, initial_grab_cursor)
+            .add_systems(Startup, spawn_debug_text)
             .add_systems(Update, player_move)
             .add_systems(Update, player_look)
             .add_systems(Update, cursor_grab);
@@ -236,6 +307,7 @@ impl Plugin for NoCameraPlayerPlugin {
             .init_resource::<KeyBindings>()
             .add_systems(Startup, initial_grab_cursor)
             .add_systems(Startup, initial_grab_on_flycam_spawn)
+            .add_systems(Startup, spawn_debug_text)
             .add_systems(Update, player_move)
             .add_systems(Update, player_look)
             .add_systems(Update, cursor_grab);

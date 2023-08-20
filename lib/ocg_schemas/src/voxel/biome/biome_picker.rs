@@ -3,7 +3,6 @@
 use crate::{voxel::biome::{BiomeRegistry, biome_map::BiomeMap}, coordinates::{AbsChunkRange, AbsChunkPos, RelChunkPos, CHUNK_DIM}, registry::RegistryId};
 use noise::NoiseFn;
 use serde::{Serialize, Deserialize};
-use bevy_math::IVec3;
 
 use super::{Noises, BiomeDefinition, PLAINS_BIOME_NAME};
 
@@ -36,9 +35,9 @@ impl BiomeGenerator {
     fn pick_biome<'a>(center: AbsChunkPos, pos: RelChunkPos, _map: &BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) -> (RegistryId, &'a BiomeDefinition) {
         let pos_d = (center + pos).as_dvec3();
         let pos_d = [pos_d.x, pos_d.z];
-        let height = noises.elevation_noise.get(pos_d); // Self::map_range((-1.0, 1.0), (0.0, 1.0), noises.elevation_noise.get(pos_d));
-        let wetness = noises.moisture_noise.get(pos_d); //Self::map_range((-1.0, 1.0), (0.0, 1.0), noises.moisture_noise.get(pos_d));
-        let temp = noises.temperature_noise.get(pos_d); //Self::map_range((-1.0, 1.0), (0.0, 1.0), noises.temperature_noise.get(pos_d));
+        let height = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.elevation_noise.get(pos_d));
+        let wetness = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.moisture_noise.get(pos_d));
+        let temp = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.temperature_noise.get(pos_d));
 
         let mut final_id = None;
 

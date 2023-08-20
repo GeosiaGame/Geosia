@@ -2,9 +2,11 @@
 
 use std::{ops::{Deref, DerefMut}, cell::RefCell};
 
+use bevy::prelude::Resource;
 use hashbrown::HashMap;
 use itertools::iproduct;
 use serde::{Serialize, Deserialize};
+use smallvec::SmallVec;
 
 use crate::{coordinates::{AbsChunkPos, CHUNK_DIM}, registry::RegistryId};
 
@@ -23,18 +25,20 @@ pub const BLEND_CIRCUMFERENCE: i32 = BLEND_RADIUS * 2 + 1;
 /// Size of a single region.
 pub const SUPERGRID_DIM: i32 = 4 * CHUNK_DIM;
 /// Padded region size.
-pub const PADDED_REGION_SIZE: i32 = SUPERGRID_DIM + BLEND_RADIUS*2;
+pub const PADDED_REGION_SIZE: i32 = SUPERGRID_DIM + BLEND_RADIUS * 2;
 /// Square of the padded region size, as `usize`.
 pub const PADDED_REGION_SIZE_SQZ: usize = (PADDED_REGION_SIZE * PADDED_REGION_SIZE) as usize;
 
 /// The per-planet biome map.
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize, Resource)]
 pub struct BiomeMap {
     /// Map of Chunk position to biome.
     map: HashMap<AbsChunkPos, BiomeEntry>,
     /// Map of Chunk position to biome definition.
     #[serde(skip)] // TODO fix serialization of `BiomeDefinition`
     pub base_map: HashMap<AbsChunkPos, (RegistryId, BiomeDefinition)>,
+    /// The final map of Block column -> Weighted biome entry with strides of (x=1,z=32)
+    pub final_map: HashMap<[i32; 2], SmallVec<[BiomeEntry; 3]>>,
 }
 
 impl BiomeMap {
@@ -56,8 +60,14 @@ impl BiomeMap {
             let x = (rx - BLEND_RADIUS) + (region_x * SUPERGRID_DIM);
             let z = (rz - BLEND_RADIUS) + (region_z * SUPERGRID_DIM);
 
-            let biome = generator.borrow_mut().generate_biome(&AbsChunkPos::new(x, 0, z), self, registry, noises);
-            self.base_map.insert(AbsChunkPos::new(x, 0, z), biome.clone());
+            let biome;
+            let pos = AbsChunkPos::new(x, 0, z);
+            if self.base_map.contains_key(&pos) {
+                biome = self.base_map.get(&pos).unwrap().to_owned();
+            } else {
+                biome = generator.borrow_mut().generate_biome(&pos, self, registry, noises);
+                self.base_map.insert(pos, biome.clone());
+            }
 
             biome_map[(rx + rz * PADDED_REGION_SIZE) as usize] = biome;
         }

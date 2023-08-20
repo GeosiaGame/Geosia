@@ -3289,6 +3289,7 @@ name = "ocg_schemas"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "bevy",
  "bevy_math",
  "bitflags 2.3.3",
  "bitvec",
