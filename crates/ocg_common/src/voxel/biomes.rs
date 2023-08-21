@@ -50,7 +50,7 @@ pub fn setup_basic_biomes(block_registry: &BlockRegistry, biome_registry: &mut B
         .push_object(BiomeDefinition {
             name: PLAINS_BIOME_NAME,
             representative_color: RGBA8::new(20, 180, 10, 255),
-            elevation: range(0.0..1.5),
+            elevation: range(..2.0),
             temperature: range(..),
             moisture: range(..2.5),
             rule_source: plains_rule_source.clone(),

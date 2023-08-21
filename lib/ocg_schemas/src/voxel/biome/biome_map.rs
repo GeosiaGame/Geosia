@@ -1,16 +1,13 @@
 //! World biome map implementation
 
-use std::{ops::{Deref, DerefMut}, cell::RefCell};
-
 use bevy::prelude::Resource;
 use hashbrown::HashMap;
-use itertools::iproduct;
 use serde::{Serialize, Deserialize};
 use smallvec::SmallVec;
 
-use crate::{coordinates::{AbsChunkPos, CHUNK_DIM}, registry::RegistryId};
+use crate::{coordinates::CHUNK_DIM, registry::RegistryId};
 
-use super::{BiomeEntry, biome_picker::BiomeGenerator, BiomeRegistry, Noises, BiomeDefinition, PLAINS_BIOME_NAME};
+use super::{BiomeEntry, BiomeDefinition};
 
 
 /// SIZExSIZE, SIZE=2^EXPONENT; 2^8=256
@@ -32,59 +29,9 @@ pub const PADDED_REGION_SIZE_SQZ: usize = (PADDED_REGION_SIZE * PADDED_REGION_SI
 /// The per-planet biome map.
 #[derive(Clone, Default, Serialize, Deserialize, Resource)]
 pub struct BiomeMap {
-    /// Map of Chunk position to biome.
-    map: HashMap<AbsChunkPos, BiomeEntry>,
     /// Map of Chunk position to biome definition.
     #[serde(skip)] // TODO fix serialization of `BiomeDefinition`
-    pub base_map: HashMap<AbsChunkPos, (RegistryId, BiomeDefinition)>,
+    pub base_map: HashMap<[i32; 2], (RegistryId, BiomeDefinition)>,
     /// The final map of Block column -> Weighted biome entry with strides of (x=1,z=32)
     pub final_map: HashMap<[i32; 2], SmallVec<[BiomeEntry; 3]>>,
-}
-
-impl BiomeMap {
-
-    /// Gets a biome for a chunk, or if nonexistent, generates a new one.
-    pub fn get_or_new<'a>(&'a mut self, pos: &AbsChunkPos, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &Noises) -> Option<&(RegistryId, BiomeDefinition)> {
-        if !self.contains_key(pos) {
-            let mut gen = generator.borrow_mut();
-            let gen = gen.generate_biome(pos, self, registry, noises);
-            self.base_map.insert(*pos, (gen.0, gen.1.to_owned()));
-        }
-        return self.base_map.get(pos);
-    }
-
-    /// Generates a region of biomes.
-    pub fn generate_region(&mut self, region_x: i32, region_z: i32, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &Noises) -> Vec<(RegistryId, BiomeDefinition)> {
-        let mut biome_map = vec![registry.lookup_name_to_object(PLAINS_BIOME_NAME.as_ref()).map(|x| (x.0, x.1.to_owned())).unwrap(); PADDED_REGION_SIZE_SQZ];
-        for (rx, rz) in iproduct!(0..PADDED_REGION_SIZE, 0..PADDED_REGION_SIZE) {
-            let x = (rx - BLEND_RADIUS) + (region_x * SUPERGRID_DIM);
-            let z = (rz - BLEND_RADIUS) + (region_z * SUPERGRID_DIM);
-
-            let biome;
-            let pos = AbsChunkPos::new(x, 0, z);
-            if self.base_map.contains_key(&pos) {
-                biome = self.base_map.get(&pos).unwrap().to_owned();
-            } else {
-                biome = generator.borrow_mut().generate_biome(&pos, self, registry, noises);
-                self.base_map.insert(pos, biome.clone());
-            }
-
-            biome_map[(rx + rz * PADDED_REGION_SIZE) as usize] = biome;
-        }
-        biome_map
-    }
-}
-
-impl Deref for BiomeMap {
-    type Target = HashMap<AbsChunkPos, BiomeEntry>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.map
-    }
-}
-
-impl DerefMut for BiomeMap {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.map
-    }
 }

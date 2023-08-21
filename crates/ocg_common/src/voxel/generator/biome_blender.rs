@@ -22,7 +22,7 @@ lazy_static! {
                 }
 				this_weight *= this_weight; // Make transitions smoother.
 				weight_total += this_weight as f64;
-				ret_val[(iz * (BLEND_CIRCUMFERENCE) + ix) as usize] = this_weight as f64;
+				ret_val[(ix + iz * (BLEND_CIRCUMFERENCE)) as usize] = this_weight as f64;
 			}
 		}
 		
@@ -102,7 +102,7 @@ impl SimpleBiomeBlender {
 
         if correct_cache_entry.is_none() {
             let mut entry = BiomeCacheEntry::new(region_x, region_z);
-            entry.cache = Some(biome_map.generate_region(region_x, region_z, generator, registry, noises));
+            entry.cache = Some(generator.borrow_mut().generate_region(region_x, region_z, biome_map, registry, noises));
             correct_cache_entry = Some(entry);
         }
 

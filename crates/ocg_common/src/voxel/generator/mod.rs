@@ -142,7 +142,7 @@ impl<'a> StdGenerator<'a> {
                 let result = biome.rule_source.place(&g_pos, &ctx, block_registry);
                 if result.is_some() {
                     chunk.put(b_pos, result.unwrap());
-                    //break;
+                    break;
                 }
             }
         }

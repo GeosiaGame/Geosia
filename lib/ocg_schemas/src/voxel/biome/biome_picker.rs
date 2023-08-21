@@ -1,10 +1,11 @@
 //! Random biome picker
 
-use crate::{voxel::biome::{BiomeRegistry, biome_map::BiomeMap}, coordinates::{AbsChunkRange, AbsChunkPos, RelChunkPos, CHUNK_DIM}, registry::RegistryId};
+use crate::{voxel::biome::{BiomeRegistry, biome_map::BiomeMap}, registry::RegistryId};
+use itertools::iproduct;
 use noise::NoiseFn;
 use serde::{Serialize, Deserialize};
 
-use super::{Noises, BiomeDefinition, PLAINS_BIOME_NAME};
+use super::{Noises, BiomeDefinition, PLAINS_BIOME_NAME, biome_map::{BLEND_RADIUS, SUPERGRID_DIM, PADDED_REGION_SIZE, PADDED_REGION_SIZE_SQZ}};
 
 /// The generic biome selector.
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -32,9 +33,8 @@ impl BiomeGenerator {
         to_range.0 + (s - from_range.0) * (to_range.1 - to_range.0) / (from_range.1 - from_range.0)
     }
 
-    fn pick_biome<'a>(center: AbsChunkPos, pos: RelChunkPos, _map: &BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) -> (RegistryId, &'a BiomeDefinition) {
-        let pos_d = (center + pos).as_dvec3();
-        let pos_d = [pos_d.x, pos_d.z];
+    fn pick_biome<'a>(pos: [i32; 2], _map: &BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) -> (RegistryId, &'a BiomeDefinition) {
+        let pos_d = [pos[0] as f64, pos[1] as f64];
         let height = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.elevation_noise.get(pos_d));
         let wetness = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.moisture_noise.get(pos_d));
         let temp = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.temperature_noise.get(pos_d));
@@ -54,20 +54,32 @@ impl BiomeGenerator {
         final_id.unwrap_or_else(|| registry.lookup_name_to_object(PLAINS_BIOME_NAME.as_ref()).unwrap())
     }
 
-    /// Generates biomes for a range of positions.
-    pub fn generate_area_biomes(&mut self, area: AbsChunkRange, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) {
-        let center = area.max() - RelChunkPos::from(area.min().into_ivec3() / 2);
-        for pos in area.iter_xzy() {
-            let biome_def = BiomeGenerator::pick_biome(AbsChunkPos::from_ivec3(center.0 * CHUNK_DIM), RelChunkPos::from_ivec3(pos.0), &biome_map, registry, noises);
-            biome_map.base_map.insert(pos, (biome_def.0, biome_def.1.to_owned()));
-        }
-    }
-
     /// Generates a single biome at `pos`.
-    pub fn generate_biome(&mut self, pos: &AbsChunkPos, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> (RegistryId, BiomeDefinition) {
-        let biome_def: (RegistryId, &BiomeDefinition) = BiomeGenerator::pick_biome(*pos, RelChunkPos::splat(0), &biome_map, registry, noises);
+    pub fn generate_biome(&mut self, pos: [i32; 2], biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> (RegistryId, BiomeDefinition) {
+        let biome_def: (RegistryId, &BiomeDefinition) = BiomeGenerator::pick_biome(pos, &biome_map, registry, noises);
         //biome_map.base_map.insert(*pos, (biome_def.0, biome_def.1.to_owned()));
         (biome_def.0, biome_def.1.to_owned())
+    }
+
+    /// Generates a region of biomes.
+    pub fn generate_region(&mut self, region_x: i32, region_z: i32, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> Vec<(RegistryId, BiomeDefinition)> {
+        let mut biomes = vec![registry.lookup_name_to_object(PLAINS_BIOME_NAME.as_ref()).map(|x| (x.0, x.1.to_owned())).unwrap(); PADDED_REGION_SIZE_SQZ];
+        for (rx, rz) in iproduct!(0..PADDED_REGION_SIZE, 0..PADDED_REGION_SIZE) {
+            let x = (rx - BLEND_RADIUS) + (region_x * SUPERGRID_DIM);
+            let z = (rz - BLEND_RADIUS) + (region_z * SUPERGRID_DIM);
+
+            let biome;
+            let pos = [x, z];
+            if biome_map.base_map.contains_key(&pos) {
+                biome = biome_map.base_map.get(&pos).unwrap().to_owned();
+            } else {
+                biome = self.generate_biome(pos, biome_map, registry, noises);
+                biome_map.base_map.insert(pos, biome.clone());
+            }
+
+            biomes[(rx + rz * PADDED_REGION_SIZE) as usize] = biome;
+        }
+        biomes
     }
 
     /// Sets the seed of this biome generator.
