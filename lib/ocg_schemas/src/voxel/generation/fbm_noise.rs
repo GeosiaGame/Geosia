@@ -54,12 +54,14 @@ pub struct Fbm<T> {
     scale_factor: f64,
 }
 
-fn calc_scale_factor(persistence: f64, octaves: &Vec<f64>) -> f64 {
-    let mut last_value = 0.0;
-    for octave in octaves {
-        last_value += persistence.powf(*octave);
+fn calc_scale_factor(octaves: &Vec<f64>) -> f64 {
+    let mut lowest_freq_value_factor = 2f64.powf(octaves.len() as f64 - 1.0) / (2f64.powf(octaves.len() as f64) - 1.0);
+    let mut value = 0.0;
+    for o in octaves.iter() {
+        value += o * 2.0 * lowest_freq_value_factor;
+        lowest_freq_value_factor /= 2.0;
     }
-    1.0 - last_value
+    value
 }
 
 impl<T> Fbm<T>
@@ -88,7 +90,7 @@ where
             lacunarity: Self::DEFAULT_LACUNARITY,
             persistence: Self::DEFAULT_PERSISTENCE,
             sources: super::build_sources(seed, &octaves),
-            scale_factor: calc_scale_factor(Self::DEFAULT_PERSISTENCE, &octaves),
+            scale_factor: calc_scale_factor(&octaves),
             octaves: octaves,
         }
     }
@@ -97,7 +99,7 @@ where
     pub fn set_octaves(&self, octaves: Vec<f64>) -> Self {
         Self {
             sources: super::build_sources(self.seed, &octaves),
-            scale_factor: calc_scale_factor(Self::DEFAULT_PERSISTENCE, &octaves),
+            scale_factor: calc_scale_factor(&octaves),
             octaves,
             ..*self
         }
@@ -122,7 +124,6 @@ where
     pub fn set_persistence(self, persistence: f64) -> Self {
         Self {
             persistence,
-            scale_factor: calc_scale_factor(persistence, &self.octaves),
             ..self
         }
     }
@@ -221,14 +222,18 @@ where
         point *= self.frequency;
 
         for x in 0..self.octaves.len() {
-            // Get the signal.
-            let mut signal = self.sources[x].get(point.to_array());
-            
-            // Scale the result for this octave
-            signal *= self.octaves[x];
+            let mut signal = 0.0;
+            let o = self.octaves[x];
+            if o != 0.0 {
+                // Get the signal.
+                signal = self.sources[x].get(point.to_array());
+                
+                // Scale the result for this octave
+                signal *= o;
 
-            // Scale the amplitude appropriately for this frequency.
-            signal *= attenuation;
+                // Scale the amplitude appropriately for this frequency.
+                signal *= attenuation;
+            }
 
             // Increase the attenuation for the next octave, to be equal to persistence ^ (x + 1)
             attenuation *= attenuation;

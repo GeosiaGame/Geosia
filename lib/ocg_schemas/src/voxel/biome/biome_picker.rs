@@ -33,7 +33,7 @@ impl BiomeGenerator {
         to_range.0 + (s - from_range.0) * (to_range.1 - to_range.0) / (from_range.1 - from_range.0)
     }
 
-    fn pick_biome<'a>(pos: [i32; 2], _map: &BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) -> (RegistryId, &'a BiomeDefinition) {
+    fn pick_biome<'a>(pos: [i32; 2], map: &'a BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) -> (RegistryId, &'a BiomeDefinition) {
         let pos_d = [pos[0] as f64, pos[1] as f64];
         let height = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.elevation_noise.get(pos_d));
         let wetness = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.moisture_noise.get(pos_d));
@@ -41,14 +41,9 @@ impl BiomeGenerator {
 
         let mut final_id = None;
 
-        let objects = registry.get_objects_ids(); // TODO change from looping the registry to getting a list of generatable biomes from somewhere (BiomeMap?)
-        for id in objects.iter() {
-            if let Some(obj) = id {
-                let id = obj.0;
-                let obj = obj.1;
-                if obj.elevation.contains(height) && obj.moisture.contains(wetness) && obj.temperature.contains(temp) {
-                    final_id = Some((*id, obj));
-                }
+        for obj in map.gen_biomes.iter() {
+            if obj.1.elevation.contains(height) && obj.1.moisture.contains(wetness) && obj.1.temperature.contains(temp) {
+                final_id = Some((obj.0, &obj.1));
             }
         }
         final_id.unwrap_or_else(|| registry.lookup_name_to_object(PLAINS_BIOME_NAME.as_ref()).unwrap())
@@ -56,7 +51,7 @@ impl BiomeGenerator {
 
     /// Generates a single biome at `pos`.
     pub fn generate_biome(&mut self, pos: [i32; 2], biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> (RegistryId, BiomeDefinition) {
-        let biome_def: (RegistryId, &BiomeDefinition) = BiomeGenerator::pick_biome(pos, &biome_map, registry, noises);
+        let biome_def = BiomeGenerator::pick_biome(pos, &biome_map, registry, noises);
         //biome_map.base_map.insert(*pos, (biome_def.0, biome_def.1.to_owned()));
         (biome_def.0, biome_def.1.to_owned())
     }
