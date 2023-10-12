@@ -73,6 +73,8 @@ pub fn client_main() {
 }
 
 mod debug_window {
+    use std::io::{stdout, Write};
+
     use bevy::log;
     use bevy::prelude::*;
     use ocg_common::voxel::biomes::setup_basic_biomes;
@@ -122,14 +124,16 @@ mod debug_window {
         setup_basic_biomes(&block_reg, &mut biome_reg);
         //let biome_reg = biome_reg;
 
-        let mut generator = StdGenerator::new(1, biome_map, BiomeGenerator::new(1));
+        let mut generator = StdGenerator::new(0, biome_map, BiomeGenerator::new(0));
 
+        //let mut lock = stdout().lock();
         let mut test_chunks = ClientChunkGroup::new();
-        for (cx, cy, cz) in iproduct!(-16..=16, -16..=16, -16..=16) {
+        for (cx, cy, cz) in iproduct!(-16..=16, -8..=8, -16..=16) {
             let cpos = AbsChunkPos::new(cx, cy, cz);
             let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
             generator.generate_chunk(cpos, &mut chunk.blocks, &block_reg, &biome_reg);
             test_chunks.chunks.insert(cpos, chunk);
+            //writeln!(lock, "generated chunk at {0}.", <IVec3>::from(cpos)).expect("Lock failed");
         }
         for (pos, _) in test_chunks.chunks.iter() {
             let chunks = &test_chunks

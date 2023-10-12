@@ -48,7 +48,7 @@ pub fn setup_basic_biomes(block_registry: &BlockRegistry, biome_registry: &mut B
         .push_object(BiomeDefinition {
             name: PLAINS_BIOME_NAME,
             representative_color: RGBA8::new(20, 180, 10, 255),
-            elevation: range(0.75..1.75),
+            elevation: range(1.0..2.5),
             temperature: range(..),
             moisture: range(..2.5),
             rule_source: plains_rule_source.clone(),
@@ -62,19 +62,19 @@ pub fn setup_basic_biomes(block_registry: &BlockRegistry, biome_registry: &mut B
                 )),
                 GLOBAL_SCALE_MOD * 2.0
             )),
-            blend_influence: 1.0,
+            blend_influence: 0.5,
             block_influence: 1.0,
             can_generate: true,
         })
         .unwrap();
 
     let noise_func = Fbm::<SuperSimplex>::new(2);
-    let noise_func = noise_func.set_octaves(vec![1.0, 1.0, 1.0, 1.0]).set_persistence(0.75);
+    let noise_func = noise_func.set_octaves(vec![1.0, 1.0, 0.0, 0.0]);
     biome_registry
         .push_object(BiomeDefinition {
             name: HILLS_BIOME_NAME,
             representative_color: RGBA8::new(15, 110, 10, 255),
-            elevation: range(1.75..2.75),
+            elevation: range(2.5..3.5),
             temperature: range(..),
             moisture: range(..2.5),
             rule_source: plains_rule_source.clone(),
@@ -88,11 +88,11 @@ pub fn setup_basic_biomes(block_registry: &BlockRegistry, biome_registry: &mut B
                             )),
                             Mul2(noise::Multiply::new(NoiseOffsetMul2(noise_func.clone(), 3.0), noise::Constant::new(0.15)))
                         )),
-                        noise::Constant::new(0.05)
+                        noise::Constant::new(0.25)
                     )),
-                    noise::Constant::new(0.0)
+                    noise::Constant::new(60.0)
                 )),
-                GLOBAL_SCALE_MOD * 40.0
+                GLOBAL_SCALE_MOD * 80.0
             )),
             blend_influence: 1.0,
             block_influence: 1.0,
@@ -131,8 +131,8 @@ pub fn setup_basic_biomes(block_registry: &BlockRegistry, biome_registry: &mut B
         .push_object(BiomeDefinition {
             name: MOUNTAINS_BIOME_NAME,
             representative_color: RGBA8::new(220, 220, 220, 255),
-            elevation: range(2.75..),
-            temperature: range(..=3.0),
+            elevation: range(3.5..),
+            temperature: range(../*=3.0*/),
             moisture: range(..2.5),
             rule_source: plains_rule_source.clone(),
             surface_noise: Box::new(NoiseOffsetDiv2(
@@ -163,11 +163,11 @@ pub fn setup_basic_biomes(block_registry: &BlockRegistry, biome_registry: &mut B
                                 ))
                             ))
                         )),
-                    noise::Constant::new(15.0)
+                    noise::Constant::new(150.0)
                     )),
-                noise::Constant::new(0.0)
+                noise::Constant::new(40.0)
                 )),
-                GLOBAL_SCALE_MOD * 16.0
+                GLOBAL_SCALE_MOD * 160.0
             )),
             blend_influence: 1.0,
             block_influence: 1.0,
@@ -181,7 +181,7 @@ pub fn setup_basic_biomes(block_registry: &BlockRegistry, biome_registry: &mut B
         .push_object(BiomeDefinition {
             name: OCEAN_BIOME_NAME,
             representative_color: RGBA8::new(10, 120, 180, 255),
-            elevation: range(..3.0),
+            elevation: range(..1.0),
             temperature: range(..),
             moisture: range(2.5..),
             rule_source: ConditionRuleSource::new_boxed(UnderSeaLevelCondition::new_boxed(), 
@@ -191,8 +191,8 @@ pub fn setup_basic_biomes(block_registry: &BlockRegistry, biome_registry: &mut B
             ])),
             surface_noise: Box::new(
                 NoiseOffsetDiv2(
-                    Add2(noise::Add::new(Mul2(noise::Multiply::new(noise_func, noise::Constant::new(-7.5))), noise::Constant::new(1.0))),
-                    GLOBAL_SCALE_MOD * 1.0
+                    Add2(noise::Add::new(Mul2(noise::Multiply::new(noise_func, noise::Constant::new(-7.5))), noise::Constant::new(0.0))),
+                    GLOBAL_SCALE_MOD * 100.0
                 )
             ),
             blend_influence: 1.0,

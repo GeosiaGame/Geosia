@@ -1,11 +1,13 @@
 //! Random biome picker
 
+use std::io::{stdout, Write};
+
 use crate::{voxel::biome::{BiomeRegistry, biome_map::BiomeMap}, registry::RegistryId};
 use itertools::iproduct;
 use noise::NoiseFn;
 use serde::{Serialize, Deserialize};
 
-use super::{Noises, BiomeDefinition, PLAINS_BIOME_NAME, biome_map::{BLEND_RADIUS, SUPERGRID_DIM, PADDED_REGION_SIZE, PADDED_REGION_SIZE_SQZ}};
+use super::{Noises, BiomeDefinition, PLAINS_BIOME_NAME, biome_map::{BLEND_RADIUS, SUPERGRID_DIM, PADDED_REGION_SIZE, PADDED_REGION_SIZE_SQZ, GLOBAL_SCALE_MOD, GLOBAL_BIOME_SCALE}};
 
 /// The generic biome selector.
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -34,16 +36,17 @@ impl BiomeGenerator {
     }
 
     fn pick_biome<'a>(pos: [i32; 2], map: &'a BiomeMap, registry: &'a BiomeRegistry, noises: &Noises) -> (RegistryId, &'a BiomeDefinition) {
-        let pos_d = [pos[0] as f64, pos[1] as f64];
-        let height = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.elevation_noise.get(pos_d));
-        let wetness = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.moisture_noise.get(pos_d));
-        let temp = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.temperature_noise.get(pos_d));
+        let pos_d = [pos[0] as f64 / GLOBAL_BIOME_SCALE, pos[1] as f64 / GLOBAL_SCALE_MOD];
+        let height = Self::map_range((-0.9, 0.9), (0.0, 5.0), noises.elevation_noise.get(pos_d));
+        let wetness = Self::map_range((-0.9, 0.9), (0.0, 5.0), noises.moisture_noise.get(pos_d));
+        let temp = Self::map_range((-0.9, 0.9), (0.0, 5.0), noises.temperature_noise.get(pos_d));
 
         let mut final_id = None;
 
         for obj in map.gen_biomes.iter() {
             if obj.1.elevation.contains(height) && obj.1.moisture.contains(wetness) && obj.1.temperature.contains(temp) {
                 final_id = Some((obj.0, &obj.1));
+                //break;
             }
         }
         final_id.unwrap_or_else(|| registry.lookup_name_to_object(PLAINS_BIOME_NAME.as_ref()).unwrap())
@@ -58,6 +61,8 @@ impl BiomeGenerator {
 
     /// Generates a region of biomes.
     pub fn generate_region(&mut self, region_x: i32, region_z: i32, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> Vec<(RegistryId, BiomeDefinition)> {
+        //let mut lock = stdout().lock();
+
         let mut biomes = vec![registry.lookup_name_to_object(PLAINS_BIOME_NAME.as_ref()).map(|x| (x.0, x.1.to_owned())).unwrap(); PADDED_REGION_SIZE_SQZ];
         for (rx, rz) in iproduct!(0..PADDED_REGION_SIZE, 0..PADDED_REGION_SIZE) {
             let x = (rx - BLEND_RADIUS) + (region_x * SUPERGRID_DIM);
@@ -72,6 +77,7 @@ impl BiomeGenerator {
                 biome_map.base_map.insert(pos, biome.clone());
             }
 
+            //writeln!(lock, "picked biome {0} for chunk [{x}, {z}]", biome.1).expect("Lock failed");
             biomes[(rx + rz * PADDED_REGION_SIZE) as usize] = biome;
         }
         biomes

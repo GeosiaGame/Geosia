@@ -90,9 +90,9 @@ impl<'a> StdGenerator<'a> {
             biome_map: biome_map,
             biome_blender: SimpleBiomeBlender::new(),
             noises: Noises {
-                elevation_noise: Box::new(Fbm::<SuperSimplex>::new(1).set_octaves(vec![-1.0, 1.0, 1.0, 0.0])),
-                temperature_noise: Box::new(Fbm::<SuperSimplex>::new(2).set_octaves(vec![-1.0, 1.0, 1.0, 0.0])),
-                moisture_noise: Box::new(Fbm::<SuperSimplex>::new(3).set_octaves(vec![-1.0, 1.0, 1.0, 0.0])),
+                elevation_noise: Box::new(Fbm::<SuperSimplex>::new(1).set_octaves(vec![-3.0, 1.0, 1.0, 0.0])),
+                temperature_noise: Box::new(Fbm::<SuperSimplex>::new(2).set_octaves(vec![-3.0, 1.0, 1.0, 0.0])),
+                moisture_noise: Box::new(Fbm::<SuperSimplex>::new(3).set_octaves(vec![-3.0, 1.0, 1.0, 0.0])),
             },
             cell_gen: ThreadLocal::new(),
         }
@@ -126,6 +126,13 @@ impl<'a> StdGenerator<'a> {
         for (pos_x, pos_y, pos_z) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM, 0..CHUNK_DIM) {
             let b_pos = InChunkPos::try_new(pos_x, pos_y, pos_z).unwrap();
 
+            let g_pos = <IVec3>::from(b_pos) + (<IVec3>::from(c_pos) * CHUNK_DIM);
+            let height = vparams[(pos_x + pos_z * CHUNK_DIM) as usize];
+
+            //if g_pos.y - height < 0 {
+            //    continue;
+            //}
+
             let mut biomes: SmallVec<[(&BiomeDefinition, f64); 3]> = SmallVec::new();
             for b in blended[(pos_x + pos_z * CHUNK_DIM) as usize].iter() {
                 let e = b.lookup(biome_registry).unwrap();
@@ -134,15 +141,11 @@ impl<'a> StdGenerator<'a> {
             }
             biomes.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
-            let g_pos = <IVec3>::from(b_pos) + (<IVec3>::from(c_pos) * CHUNK_DIM);
-            let height = vparams[(pos_x + pos_z * CHUNK_DIM) as usize];
-
             for (biome, _) in biomes.iter() {
                 let ctx = Context { biome_generator: &biomegen.borrow_mut(), chunk: chunk, random: PositionalRandomFactory::default(), ground_y: height, sea_level: 0 /* hardcoded for now... */ };
                 let result = biome.rule_source.place(&g_pos, &ctx, block_registry);
                 if result.is_some() {
                     chunk.put(b_pos, result.unwrap());
-                    //break;
                 }
             }
         }
