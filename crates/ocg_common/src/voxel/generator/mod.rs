@@ -4,7 +4,7 @@ mod biome_blender;
 
 use bevy::{math::{IVec2, DVec2}, prelude::ResMut};
 use bevy_math::IVec3;
-use noise::{NoiseFn, SuperSimplex};
+use noise::SuperSimplex;
 use ocg_schemas::{voxel::{chunk_storage::{PaletteStorage, ChunkStorage}, voxeltypes::{BlockEntry, BlockRegistry}, biome::{BiomeDefinition, biome_map::{BiomeMap, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD}, biome_picker::BiomeGenerator, Noises, BiomeRegistry, BiomeEntry}, generation::{fbm_noise::Fbm, Context, positional_random::PositionalRandomFactory}}, coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM2Z}, dependencies::{itertools::iproduct, smallvec::SmallVec}, registry::RegistryId};
 use std::cell::RefCell;
 use std::mem::MaybeUninit;
@@ -26,21 +26,21 @@ impl CellGen {
         s.set_seed(seed, biome_map, biome_registry, noises);
         s
     }
-
+    
     fn set_seed(&mut self, seed: u64, biome_map: &mut BiomeMap, biome_registry: &BiomeRegistry, noises: &mut Noises) {
         use rand::prelude::*;
         use rand_xoshiro::SplitMix64;
         self.seed = seed;
         let mut sdgen = SplitMix64::seed_from_u64(seed);
         let mut biomes: Vec<(RegistryId, BiomeDefinition)> = Vec::new();
-        for def in biome_registry.get_objects_ids().iter() {
+        /*for def in biome_registry.get_objects_ids().iter() {
             if def.1.can_generate {
                 if let Some(seedable) = def.1.surface_noise.get_seedable().as_mut() {
                     seedable.set_seed(sdgen.next_u32());
                 }
                 biomes.push((*def.0, def.1.to_owned()));
             }
-        }
+        }*/
         biome_map.gen_biomes = biomes;
         if let Some(seedable) = noises.elevation_noise.get_seedable().as_mut() {
             seedable.set_seed(sdgen.next_u32());
@@ -59,7 +59,7 @@ impl CellGen {
 //    }
 
     fn elevation_noise(&self, pos: IVec2, c_pos: IVec2, biome_registry: &BiomeRegistry, blended: &SmallVec<[SmallVec<[BiomeEntry; 3]>; CHUNK_DIM2Z]>) -> f64 {
-        let nf = |p: DVec2, b: &BiomeDefinition| (b.surface_noise.get([p.x, p.y]) + 1.0) / 2.0;
+        let nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise.generator)([p.x, p.y], self.seed as u32) + 1.0) / 2.0;
         let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
         let in_c_pos = pos - (c_pos * CHUNK_DIM);
         let blend = &blended[(in_c_pos.x + in_c_pos.y * CHUNK_DIM) as usize];
