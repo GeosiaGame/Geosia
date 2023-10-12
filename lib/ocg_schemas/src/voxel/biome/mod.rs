@@ -45,8 +45,8 @@ impl BiomeEntry {
 pub type BiomeRegistry = Registry<BiomeDefinition>;
 
 /// A definition of a biome type, specifying properties such as registry name, shape, textures.
-#[derive(Clone)]
 // TODO fix serialization of `BiomeDefinition`
+#[derive(Clone)]
 pub struct BiomeDefinition {
     /// The unique registry name
     pub name: RegistryName,
@@ -63,7 +63,7 @@ pub struct BiomeDefinition {
     /// The block placement rule source for this biome.
     pub rule_source: Box<RuleSrc>,
     /// The noise function for this biome.
-    pub surface_noise: Box<NoiseFn2>,
+    pub surface_noise: SurfaceGenerator<&'static (dyn Fn([f64; 2], u32) -> f64 + Sync + Send)>,
     /// The strength of this biome in the blending step.
     pub blend_influence: f64,
     /// The strength of this biome in the block placement step.
@@ -95,6 +95,20 @@ impl RegistryObject for BiomeDefinition {
 }
 
 impl BiomeDefinition {}
+
+/// A surface noise generator (wrapper)
+#[derive(Clone)]
+pub struct SurfaceGenerator<T> {
+    /// The actual object
+    pub generator: T,
+}
+
+impl<T> SurfaceGenerator<T> where T: Fn([f64; 2], u32) -> f64 + Sized + Sync + Send {
+    /// Helper function to create a new surface generator.
+    pub fn new(gen: T) -> Self {
+        Self { generator: gen }
+    }
+}
 
 /// God save my soul from the hell that is Rust generic types.
 /// You NEED to use this type alias everywhere where one is required, by the way. FUN.
@@ -166,7 +180,7 @@ lazy_static! {
         temperature: range(-1.0..-1.0),
         moisture: range(-1.0..-1.0),
         rule_source: Box::new(EmptyRuleSource()),
-        surface_noise: Box::new(Constant::new(0.0)),
+        surface_noise: SurfaceGenerator::new(&|_point, _seed| 0.0),
         blend_influence: 0.0,
         block_influence: 0.0,
         can_generate: false,
