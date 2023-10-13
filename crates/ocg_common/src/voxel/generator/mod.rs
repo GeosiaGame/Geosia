@@ -33,14 +33,16 @@ impl CellGen {
         self.seed = seed;
         let mut sdgen = SplitMix64::seed_from_u64(seed);
         let mut biomes: Vec<(RegistryId, BiomeDefinition)> = Vec::new();
-        /*for def in biome_registry.get_objects_ids().iter() {
+        for def in biome_registry.get_objects_ids().iter() {
             if def.1.can_generate {
+                /*
                 if let Some(seedable) = def.1.surface_noise.get_seedable().as_mut() {
                     seedable.set_seed(sdgen.next_u32());
                 }
+                */
                 biomes.push((*def.0, def.1.to_owned()));
             }
-        }*/
+        }
         biome_map.gen_biomes = biomes;
         if let Some(seedable) = noises.elevation_noise.get_seedable().as_mut() {
             seedable.set_seed(sdgen.next_u32());
