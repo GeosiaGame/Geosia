@@ -1,21 +1,15 @@
 //! World generation related methods.
 
-use std::fmt::Debug;
-
-use dyn_clone::DynClone;
-use bevy_math::IVec3;
 use noise::Seedable;
 
 use crate::voxel::biome::biome_picker::BiomeGenerator;
 
 use self::positional_random::PositionalRandomFactory;
 
-use super::{voxeltypes::{BlockEntry, BlockRegistry}, chunk_storage::PaletteStorage};
+use super::{voxeltypes::BlockEntry, chunk_storage::PaletteStorage};
 
 pub mod fbm_noise;
 pub mod positional_random;
-pub mod rule_sources;
-pub mod condition_sources;
 
 /// Context data for world generation.
 pub struct Context<'a> {
@@ -30,25 +24,6 @@ pub struct Context<'a> {
     /// The sea level for this planet.
     pub sea_level: i32,
 }
-
-/// Block placement rule source.
-#[typetag::serde(tag = "rule_source")]
-pub trait RuleSource: Sync + Send + Debug + DynClone {
-    /// Placement function
-    fn place(self: &Self, pos: &IVec3, context: &Context, block_registry: &BlockRegistry) -> Option<BlockEntry>;
-}
-
-dyn_clone::clone_trait_object!(RuleSource);
-
-/// Block placement condition. Used for testing if a certain position is valid etc.
-#[typetag::serde(tag = "condition_source")]
-pub trait ConditionSource: Sync + Send + Debug + DynClone {
-    /// Wether a block is valid.
-    fn test(self: &Self, pos: &IVec3, context: &Context) -> bool;
-}
-
-dyn_clone::clone_trait_object!(ConditionSource);
-
 
 fn build_sources<Source>(seed: u32, octaves: &Vec<f64>) -> Vec<Source>
 where

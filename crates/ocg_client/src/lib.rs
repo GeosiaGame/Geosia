@@ -121,7 +121,7 @@ mod debug_window {
         let block_reg = block_reg;
         let (empty, _) = block_reg.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
 
-        setup_basic_biomes(&block_reg, &mut biome_reg);
+        setup_basic_biomes(&mut biome_reg);
         //let biome_reg = biome_reg;
 
         let mut generator = StdGenerator::new(0, biome_map, BiomeGenerator::new(0));

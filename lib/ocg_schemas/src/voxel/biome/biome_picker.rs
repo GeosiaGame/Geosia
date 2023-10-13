@@ -53,7 +53,7 @@ impl BiomeGenerator {
     }
 
     /// Generates a single biome at `pos`.
-    pub fn generate_biome(&mut self, pos: [i32; 2], biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> (RegistryId, BiomeDefinition) {
+    pub fn generate_biome(pos: [i32; 2], biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &Noises) -> (RegistryId, BiomeDefinition) {
         let biome_def = BiomeGenerator::pick_biome(pos, &biome_map, registry, noises);
         //biome_map.base_map.insert(*pos, (biome_def.0, biome_def.1.to_owned()));
         (biome_def.0, biome_def.1.to_owned())
@@ -73,7 +73,7 @@ impl BiomeGenerator {
             if biome_map.base_map.contains_key(&pos) {
                 biome = biome_map.base_map.get(&pos).unwrap().to_owned();
             } else {
-                biome = self.generate_biome(pos, biome_map, registry, noises);
+                biome = BiomeGenerator::generate_biome(pos, biome_map, registry, noises);
                 biome_map.base_map.insert(pos, biome.clone());
             }
 

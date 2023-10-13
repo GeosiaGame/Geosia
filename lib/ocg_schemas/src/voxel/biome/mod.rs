@@ -4,13 +4,13 @@ use std::fmt::{Debug, Display};
 
 use lazy_static::lazy_static;
 use dyn_clone::DynClone;
-use noise::{NoiseFn, Constant, SuperSimplex, Perlin, Multiply, Add, Max, Min, Power, Seedable};
+use noise::{NoiseFn, Constant, SuperSimplex, Perlin, Seedable};
 use rgb::RGBA8;
 use serde::{Serialize, Deserialize};
 
-use crate::{registry::{Registry, RegistryName, RegistryObject, RegistryId}, voxel::generation::rule_sources::EmptyRuleSource, range::{Range, range}};
+use crate::{registry::{Registry, RegistryName, RegistryObject, RegistryId}, range::{Range, range}};
 
-use super::generation::{RuleSource, ConditionSource, fbm_noise::Fbm};
+use super::{generation::{fbm_noise::Fbm, Context}, voxeltypes::{BlockRegistry, BlockEntry}};
 
 
 pub mod biome_map;
@@ -61,9 +61,9 @@ pub struct BiomeDefinition {
     /// Moisture of this biome.
     pub moisture: Range<f64>,
     /// The block placement rule source for this biome.
-    pub rule_source: Box<RuleSrc>,
+    pub rule_source: Box<dyn BlockPlacer>,
     /// The noise function for this biome.
-    pub surface_noise: SurfaceGenerator<&'static (dyn Fn([f64; 2], u32) -> f64 + Sync + Send)>,
+    pub surface_noise: Box<dyn HeightGenerator>,
     /// The strength of this biome in the blending step.
     pub blend_influence: f64,
     /// The strength of this biome in the block placement step.
@@ -96,27 +96,66 @@ impl RegistryObject for BiomeDefinition {
 
 impl BiomeDefinition {}
 
-/// A surface noise generator (wrapper)
-#[derive(Clone)]
-pub struct SurfaceGenerator<T> {
-    /// The actual object
-    pub generator: T,
+/// A block placer (wrapper).
+pub trait BlockPlacer: Sync + Send {
+    /// Clone this in a box.
+    fn box_clone(&self) -> Box<dyn BlockPlacer>;
+    /// Call the inner function.
+    fn call(&self, pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>;
 }
+impl Clone for Box<dyn BlockPlacer> {
+    fn clone(&self) -> Self {
+        self.box_clone()
+    }
+}
+impl BlockPlacer for Box<dyn BlockPlacer> {
+    fn box_clone(&self) -> Box<dyn BlockPlacer> {
+        (**self).box_clone()
+    }
 
-impl<T> SurfaceGenerator<T> where T: Fn([f64; 2], u32) -> f64 + Sized + Sync + Send {
-    /// Helper function to create a new surface generator.
-    pub fn new(gen: T) -> Self {
-        Self { generator: gen }
+    fn call(&self, pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry> {
+        (**self).call(pos, ctx, registry)
+    }
+}
+impl<F: Fn(&bevy_math::IVec3, &Context, &BlockRegistry) -> Option<BlockEntry> + Clone + Sync + Send + 'static> BlockPlacer for F {
+    fn box_clone(&self) -> Box<dyn BlockPlacer> {
+        Box::new(self.clone())
+    }
+    fn call(&self, pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry> {
+        self(pos, ctx, registry)
     }
 }
 
-/// God save my soul from the hell that is Rust generic types.
-/// You NEED to use this type alias everywhere where one is required, by the way. FUN.
-pub type RuleSrc = dyn RuleSource;
-/// Holy shit another one
-pub type ConditionSrc = dyn ConditionSource;
-/// WHERE DO THESE KEEP APPEARING FROM
-pub type NoiseFn2 = dyn NoiseFn2Trait;
+
+/// A surface noise generator (wrapper)
+pub trait HeightGenerator: Sync + Send {
+    /// Clone this in a box.
+    fn box_clone(&self) -> Box<dyn HeightGenerator>;
+    /// Call the inner function.
+    fn call(&self, pos: [f64; 2], seed: u32) -> f64;
+}
+impl Clone for Box<dyn HeightGenerator> {
+    fn clone(&self) -> Self {
+        (**self).box_clone()
+    }
+}
+impl HeightGenerator for Box<dyn HeightGenerator> {
+    fn box_clone(&self) -> Box<dyn HeightGenerator> {
+        (**self).box_clone()
+    }
+
+    fn call(&self, pos: [f64; 2], seed: u32) -> f64 {
+        (**self).call(pos, seed)
+    }
+}
+impl<F: Fn([f64; 2], u32) -> f64 + Clone + Sync + Send + 'static> HeightGenerator for F {
+    fn box_clone(&self) -> Box<dyn HeightGenerator> {
+        Box::new(self.clone())
+    }
+    fn call(&self, pos: [f64; 2], seed: u32) -> f64 {
+        self(pos, seed)
+    }
+}
 
 /// Helper trait for NoiseFn<f64, 2> + required extras
 pub trait NoiseFn2Trait: NoiseFn<f64, 2> + SeedableGetter + DynClone + Sync + Send {}
@@ -159,11 +198,11 @@ impl Seedable for (dyn SeedableWrapper) where (dyn SeedableWrapper): Sized {
 /// Different noise layers for biome generation.
 pub struct Noises {
     /// Height noise (0~5)
-    pub elevation_noise: Box<NoiseFn2>, 
+    pub elevation_noise: Box<dyn NoiseFn2Trait>, 
     /// Temperature noise (0~5)
-    pub temperature_noise: Box<NoiseFn2>, 
+    pub temperature_noise: Box<dyn NoiseFn2Trait>, 
     /// Moisture noise (0~5)
-    pub moisture_noise: Box<NoiseFn2>,
+    pub moisture_noise: Box<dyn NoiseFn2Trait>,
 }
 
 /// Name of the default-er plains biome.
@@ -179,8 +218,8 @@ lazy_static! {
         elevation: range(-1.0..-1.0),
         temperature: range(-1.0..-1.0),
         moisture: range(-1.0..-1.0),
-        rule_source: Box::new(EmptyRuleSource()),
-        surface_noise: SurfaceGenerator::new(&|_point, _seed| 0.0),
+        rule_source: Box::new(|_pos: &bevy_math::IVec3, _ctx: &Context, _reg: &BlockRegistry| None),
+        surface_noise: Box::new(|_point, _seed| 0.0),
         blend_influence: 0.0,
         block_influence: 0.0,
         can_generate: false,
@@ -278,10 +317,10 @@ impl<S1> Clone for NoiseOffsetMul2<S1> where S1: NoiseFn2Trait + Send + Sync + C
 }
 
 /// newtype wrapper
-pub struct Mul2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub Multiply<f64, S1, S2, 2>);
+pub struct Mul2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub S1, pub S2);
 impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Mul2<S1, S2> {
     fn get(&self, point: [f64; 2]) -> f64 {
-        self.0.get(point)
+        self.0.get(point) * self.1.get(point)
     }
 }
 impl<S1, S2> NoiseFn2Trait for Mul2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone + 'static, S2: NoiseFn2Trait + Send + Sync + Clone + 'static {}
@@ -292,10 +331,10 @@ impl<S1, S2> SeedableGetter for Mul2<S1, S2> where S1: NoiseFn2Trait + Send + Sy
 }
 impl<S1, S2> SeedableWrapper for Mul2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone + 'static, S2: NoiseFn2Trait + Send + Sync + Clone + 'static {
     fn set_seed(&mut self, seed: u32) -> Box<dyn SeedableWrapper> {
-        if let Some(seedable) = self.0.source1.get_seedable().as_mut() {
+        if let Some(seedable) = self.0.get_seedable().as_mut() {
             seedable.set_seed(seed);
         }
-        if let Some(seedable) = self.0.source2.get_seedable().as_mut() {
+        if let Some(seedable) = self.1.get_seedable().as_mut() {
             seedable.set_seed(seed.wrapping_add(1));
         }
         Box::new(self.to_owned())
@@ -303,7 +342,7 @@ impl<S1, S2> SeedableWrapper for Mul2<S1, S2> where S1: NoiseFn2Trait + Send + S
 
     fn seed(self: &Self) -> u32 {
         let mut seed = 0;
-        if let Some(seedable) = self.0.source1.get_seedable().as_ref() {
+        if let Some(seedable) = self.0.get_seedable().as_ref() {
             seed = seedable.seed();
         }
         seed
@@ -311,14 +350,14 @@ impl<S1, S2> SeedableWrapper for Mul2<S1, S2> where S1: NoiseFn2Trait + Send + S
 }
 impl<S1, S2> Clone for Mul2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
     fn clone(&self) -> Self {
-        Self(Multiply::new(self.0.source1.clone(), self.0.source2.clone()))
+        Self(self.0.clone(), self.1.clone())
     }
 }
 /// newtype wrapper
-pub struct Add2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub Add<f64, S1, S2, 2>);
+pub struct Add2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub S1, pub S2);
 impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Add2<S1, S2> {
     fn get(&self, point: [f64; 2]) -> f64 {
-        self.0.get(point)
+        self.0.get(point) + self.1.get(point)
     }
 }
 impl<S1, S2> NoiseFn2Trait for Add2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone + 'static, S2: NoiseFn2Trait + Send + Sync + Clone + 'static {}
@@ -329,10 +368,10 @@ impl<S1, S2> SeedableGetter for Add2<S1, S2> where S1: NoiseFn2Trait + Send + Sy
 }
 impl<S1, S2> SeedableWrapper for Add2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone + 'static, S2: NoiseFn2Trait + Send + Sync + Clone + 'static {
     fn set_seed(&mut self, seed: u32) -> Box<dyn SeedableWrapper> {
-        if let Some(seedable) = self.0.source1.get_seedable().as_mut() {
+        if let Some(seedable) = self.0.get_seedable().as_mut() {
             seedable.set_seed(seed);
         }
-        if let Some(seedable) = self.0.source2.get_seedable().as_mut() {
+        if let Some(seedable) = self.1.get_seedable().as_mut() {
             seedable.set_seed(seed.wrapping_add(1));
         }
         Box::new(self.to_owned())
@@ -340,7 +379,7 @@ impl<S1, S2> SeedableWrapper for Add2<S1, S2> where S1: NoiseFn2Trait + Send + S
 
     fn seed(self: &Self) -> u32 {
         let mut seed = 0;
-        if let Some(seedable) = self.0.source1.get_seedable().as_ref() {
+        if let Some(seedable) = self.0.get_seedable().as_ref() {
             seed = seedable.seed();
         }
         seed
@@ -348,7 +387,7 @@ impl<S1, S2> SeedableWrapper for Add2<S1, S2> where S1: NoiseFn2Trait + Send + S
 }
 impl<S1, S2> Clone for Add2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
     fn clone(&self) -> Self {
-        Self(Add::new(self.0.source1.clone(), self.0.source2.clone()))
+        Self(self.0.clone(), self.1.clone())
     }
 }
 /// newtype wrapper
@@ -426,10 +465,10 @@ impl<S1, S2> Clone for Div2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clon
     }
 }
 /// newtype wrapper
-pub struct Max2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub Max<f64, S1, S2, 2>);
+pub struct Max2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub S1, pub S2);
 impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Max2<S1, S2> {
     fn get(&self, point: [f64; 2]) -> f64 {
-        self.0.get(point)
+        self.0.get(point).max(self.1.get(point))
     }
 }
 impl<S1, S2> NoiseFn2Trait for Max2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone + 'static, S2: NoiseFn2Trait + Send + Sync + Clone + 'static {}
@@ -440,10 +479,10 @@ impl<S1, S2> SeedableGetter for Max2<S1, S2> where S1: NoiseFn2Trait + Send + Sy
 }
 impl<S1, S2> SeedableWrapper for Max2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone + 'static, S2: NoiseFn2Trait + Send + Sync + Clone + 'static {
     fn set_seed(&mut self, seed: u32) -> Box<dyn SeedableWrapper> {
-        if let Some(seedable) = self.0.source1.get_seedable().as_mut() {
+        if let Some(seedable) = self.0.get_seedable().as_mut() {
             seedable.set_seed(seed);
         }
-        if let Some(seedable) = self.0.source2.get_seedable().as_mut() {
+        if let Some(seedable) = self.1.get_seedable().as_mut() {
             seedable.set_seed(seed.wrapping_add(1));
         }
         Box::new(self.to_owned())
@@ -451,7 +490,7 @@ impl<S1, S2> SeedableWrapper for Max2<S1, S2> where S1: NoiseFn2Trait + Send + S
 
     fn seed(self: &Self) -> u32 {
         let mut seed = 0;
-        if let Some(seedable) = self.0.source1.get_seedable().as_ref() {
+        if let Some(seedable) = self.0.get_seedable().as_ref() {
             seed = seedable.seed();
         }
         seed
@@ -459,14 +498,14 @@ impl<S1, S2> SeedableWrapper for Max2<S1, S2> where S1: NoiseFn2Trait + Send + S
 }
 impl<S1, S2> Clone for Max2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
     fn clone(&self) -> Self {
-        Self(Max::new(self.0.source1.clone(), self.0.source2.clone()))
+        Self(self.0.clone(), self.1.clone())
     }
 }
 /// newtype wrapper
-pub struct Min2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub Min<f64, S1, S2, 2>);
+pub struct Min2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub S1, pub S2);
 impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Min2<S1, S2> {
     fn get(&self, point: [f64; 2]) -> f64 {
-        self.0.get(point)
+        self.0.get(point).min(self.1.get(point))
     }
 }
 impl<S1, S2> NoiseFn2Trait for Min2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone + 'static, S2: NoiseFn2Trait + Send + Sync + Clone + 'static {}
@@ -477,10 +516,10 @@ impl<S1, S2> SeedableGetter for Min2<S1, S2> where S1: NoiseFn2Trait + Send + Sy
 }
 impl<S1, S2> SeedableWrapper for Min2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone + 'static, S2: NoiseFn2Trait + Send + Sync + Clone + 'static {
     fn set_seed(&mut self, seed: u32) -> Box<dyn SeedableWrapper> {
-        if let Some(seedable) = self.0.source1.get_seedable().as_mut() {
+        if let Some(seedable) = self.0.get_seedable().as_mut() {
             seedable.set_seed(seed);
         }
-        if let Some(seedable) = self.0.source2.get_seedable().as_mut() {
+        if let Some(seedable) = self.1.get_seedable().as_mut() {
             seedable.set_seed(seed.wrapping_add(1));
         }
         Box::new(self.to_owned())
@@ -488,7 +527,7 @@ impl<S1, S2> SeedableWrapper for Min2<S1, S2> where S1: NoiseFn2Trait + Send + S
 
     fn seed(self: &Self) -> u32 {
         let mut seed = 0;
-        if let Some(seedable) = self.0.source1.get_seedable().as_ref() {
+        if let Some(seedable) = self.0.get_seedable().as_ref() {
             seed = seedable.seed();
         }
         seed
@@ -496,14 +535,14 @@ impl<S1, S2> SeedableWrapper for Min2<S1, S2> where S1: NoiseFn2Trait + Send + S
 }
 impl<S1, S2> Clone for Min2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
     fn clone(&self) -> Self {
-        Self(Min::new(self.0.source1.clone(), self.0.source2.clone()))
+        Self(self.0.clone(), self.1.clone())
     }
 }
 /// newtype wrapper
-pub struct Pow2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub Power<f64, S1, S2, 2>);
+pub struct Pow2<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>>(pub S1, pub S2);
 impl<S1: NoiseFn<f64, 2>, S2: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Pow2<S1, S2> {
     fn get(&self, point: [f64; 2]) -> f64 {
-        self.0.get(point)
+        self.0.get(point).powf(self.1.get(point))
     }
 }
 impl<S1, S2> NoiseFn2Trait for Pow2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone + 'static, S2: NoiseFn2Trait + Send + Sync + Clone + 'static {}
@@ -514,10 +553,10 @@ impl<S1, S2> SeedableGetter for Pow2<S1, S2> where S1: NoiseFn2Trait + Send + Sy
 }
 impl<S1, S2> SeedableWrapper for Pow2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone + 'static, S2: NoiseFn2Trait + Send + Sync + Clone + 'static {
     fn set_seed(&mut self, seed: u32) -> Box<dyn SeedableWrapper> {
-        if let Some(seedable) = self.0.source1.get_seedable().as_mut() {
+        if let Some(seedable) = self.0.get_seedable().as_mut() {
             seedable.set_seed(seed);
         }
-        if let Some(seedable) = self.0.source2.get_seedable().as_mut() {
+        if let Some(seedable) = self.1.get_seedable().as_mut() {
             seedable.set_seed(seed.wrapping_add(1));
         }
         Box::new(self.to_owned())
@@ -525,7 +564,7 @@ impl<S1, S2> SeedableWrapper for Pow2<S1, S2> where S1: NoiseFn2Trait + Send + S
 
     fn seed(self: &Self) -> u32 {
         let mut seed = 0;
-        if let Some(seedable) = self.0.source1.get_seedable().as_ref() {
+        if let Some(seedable) = self.0.get_seedable().as_ref() {
             seed = seedable.seed();
         }
         seed
@@ -533,14 +572,14 @@ impl<S1, S2> SeedableWrapper for Pow2<S1, S2> where S1: NoiseFn2Trait + Send + S
 }
 impl<S1, S2> Clone for Pow2<S1, S2> where S1: NoiseFn2Trait + Send + Sync + Clone, S2: NoiseFn2Trait + Send + Sync + Clone {
     fn clone(&self) -> Self {
-        Self(Power::new(self.0.source1.clone(), self.0.source2.clone()))
+        Self(self.0.clone(), self.1.clone())
     }
 }
 /// Newtype wrapper
-pub struct Abs2<S1: NoiseFn<f64, 2>>(pub noise::Abs<f64, S1, 2>);
+pub struct Abs2<S1: NoiseFn<f64, 2>>(pub S1);
 impl<S1: NoiseFn<f64, 2>> NoiseFn<f64, 2> for Abs2<S1> {
     fn get(&self, point: [f64; 2]) -> f64 {
-        self.0.get(point)
+        self.0.get(point).abs()
     }
 }
 impl<S1> NoiseFn2Trait for Abs2<S1> where S1: NoiseFn2Trait + Send + Sync + Clone + 'static {}
@@ -551,7 +590,7 @@ impl<S1> SeedableGetter for Abs2<S1> where S1: NoiseFn2Trait + Send + Sync + Clo
 }
 impl<S1> SeedableWrapper for Abs2<S1> where S1: NoiseFn2Trait + Send + Sync + Clone + 'static {
     fn set_seed(self: &mut Self, seed: u32) -> Box<dyn SeedableWrapper> {
-        if let Some(seedable) = self.0.source.get_seedable().as_mut() {
+        if let Some(seedable) = self.0.get_seedable().as_mut() {
             seedable.set_seed(seed);
         }
         Box::new(self.to_owned())
@@ -559,7 +598,7 @@ impl<S1> SeedableWrapper for Abs2<S1> where S1: NoiseFn2Trait + Send + Sync + Cl
 
     fn seed(self: &Self) -> u32 {
         let mut seed = 0;
-        if let Some(seedable) = self.0.source.get_seedable().as_ref() {
+        if let Some(seedable) = self.0.get_seedable().as_ref() {
             seed = seedable.seed();
         }
         seed
@@ -567,6 +606,6 @@ impl<S1> SeedableWrapper for Abs2<S1> where S1: NoiseFn2Trait + Send + Sync + Cl
 }
 impl<S1> Clone for Abs2<S1> where S1: NoiseFn2Trait + Send + Sync + Clone {
     fn clone(&self) -> Self {
-        Self(noise::Abs::new(self.0.source.clone()))
+        Self(self.0.clone())
     }
 }

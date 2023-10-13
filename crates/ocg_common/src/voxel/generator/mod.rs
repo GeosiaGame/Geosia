@@ -59,7 +59,7 @@ impl CellGen {
 //    }
 
     fn elevation_noise(&self, pos: IVec2, c_pos: IVec2, biome_registry: &BiomeRegistry, blended: &SmallVec<[SmallVec<[BiomeEntry; 3]>; CHUNK_DIM2Z]>) -> f64 {
-        let nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise.generator)([p.x, p.y], self.seed as u32) + 1.0) / 2.0;
+        let nf = |p: DVec2, b: &BiomeDefinition| (b.surface_noise.call([p.x, p.y], self.seed as u32) + 1.0) / 2.0;
         let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
         let in_c_pos = pos - (c_pos * CHUNK_DIM);
         let blend = &blended[(in_c_pos.x + in_c_pos.y * CHUNK_DIM) as usize];
@@ -143,7 +143,7 @@ impl<'a> StdGenerator<'a> {
 
             for (biome, _) in biomes.iter() {
                 let ctx = Context { biome_generator: &biomegen.borrow_mut(), chunk: chunk, random: PositionalRandomFactory::default(), ground_y: height, sea_level: 0 /* hardcoded for now... */ };
-                let result = biome.rule_source.place(&g_pos, &ctx, block_registry);
+                let result = biome.rule_source.call(&g_pos, &ctx, &block_registry);
                 if result.is_some() {
                     chunk.put(b_pos, result.unwrap());
                 }
