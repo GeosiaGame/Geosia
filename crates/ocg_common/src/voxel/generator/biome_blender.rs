@@ -45,7 +45,7 @@ impl SimpleBiomeBlender {
         }
     }
 
-    pub fn get_blended_for_chunk(&mut self, chunk_x: i32, chunk_z: i32, biome_map: &mut BiomeMap, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &Noises) -> SmallVec<[SmallVec<[BiomeEntry; 3]>; CHUNK_DIM2Z]> {
+    pub fn get_blended_for_chunk(&mut self, chunk_x: i32, chunk_z: i32, biome_map: &mut BiomeMap, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &mut Noises) -> SmallVec<[SmallVec<[BiomeEntry; 3]>; CHUNK_DIM2Z]> {
         let region_x = chunk_x >> (SUPERGRID_DIM_EXPONENT - CHUNK_SIZE_EXPONENT);
         let region_z = chunk_z >> (SUPERGRID_DIM_EXPONENT - CHUNK_SIZE_EXPONENT);
         let biomes = self.get_biomes_for_region(region_x, region_z, biome_map, generator, registry, noises);
@@ -90,7 +90,7 @@ impl SimpleBiomeBlender {
         biome_map.final_map.insert([x, z], results.clone());
     }
 
-    fn get_biomes_for_region(&mut self, region_x: i32, region_z: i32, biome_map: &mut BiomeMap, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &Noises) -> &Vec<(RegistryId, BiomeDefinition)> {
+    fn get_biomes_for_region(&mut self, region_x: i32, region_z: i32, biome_map: &mut BiomeMap, generator: &mut RefCell<BiomeGenerator>, registry: &BiomeRegistry, noises: &mut Noises) -> &Vec<(RegistryId, BiomeDefinition)> {
         let mut correct_cache_entry: Option<BiomeCacheEntry> = None;
         self.biome_map_cache.retain(|obj| {
             if obj.region_x == region_x && obj.region_z == region_z {

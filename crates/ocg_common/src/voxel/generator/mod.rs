@@ -4,7 +4,7 @@ mod biome_blender;
 
 use bevy::{math::{IVec2, DVec2}, prelude::ResMut};
 use bevy_math::IVec3;
-use noise::SuperSimplex;
+use noise::{NoiseFn, SuperSimplex};
 use ocg_schemas::{voxel::{chunk_storage::{PaletteStorage, ChunkStorage}, voxeltypes::{BlockEntry, BlockRegistry}, biome::{BiomeDefinition, biome_map::{BiomeMap, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD}, biome_picker::BiomeGenerator, Noises, BiomeRegistry, BiomeEntry}, generation::{fbm_noise::Fbm, Context, positional_random::PositionalRandomFactory}}, coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM2Z}, dependencies::{itertools::iproduct, smallvec::SmallVec}, registry::RegistryId};
 use std::cell::RefCell;
 use std::mem::MaybeUninit;
@@ -44,15 +44,6 @@ impl CellGen {
             }
         }
         biome_map.gen_biomes = biomes;
-        if let Some(seedable) = noises.elevation_noise.get_seedable().as_mut() {
-            seedable.set_seed(sdgen.next_u32());
-        }
-        if let Some(seedable) = noises.temperature_noise.get_seedable().as_mut() {
-            seedable.set_seed(sdgen.next_u32());
-        }
-        if let Some(seedable) = noises.moisture_noise.get_seedable().as_mut() {
-            seedable.set_seed(sdgen.next_u32());
-        }
     }
 
 //    #[inline(always)]
@@ -60,8 +51,8 @@ impl CellGen {
 //        self.seed ^ (((cell.x as u64) << 32) | (cell.y as u64 & 0xFFFF_FFFF))
 //    }
 
-    fn elevation_noise(&self, pos: IVec2, c_pos: IVec2, biome_registry: &BiomeRegistry, blended: &SmallVec<[SmallVec<[BiomeEntry; 3]>; CHUNK_DIM2Z]>) -> f64 {
-        let nf = |p: DVec2, b: &BiomeDefinition| (b.surface_noise.call([p.x, p.y], self.seed as u32) + 1.0) / 2.0;
+    fn elevation_noise(&self, pos: IVec2, c_pos: IVec2, biome_registry: &BiomeRegistry, blended: &SmallVec<[SmallVec<[BiomeEntry; 3]>; CHUNK_DIM2Z]>, noises: &mut Noises) -> f64 {
+        let mut nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)([p.x, p.y], self.seed as u32, &mut noises.base_noise) + 1.0) / 2.0;
         let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
         let in_c_pos = pos - (c_pos * CHUNK_DIM);
         let blend = &blended[(in_c_pos.x + in_c_pos.y * CHUNK_DIM) as usize];
@@ -92,9 +83,10 @@ impl<'a> StdGenerator<'a> {
             biome_map: biome_map,
             biome_blender: SimpleBiomeBlender::new(),
             noises: Noises {
-                elevation_noise: Box::new(Fbm::<SuperSimplex>::new(1).set_octaves(vec![-3.0, 1.0, 1.0, 0.0])),
-                temperature_noise: Box::new(Fbm::<SuperSimplex>::new(2).set_octaves(vec![-3.0, 1.0, 1.0, 0.0])),
-                moisture_noise: Box::new(Fbm::<SuperSimplex>::new(3).set_octaves(vec![-3.0, 1.0, 1.0, 0.0])),
+                base_noise: Box::new(Fbm::<SuperSimplex>::new(seed as u32).set_octaves(vec![-3.0, 1.0, 1.0, 0.0])),
+                elevation_noise: |noise: &mut dyn NoiseFn<f64, 2>, pos| noise.get(pos) * 2.0,
+                temperature_noise: |noise: &mut dyn NoiseFn<f64, 2>, pos| noise.get(pos) * 1.5,
+                moisture_noise: |noise: &mut dyn NoiseFn<f64, 2>, pos| noise.get(pos) * 3.1,
             },
             cell_gen: ThreadLocal::new(),
         }
@@ -105,11 +97,8 @@ impl<'a> StdGenerator<'a> {
             .cell_gen
             .get_or(|| RefCell::new(CellGen::new(self.seed, &mut self.biome_map, biome_registry, &mut self.noises)))
             .borrow_mut();
-
-        let biomegen = self
-            .biome_gen.clone();
-
-        let blended = self.biome_blender.get_blended_for_chunk(c_pos.x, c_pos.z, &mut self.biome_map, &mut self.biome_gen, biome_registry, &self.noises);
+        
+        let blended = self.biome_blender.get_blended_for_chunk(c_pos.x, c_pos.z, &mut self.biome_map, &mut self.biome_gen, biome_registry, &mut self.noises);
 
         let vparams: [i32; CHUNK_DIM2Z] = {
             let mut vparams: [MaybeUninit<i32>; CHUNK_DIM2Z] =
@@ -117,7 +106,7 @@ impl<'a> StdGenerator<'a> {
             for (i, v) in vparams[..].iter_mut().enumerate() {
                 let x = (i % CHUNK_DIMZ) as i32 + (c_pos.x * CHUNK_DIM);
                 let z = ((i / CHUNK_DIMZ) % CHUNK_DIMZ) as i32 + (c_pos.z * CHUNK_DIM);
-                let p = cellgen.elevation_noise(IVec2::new(x, z), IVec2::new(c_pos.x, c_pos.z), biome_registry, &blended).round() as i32;
+                let p = cellgen.elevation_noise(IVec2::new(x, z), IVec2::new(c_pos.x, c_pos.z), biome_registry, &blended, &mut self.noises).round() as i32;
                 unsafe {
                     std::ptr::write(v.as_mut_ptr(), p);
                 }
@@ -144,8 +133,8 @@ impl<'a> StdGenerator<'a> {
             biomes.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
             for (biome, _) in biomes.iter() {
-                let ctx = Context { biome_generator: &biomegen.borrow_mut(), chunk: chunk, random: PositionalRandomFactory::default(), ground_y: height, sea_level: 0 /* hardcoded for now... */ };
-                let result = biome.rule_source.call(&g_pos, &ctx, &block_registry);
+                let ctx = Context { biome_generator: &self.biome_gen.borrow_mut(), chunk: chunk, random: PositionalRandomFactory::default(), ground_y: height, sea_level: 0 /* hardcoded for now... */ };
+                let result = (biome.rule_source)(&g_pos, &ctx, &block_registry);
                 if result.is_some() {
                     chunk.put(b_pos, result.unwrap());
                 }
