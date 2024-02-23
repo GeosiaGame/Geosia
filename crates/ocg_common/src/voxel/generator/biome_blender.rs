@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use lazy_static::lazy_static;
-use ocg_schemas::{voxel::biome::{BiomeEntry, BiomeRegistry, BiomeDefinition, biome_map::{BLEND_RADIUS, BLEND_CIRCUMFERENCE, SUPERGRID_DIM, BiomeMap, SUPERGRID_DIM_EXPONENT, CHUNK_SIZE_EXPONENT, PADDED_REGION_SIZE}, biome_picker::BiomeGenerator, Noises}, coordinates::{CHUNK_DIM, CHUNK_DIM2Z}, registry::RegistryId, dependencies::{smallvec::SmallVec, itertools::iproduct}};
+use ocg_schemas::{coordinates::{CHUNK_DIM, CHUNK_DIM2Z}, dependencies::{itertools::iproduct, smallvec::SmallVec}, registry::RegistryId, voxel::biome::{biome_map::{BiomeMap, BLEND_CIRCUMFERENCE, BLEND_RADIUS, CHUNK_SIZE_EXPONENT, PADDED_REGION_SIZE, SUPERGRID_DIM, SUPERGRID_DIM_EXPONENT}, biome_picker::BiomeGenerator, BiomeDefinition, BiomeEntry, BiomeRegistry, Noises}};
 
 pub const CACHE_MAX_ENTRIES: i32 = 24;
 
@@ -69,12 +69,12 @@ impl SimpleBiomeBlender {
             if this_weight <= 0.0 {
                 continue;
             }
-            
-            let this_biome = &biomes[((x_masked + ix) + ((z_masked + iz) * PADDED_REGION_SIZE)) as usize];
+            let pos = ((x_masked + ix) + ((z_masked + iz) * PADDED_REGION_SIZE)) as usize;
+            let this_biome_id = &biomes[pos].0;
 
             let mut found_entry = false;
             for entry in results.iter_mut() {
-                if entry.id == this_biome.0 {
+                if entry.id == *this_biome_id {
                     entry.weight += this_weight;
                     found_entry = true;
                     break;
@@ -82,7 +82,7 @@ impl SimpleBiomeBlender {
             }
 
             if !found_entry {
-                let mut entry = BiomeEntry::new(this_biome.0);
+                let mut entry = BiomeEntry::new(*this_biome_id);
                 entry.weight = this_weight;
                 results.push(entry);
             }

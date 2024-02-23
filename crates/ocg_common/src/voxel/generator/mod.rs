@@ -5,7 +5,7 @@ mod biome_blender;
 use bevy::{math::{IVec2, DVec2}, prelude::ResMut};
 use bevy_math::IVec3;
 use noise::SuperSimplex;
-use ocg_schemas::{voxel::{chunk_storage::{PaletteStorage, ChunkStorage}, voxeltypes::{BlockEntry, BlockRegistry}, biome::{BiomeDefinition, biome_map::{BiomeMap, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD}, biome_picker::BiomeGenerator, Noises, BiomeRegistry, BiomeEntry}, generation::{fbm_noise::Fbm, Context, positional_random::PositionalRandomFactory}}, coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM2Z}, dependencies::{itertools::iproduct, smallvec::SmallVec}, registry::RegistryId};
+use ocg_schemas::{coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM2Z}, dependencies::{itertools::iproduct, smallvec::SmallVec}, registry::RegistryId, voxel::{biome::{biome_map::{BiomeMap, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD}, biome_picker::BiomeGenerator, BiomeDefinition, BiomeEntry, BiomeRegistry, Noises}, chunk_storage::{ChunkStorage, PaletteStorage}, generation::{fbm_noise::Fbm, positional_random::PositionalRandomFactory, Context}, voxeltypes::{BlockEntry, BlockRegistry}}};
 use std::cell::RefCell;
 use std::mem::MaybeUninit;
 use thread_local::ThreadLocal;
@@ -13,6 +13,9 @@ use thread_local::ThreadLocal;
 use ocg_schemas::coordinates::{CHUNK_DIM, CHUNK_DIMZ};
 
 use self::biome_blender::SimpleBiomeBlender;
+
+pub const WORLD_SIZE_XZ: i32 = 8;
+pub const WORLD_SIZE_Y: i32 = 4;
 
 struct CellGen {
     seed: u64,
@@ -38,11 +41,6 @@ impl CellGen {
         biome_map.gen_biomes = biomes;
     }
 
-//    #[inline(always)]
-//    fn get_seed(&self, cell: IVec2) -> u64 {
-//        self.seed ^ (((cell.x as u64) << 32) | (cell.y as u64 & 0xFFFF_FFFF))
-//    }
-
     fn elevation_noise(&self, pos: IVec2, c_pos: IVec2, biome_registry: &BiomeRegistry, blended: &SmallVec<[SmallVec<[BiomeEntry; 3]>; CHUNK_DIM2Z]>, noises: &mut Noises) -> f64 {
         let mut nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)([p.x, p.y], &mut noises.base_terrain_noise) + 1.0) / 2.0;
         let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
@@ -53,7 +51,6 @@ impl CellGen {
         for entry in blend.iter() {
             h += nf((pos).as_dvec2() / scale_factor, entry.lookup(biome_registry).unwrap()) * entry.weight * entry.lookup(biome_registry).unwrap().blend_influence;
         }
-        //println!("Height at pos {pos}: {h}");
         h
     }
 }
@@ -113,17 +110,13 @@ impl<'a> StdGenerator<'a> {
             let g_pos = <IVec3>::from(b_pos) + (<IVec3>::from(c_pos) * CHUNK_DIM);
             let height = vparams[(pos_x + pos_z * CHUNK_DIM) as usize];
 
-            //if g_pos.y - height < 0 {
-            //    continue;
-            //}
-
             let mut biomes: SmallVec<[(&BiomeDefinition, f64); 3]> = SmallVec::new();
             for b in blended[(pos_x + pos_z * CHUNK_DIM) as usize].iter() {
                 let e = b.lookup(biome_registry).unwrap();
                 let w = b.weight * e.block_influence;
                 biomes.push((e, w));
             }
-            // sport by block influence, then registry id if influence is same
+            // sort by block influence, then registry id if influence is same
             biomes.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or_else(|| biome_registry.lookup_object_to_id(a.0).cmp(&biome_registry.lookup_object_to_id(b.0))));
 
             for (biome, _) in biomes.iter() {

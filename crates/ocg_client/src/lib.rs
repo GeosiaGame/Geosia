@@ -78,6 +78,8 @@ mod debug_window {
     use ocg_common::voxel::biomes::setup_basic_biomes;
     use ocg_common::voxel::blocks::setup_basic_blocks;
     use ocg_common::voxel::generator::StdGenerator;
+    use ocg_common::voxel::generator::WORLD_SIZE_XZ;
+    use ocg_common::voxel::generator::WORLD_SIZE_Y;
     use ocg_schemas::coordinates::AbsChunkPos;
     use ocg_schemas::dependencies::itertools::iproduct;
     use ocg_schemas::voxel::biome::BiomeRegistry;
@@ -120,18 +122,15 @@ mod debug_window {
         let (empty, _) = block_reg.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
 
         setup_basic_biomes(&mut biome_reg);
-        //let biome_reg = biome_reg;
 
         let mut generator = StdGenerator::new(0, biome_map, BiomeGenerator::new(0));
 
-        //let mut lock = stdout().lock();
         let mut test_chunks = ClientChunkGroup::new();
-        for (cx, cy, cz) in iproduct!(-8..=8, -4..=4, -8..=8) {
+        for (cx, cy, cz) in iproduct!(-WORLD_SIZE_XZ..=WORLD_SIZE_XZ, -WORLD_SIZE_Y..=WORLD_SIZE_Y, -WORLD_SIZE_XZ..=WORLD_SIZE_XZ) {
             let cpos = AbsChunkPos::new(cx, cy, cz);
             let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
             generator.generate_chunk(cpos, &mut chunk.blocks, &block_reg, &biome_reg);
             test_chunks.chunks.insert(cpos, chunk);
-            //writeln!(lock, "generated chunk at {0}.", <IVec3>::from(cpos)).expect("Lock failed");
         }
         for (pos, _) in test_chunks.chunks.iter() {
             let chunks = &test_chunks

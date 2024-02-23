@@ -57,8 +57,6 @@ impl BiomeGenerator {
 
     /// Generates a region of biomes.
     pub fn generate_region(&mut self, region_x: i32, region_z: i32, biome_map: &mut BiomeMap, registry: &BiomeRegistry, noises: &mut Noises) -> Vec<(RegistryId, BiomeDefinition)> {
-        //let mut lock = stdout().lock();
-
         let mut biomes = vec![registry.lookup_name_to_object(PLAINS_BIOME_NAME.as_ref()).map(|x| (x.0, x.1.to_owned())).unwrap(); PADDED_REGION_SIZE_SQZ];
         for (rx, rz) in iproduct!(0..PADDED_REGION_SIZE, 0..PADDED_REGION_SIZE) {
             let x = (rx - BLEND_RADIUS) + (region_x * SUPERGRID_DIM);
@@ -73,7 +71,6 @@ impl BiomeGenerator {
                 biome_map.base_map.insert(pos, biome.clone());
             }
 
-            //writeln!(lock, "picked biome {0} for chunk [{x}, {z}]", biome.1).expect("Lock failed");
             biomes[(rx + rz * PADDED_REGION_SIZE) as usize] = biome;
         }
         biomes

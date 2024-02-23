@@ -1,6 +1,7 @@
 //! The builtin biome types.
 //! Most of this will be moved to a "base" mod at some point in the future.
 
+use bevy_math::DVec2;
 use noise::NoiseFn;
 use ocg_schemas::{voxel::{biome::{BiomeRegistry, BiomeDefinition, PLAINS_BIOME_NAME, biome_map::GLOBAL_SCALE_MOD}, generation::Context, voxeltypes::{BlockRegistry, BlockEntry}}, registry::RegistryName, dependencies::rgb::RGBA8, range::range};
 
@@ -19,7 +20,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: PLAINS_BIOME_NAME,
             representative_color: RGBA8::new(20, 180, 10, 255),
-            elevation: range(1.0..2.5),
+            elevation: range(1.1..2.5),
             temperature: range(..),
             moisture: range(..2.5),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
@@ -82,11 +83,12 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 return None;
             },
             surface_noise: |point: [f64; 2], noise: &mut Box<dyn NoiseFn<f64, 2>>| {
-                let new_point = [point[0] / GLOBAL_SCALE_MOD * 40.0, point[1] / GLOBAL_SCALE_MOD * 40.0];
+                let new_point: DVec2 = DVec2::from_array(point) / GLOBAL_SCALE_MOD * 40.0;
+                let new_point_arr: [f64; 2] = new_point.to_array();
 
-                let mut value = noise.get(new_point) * 0.6;
-                value += noise.get([new_point[0] * 1.5, new_point[1] * 1.5]) * 0.25;
-                value += noise.get([new_point[0] * 3.0, new_point[1] * 3.0]) * 0.15;
+                let mut value = noise.get(new_point_arr) * 0.6;
+                value += noise.get((new_point * 1.5).to_array()) * 0.25;
+                value += noise.get((new_point * 3.0).to_array()) * 0.15;
                 value *= 0.05;
                 return value;
             },
@@ -123,16 +125,17 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 return None;
             },
             surface_noise: |point: [f64; 2], noise: &mut Box<dyn NoiseFn<f64, 2>>| {
-                let new_point = [point[0] / GLOBAL_SCALE_MOD, point[1] / GLOBAL_SCALE_MOD];
-                let h_n = |p: [f64; 2]| (noise.get(p) + 1.0) / 2.0;
-                let h_rn = |p: [f64; 2]| (0.5 - (0.5 - h_n(p)).abs()) * 2.0;
+                let new_point: DVec2 = DVec2::from_array(point) / GLOBAL_SCALE_MOD / 4.0;
+                let new_point_arr: [f64; 2] = new_point.to_array();
+                let h_n = |p| (noise.get(p) + 1.0) / 2.0;
+                let h_rn = |p| (0.5 - (0.5 - h_n(p)).abs()) * 2.0;
 
-                let h0 = 0.50 * h_rn(new_point);
-                let h01 = 0.25 * h_rn([new_point[0] * 2.0, new_point[1] * 2.0]) + h0;
+                let h0 = 0.50 * h_rn(new_point_arr);
+                let h01 = 0.25 * h_rn((new_point * 2.0).to_array()) + h0;
         
-                (h01 + (h01 / 0.75) * 0.15 * h_n([new_point[0] * 5.0, new_point[1] * 5.0])
-                    + (h01 / 0.75) * 0.05 * h_rn([new_point[0] * 9.0, new_point[1] * 9.0]))
-                    * 750.0
+                (h01 + (h01 / 0.75) * 0.15 * h_n((new_point * 5.0).to_array())
+                    + (h01 / 0.75) * 0.05 * h_rn((new_point * 9.0).to_array())).abs()
+                    * 100.0
                     + 40.0
 
                 /*
@@ -149,7 +152,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 value = value.abs();
                 return value;*/
             },
-            blend_influence: 1.0,
+            blend_influence: 0.75,
             block_influence: 1.0,
             can_generate: true,
         })
@@ -176,11 +179,9 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 return None;
             },
             surface_noise: |point: [f64; 2], noise: &mut Box<dyn NoiseFn<f64, 2>>| {
-                let new_point = [point[0] / GLOBAL_SCALE_MOD * 1.0, point[1] / GLOBAL_SCALE_MOD * 1.0];
+                let new_point = [point[0] / GLOBAL_SCALE_MOD, point[1] / GLOBAL_SCALE_MOD];
 
-                let mut value = noise.get(new_point) * -7.5;
-                value += 1.0;
-                return value;
+                noise.get(new_point) * -7.5 + 1.0
             },
             blend_influence: 1.0,
             block_influence: 1.0,

@@ -15,7 +15,7 @@ pub const SUPERGRID_DIM_EXPONENT: i32 = 8;
 /// SIZExSIZE, SIZE=2^EXPONENT; 2^5=32
 pub const CHUNK_SIZE_EXPONENT: i32 = 5;
 /// Blend radius in blocks.
-pub const BLEND_RADIUS: i32 = 12;
+pub const BLEND_RADIUS: i32 = 32;
 /// Blend circumference in blocks.
 pub const BLEND_CIRCUMFERENCE: i32 = BLEND_RADIUS * 2 + 1;
 
@@ -29,7 +29,7 @@ pub const PADDED_REGION_SIZE_SQZ: usize = (PADDED_REGION_SIZE * PADDED_REGION_SI
 /// Global scale modification, every other value is multiplied with this.
 pub const GLOBAL_SCALE_MOD: f64 = 1.0;
 /// Biome scale.
-pub const GLOBAL_BIOME_SCALE: f64 = 128.0;
+pub const GLOBAL_BIOME_SCALE: f64 = 256.0;
 
 /// The per-planet biome map.
 #[derive(Clone, Default, Serialize, Deserialize, Resource)]
