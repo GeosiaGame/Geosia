@@ -41,7 +41,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 }
                 return None;
             },
-            surface_noise: |point: [f64; 2], seed: u32, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
+            surface_noise: |point: [f64; 2], noise: &mut Box<dyn NoiseFn<f64, 2>>| {
                 let new_point = [point[0] / GLOBAL_SCALE_MOD * 2.0, point[1] / GLOBAL_SCALE_MOD * 2.0];
 
                 let mut value = noise.get(new_point) * 0.75;
@@ -81,7 +81,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 }
                 return None;
             },
-            surface_noise: |point: [f64; 2], seed: u32, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
+            surface_noise: |point: [f64; 2], noise: &mut Box<dyn NoiseFn<f64, 2>>| {
                 let new_point = [point[0] / GLOBAL_SCALE_MOD * 40.0, point[1] / GLOBAL_SCALE_MOD * 40.0];
 
                 let mut value = noise.get(new_point) * 0.6;
@@ -122,9 +122,22 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 }
                 return None;
             },
-            surface_noise: |point: [f64; 2], seed: u32, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
-                let new_point = [point[0] / GLOBAL_SCALE_MOD * 16.0, point[1] / GLOBAL_SCALE_MOD * 16.0];
-                let ridge = (0.5 - (0.5 - noise.get([new_point[0] * 5.0, new_point[1] * 5.0])).abs()) * 2.0;
+            surface_noise: |point: [f64; 2], noise: &mut Box<dyn NoiseFn<f64, 2>>| {
+                let new_point = [point[0] / GLOBAL_SCALE_MOD, point[1] / GLOBAL_SCALE_MOD];
+                let h_n = |p: [f64; 2]| (noise.get(p) + 1.0) / 2.0;
+                let h_rn = |p: [f64; 2]| (0.5 - (0.5 - h_n(p)).abs()) * 2.0;
+
+                let h0 = 0.50 * h_rn(new_point);
+                let h01 = 0.25 * h_rn([new_point[0] * 2.0, new_point[1] * 2.0]) + h0;
+        
+                (h01 + (h01 / 0.75) * 0.15 * h_n([new_point[0] * 5.0, new_point[1] * 5.0])
+                    + (h01 / 0.75) * 0.05 * h_rn([new_point[0] * 9.0, new_point[1] * 9.0]))
+                    * 750.0
+                    + 40.0
+
+                /*
+                let new_point = [point[0] / GLOBAL_SCALE_MOD * 2.0, point[1] / GLOBAL_SCALE_MOD * 2.0];
+                let ridge: f64 = (0.5 - (0.5 - noise.get([new_point[0] * 5.0, new_point[1] * 5.0])).abs()) * 2.0;
                 let ridge2 = (noise.get([new_point[0] * 2.0, new_point[1] * 2.0]) * 0.25) + (noise.get(new_point) * 0.5);
 
                 let intermediate = ridge2 / 0.75;
@@ -132,7 +145,9 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 value += ridge2;
                 value += intermediate + 0.05 * (0.5 - (0.5 - noise.get([new_point[0] * 9.0, new_point[1] * 9.0])).abs()) * 2.0;
                 value *= 15.0;
-                return value;
+
+                value = value.abs();
+                return value;*/
             },
             blend_influence: 1.0,
             block_influence: 1.0,
@@ -160,7 +175,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 }
                 return None;
             },
-            surface_noise: |point: [f64; 2], seed: u32, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
+            surface_noise: |point: [f64; 2], noise: &mut Box<dyn NoiseFn<f64, 2>>| {
                 let new_point = [point[0] / GLOBAL_SCALE_MOD * 1.0, point[1] / GLOBAL_SCALE_MOD * 1.0];
 
                 let mut value = noise.get(new_point) * -7.5;

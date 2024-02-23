@@ -73,8 +73,6 @@ pub fn client_main() {
 }
 
 mod debug_window {
-    use std::io::{stdout, Write};
-
     use bevy::log;
     use bevy::prelude::*;
     use ocg_common::voxel::biomes::setup_basic_biomes;
@@ -128,7 +126,7 @@ mod debug_window {
 
         //let mut lock = stdout().lock();
         let mut test_chunks = ClientChunkGroup::new();
-        for (cx, cy, cz) in iproduct!(-16..=16, -8..=8, -16..=16) {
+        for (cx, cy, cz) in iproduct!(-8..=8, -4..=4, -8..=8) {
             let cpos = AbsChunkPos::new(cx, cy, cz);
             let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
             generator.generate_chunk(cpos, &mut chunk.blocks, &block_reg, &biome_reg);

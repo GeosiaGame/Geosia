@@ -34,16 +34,15 @@ impl BiomeGenerator {
 
     fn pick_biome<'a>(pos: [i32; 2], map: &'a BiomeMap, registry: &'a BiomeRegistry, noises: &mut Noises) -> (RegistryId, &'a BiomeDefinition) {
         let pos_d = [pos[0] as f64 / GLOBAL_BIOME_SCALE, pos[1] as f64 / GLOBAL_BIOME_SCALE];
-        let height = Self::map_range((-0.9, 0.9), (0.0, 5.0), (noises.elevation_noise)(&mut noises.base_noise, pos_d));
-        let wetness = Self::map_range((-0.9, 0.9), (0.0, 5.0), (noises.moisture_noise)(&mut noises.base_noise, pos_d));
-        let temp = Self::map_range((-0.9, 0.9), (0.0, 5.0), (noises.temperature_noise)(&mut noises.base_noise, pos_d));
+        let height = Self::map_range((-0.9, 0.9), (0.0, 5.0), noises.elevation_noise.get(pos_d));
+        let wetness = Self::map_range((-0.9, 0.9), (0.0, 5.0), noises.moisture_noise.get(pos_d));
+        let temp = Self::map_range((-0.9, 0.9), (0.0, 5.0), noises.temperature_noise.get(pos_d));
 
         let mut final_id = None;
 
         for obj in map.gen_biomes.iter() {
             if obj.1.elevation.contains(height) && obj.1.moisture.contains(wetness) && obj.1.temperature.contains(temp) {
                 final_id = Some((obj.0, &obj.1));
-                break;
             }
         }
         final_id.unwrap_or_else(|| registry.lookup_name_to_object(PLAINS_BIOME_NAME.as_ref()).unwrap())
