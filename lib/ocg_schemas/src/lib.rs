@@ -13,6 +13,7 @@ pub mod registry;
 pub mod schemas;
 pub mod voxel;
 pub mod range;
+pub mod utils;
 
 /// Re-exported dependencies used in API types
 pub mod dependencies {

@@ -1,18 +1,14 @@
 //! Default world generator
 
-mod biome_blender;
-
 use bevy::{math::{IVec2, DVec2}, prelude::ResMut};
 use bevy_math::IVec3;
 use noise::SuperSimplex;
-use ocg_schemas::{coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM2Z}, dependencies::{itertools::iproduct, smallvec::SmallVec}, registry::RegistryId, voxel::{biome::{biome_map::{BiomeMap, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD}, biome_picker::BiomeGenerator, BiomeDefinition, BiomeEntry, BiomeRegistry, Noises}, chunk_storage::{ChunkStorage, PaletteStorage}, generation::{fbm_noise::Fbm, positional_random::PositionalRandomFactory, Context}, voxeltypes::{BlockEntry, BlockRegistry}}};
+use ocg_schemas::{coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM2Z}, dependencies::{itertools::iproduct, smallvec::SmallVec}, registry::RegistryId, voxel::{biome::{biome_map::{BiomeMap, CHUNK_SIZE_EXPONENT, EXPECTED_BIOME_COUNT, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD, REGION_SIZE_EXPONENT}, biome_picker::BiomeGenerator, BiomeDefinition, BiomeEntry, BiomeRegistry, Noises}, chunk_storage::{ChunkStorage, PaletteStorage}, generation::{fbm_noise::Fbm, positional_random::PositionalRandomFactory, Context}, voxeltypes::{BlockEntry, BlockRegistry}}};
 use std::cell::RefCell;
 use std::mem::MaybeUninit;
 use thread_local::ThreadLocal;
 
 use ocg_schemas::coordinates::{CHUNK_DIM, CHUNK_DIMZ};
-
-use self::biome_blender::SimpleBiomeBlender;
 
 pub const WORLD_SIZE_XZ: i32 = 8;
 pub const WORLD_SIZE_Y: i32 = 4;
@@ -38,20 +34,25 @@ impl CellGen {
                 biomes.push((*def.0, def.1.to_owned()));
             }
         }
-        biome_map.gen_biomes = biomes;
+        biome_map.generatable_biomes = biomes;
     }
 
-    fn elevation_noise(&self, pos: IVec2, c_pos: IVec2, biome_registry: &BiomeRegistry, blended: &SmallVec<[SmallVec<[BiomeEntry; 3]>; CHUNK_DIM2Z]>, noises: &mut Noises) -> f64 {
-        let mut nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)([p.x, p.y], &mut noises.base_terrain_noise) + 1.0) / 2.0;
+    fn elevation_noise(&self, in_chunk_pos: IVec2, chunk_pos: IVec2, biome_registry: &BiomeRegistry, blended: &Vec<SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>>, noises: &mut Noises) -> f64 {
+        let mut nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)(p, &mut noises.base_terrain_noise) + 1.0) / 2.0;
         let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
-        let in_c_pos = pos - (c_pos * CHUNK_DIM);
-        let blend = &blended[(in_c_pos.x + in_c_pos.y * CHUNK_DIM) as usize];
+        let blend = &blended[(in_chunk_pos.x + in_chunk_pos.y * CHUNK_DIM) as usize];
+        let global_pos = DVec2::new((in_chunk_pos.x + (chunk_pos.x * CHUNK_DIM)) as f64, (in_chunk_pos.y + (chunk_pos.y * CHUNK_DIM)) as f64);
 
-        let mut h: f64 = 0.0;
+        let mut heights = 0.0;
+        let mut weights = 0.0;
         for entry in blend.iter() {
-            h += nf((pos).as_dvec2() / scale_factor, entry.lookup(biome_registry).unwrap()) * entry.weight * entry.lookup(biome_registry).unwrap().blend_influence;
+            let biome = entry.lookup(biome_registry).unwrap();
+            let noise = nf(global_pos / scale_factor, biome);
+            let strength = (biome.blend_influence - entry.weight) / biome.blend_influence;
+            heights += noise * strength;
+            weights += strength;
         }
-        h
+        heights / weights
     }
 }
 
@@ -59,7 +60,7 @@ pub struct StdGenerator<'a> {
     seed: u64,
     biome_gen: RefCell<BiomeGenerator>,
     biome_map: ResMut<'a, BiomeMap>,
-    biome_blender: SimpleBiomeBlender,
+    //biome_blender: SimpleBiomeBlender,
     noises: Noises,
     cell_gen: ThreadLocal<RefCell<CellGen>>
 }
@@ -71,7 +72,7 @@ impl<'a> StdGenerator<'a> {
             seed,
             biome_gen: RefCell::new(biome_generator),
             biome_map: biome_map,
-            biome_blender: SimpleBiomeBlender::new(),
+            //biome_blender: SimpleBiomeBlender::new(),
             noises: Noises {
                 base_terrain_noise: Box::new(Fbm::<SuperSimplex>::new(seed_int).set_octaves(vec![-4.0, 1.0, 1.0, 0.0])),
                 elevation_noise: Box::new(Fbm::<SuperSimplex>::new(seed_int + 1).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
@@ -88,15 +89,18 @@ impl<'a> StdGenerator<'a> {
             .get_or(|| RefCell::new(CellGen::new(self.seed, &mut self.biome_map, biome_registry)))
             .borrow_mut();
         
-        let blended = self.biome_blender.get_blended_for_chunk(c_pos.x, c_pos.z, &mut self.biome_map, &mut self.biome_gen, biome_registry, &mut self.noises);
+        //let blended = self.biome_blender.get_blended_for_chunk(c_pos.x, c_pos.z, &mut self.biome_map, &mut self.biome_gen, biome_registry, &mut self.noises);
+        let region_x = c_pos.x >> (REGION_SIZE_EXPONENT - CHUNK_SIZE_EXPONENT);
+        let region_z = c_pos.z >> (REGION_SIZE_EXPONENT - CHUNK_SIZE_EXPONENT);
+        let blended = self.biome_gen.borrow_mut().generate_region(region_x, region_z, &mut self.biome_map, &mut self.noises);
 
         let vparams: [i32; CHUNK_DIM2Z] = {
             let mut vparams: [MaybeUninit<i32>; CHUNK_DIM2Z] =
                 unsafe { std::mem::MaybeUninit::uninit().assume_init() };
             for (i, v) in vparams[..].iter_mut().enumerate() {
-                let x = (i % CHUNK_DIMZ) as i32 + (c_pos.x * CHUNK_DIM);
-                let z = ((i / CHUNK_DIMZ) % CHUNK_DIMZ) as i32 + (c_pos.z * CHUNK_DIM);
-                let p = cellgen.elevation_noise(IVec2::new(x, z), IVec2::new(c_pos.x, c_pos.z), biome_registry, &blended, &mut self.noises).round() as i32;
+                let in_chunk_x = (i % CHUNK_DIMZ) as i32;
+                let in_chunk_z = ((i / CHUNK_DIMZ) % CHUNK_DIMZ) as i32;
+                let p = cellgen.elevation_noise(IVec2::new(in_chunk_x, in_chunk_z), IVec2::new(c_pos.x, c_pos.z), biome_registry, &blended, &mut self.noises).round() as i32;
                 unsafe {
                     std::ptr::write(v.as_mut_ptr(), p);
                 }
