@@ -5,7 +5,7 @@ use bevy_math::DVec2;
 use noise::NoiseFn;
 use ocg_schemas::{voxel::{biome::{BiomeRegistry, BiomeDefinition, PLAINS_BIOME_NAME}, generation::Context, voxeltypes::{BlockRegistry, BlockEntry}}, registry::RegistryName, dependencies::rgb::RGBA8, range::range};
 
-use super::blocks::{SNOWY_GRASS_BLOCK_NAME, DIRT_BLOCK_NAME, GRASS_BLOCK_NAME, STONE_BLOCK_NAME, WATER_BLOCK_NAME};
+use super::blocks::{DIRT_BLOCK_NAME, GRASS_BLOCK_NAME, SAND_BLOCK_NAME, SNOWY_GRASS_BLOCK_NAME, STONE_BLOCK_NAME, WATER_BLOCK_NAME};
 
 
 /// Registry name for ocean.
@@ -14,6 +14,8 @@ pub const OCEAN_BIOME_NAME: RegistryName = RegistryName::ocg_const("ocean");
 pub const HILLS_BIOME_NAME: RegistryName = RegistryName::ocg_const("hills");
 /// Registry name for mountains.
 pub const MOUNTAINS_BIOME_NAME: RegistryName = RegistryName::ocg_const("mountains");
+pub const BEACH_BIOME_NAME: RegistryName = RegistryName::ocg_const("beach");
+pub const RIVER_BIOME_NAME: RegistryName = RegistryName::ocg_const("river");
 
 pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
     biome_registry
@@ -172,4 +174,59 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             can_generate: true,
         })
         .unwrap();
+
+        biome_registry
+            .push_object(BiomeDefinition {
+                name: BEACH_BIOME_NAME,
+                representative_color: RGBA8::new(224, 200, 130, 255),
+                elevation: range(1.0..1.5),
+                temperature: range(-0.5..5.5),
+                moisture: range(-0.5..3.0),
+                rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+                    let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_sand, _) = block_registry.lookup_name_to_object(SAND_BLOCK_NAME.as_ref()).unwrap();
+    
+                    if context.ground_y > pos.y - 1 {
+                        return Some(BlockEntry::new(i_stone, 0));
+                    } else {
+                        return Some(BlockEntry::new(i_sand, 0));
+                    }
+                },
+                surface_noise: |point: DVec2, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
+                    noise.get(point.to_array()) * -7.5 + 1.0
+                },
+                blend_influence: 1.0,
+                block_influence: 1.0,
+                can_generate: true,
+            })
+            .unwrap();
+
+            biome_registry
+                .push_object(BiomeDefinition {
+                    name: RIVER_BIOME_NAME,
+                    representative_color: RGBA8::new(224, 200, 130, 255),
+                    elevation: range(-0.5..5.5),
+                    temperature: range(-0.5..5.5),
+                    moisture: range(-0.5..5.5),
+                    rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+                        let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
+                        let (i_sand, _) = block_registry.lookup_name_to_object(SAND_BLOCK_NAME.as_ref()).unwrap();
+                        let (i_water, _) = block_registry.lookup_name_to_object(WATER_BLOCK_NAME.as_ref()).unwrap();
+        
+                        if context.ground_y == pos.y {
+                            return Some(BlockEntry::new(i_sand, 0));
+                        } else if context.ground_y > pos.y - 3 {
+                            return Some(BlockEntry::new(i_stone, 0));
+                        } else {
+                            return Some(BlockEntry::new(i_water, 0));
+                        }
+                    },
+                    surface_noise: |point: DVec2, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
+                        noise.get(point.to_array()) * -7.5 + 1.0
+                    },
+                    blend_influence: 1.0,
+                    block_influence: 1.0,
+                    can_generate: true,
+                })
+                .unwrap();
 }

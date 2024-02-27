@@ -47,7 +47,7 @@ lru = "0.11.0"
 typetag = "0.2.12"
 dyn-clone = "1.0.12"
 lazy_static = "1.4.0"
-downcast-rs = "1.2.0"
+voronoice = "0.2.0"
 
 # Remote, testing
 criterion = { version = "0.5.1", features = ["html_reports"] }

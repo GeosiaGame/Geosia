@@ -73,18 +73,19 @@ pub fn client_main() {
 }
 
 mod debug_window {
+    use std::time::Instant;
+
     use bevy::log;
     use bevy::prelude::*;
     use ocg_common::voxel::biomes::setup_basic_biomes;
     use ocg_common::voxel::blocks::setup_basic_blocks;
-    use ocg_common::voxel::generator::StdGenerator;
+    use ocg_common::voxel::generator::newgen::NewGenerator;
     use ocg_common::voxel::generator::WORLD_SIZE_XZ;
     use ocg_common::voxel::generator::WORLD_SIZE_Y;
     use ocg_schemas::coordinates::AbsChunkPos;
     use ocg_schemas::dependencies::itertools::iproduct;
     use ocg_schemas::voxel::biome::BiomeRegistry;
     use ocg_schemas::voxel::biome::biome_map::BiomeMap;
-    use ocg_schemas::voxel::biome::biome_picker::BiomeGenerator;
     use ocg_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME};
 
     use crate::voxel::meshgen::mesh_from_chunk;
@@ -123,7 +124,10 @@ mod debug_window {
 
         setup_basic_biomes(&mut biome_reg);
 
-        let mut generator = StdGenerator::new(0, biome_map, BiomeGenerator::new(0));
+        let mut generator = NewGenerator::new(0, WORLD_SIZE_XZ * 2, 6, biome_map);
+        generator.generate_world_biomes(&biome_reg);
+
+        let start = Instant::now();
 
         let mut test_chunks = ClientChunkGroup::new();
         for (cx, cy, cz) in iproduct!(-WORLD_SIZE_XZ..=WORLD_SIZE_XZ, -WORLD_SIZE_Y..=WORLD_SIZE_Y, -WORLD_SIZE_XZ..=WORLD_SIZE_XZ) {
@@ -151,6 +155,9 @@ mod debug_window {
                 });
             }
         }
+
+        let duration = start.elapsed();
+        println!("chunk generation took {:?} ms", duration);
         
         commands.spawn(DirectionalLightBundle {
             directional_light: DirectionalLight {

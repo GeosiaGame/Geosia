@@ -22,4 +22,4 @@ thread_local.workspace = true
 lru.workspace = true
 lazy_static.workspace = true
 serde.workspace = true
-downcast-rs.workspace = true
+voronoice.workspace = true

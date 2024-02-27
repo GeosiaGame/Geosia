@@ -14,6 +14,7 @@ pub const DIRT_BLOCK_NAME: RegistryName = RegistryName::ocg_const("dirt");
 pub const GRASS_BLOCK_NAME: RegistryName = RegistryName::ocg_const("grass");
 pub const SNOWY_GRASS_BLOCK_NAME: RegistryName = RegistryName::ocg_const("snowy_grass");
 pub const WATER_BLOCK_NAME: RegistryName = RegistryName::ocg_const("water");
+pub const SAND_BLOCK_NAME: RegistryName = RegistryName::ocg_const("sand");
 
 /// Installs the base set of blocks into the given block registry.
 pub fn setup_basic_blocks(registry: &mut BlockRegistry) {
@@ -60,6 +61,15 @@ pub fn setup_basic_blocks(registry: &mut BlockRegistry) {
             shape_set: StandardShapedMaterial,
             representative_color: RGBA8::new(0, 0, 200, 100),
             has_collision_box: false,
+            has_drawable_mesh: true,
+        })
+        .unwrap();
+    registry
+        .push_object(BlockDefinition {
+            name: SAND_BLOCK_NAME,
+            shape_set: StandardShapedMaterial,
+            representative_color: RGBA8::new(224, 200, 130, 255),
+            has_collision_box: true,
             has_drawable_mesh: true,
         })
         .unwrap();

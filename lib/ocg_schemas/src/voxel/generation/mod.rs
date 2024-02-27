@@ -2,8 +2,6 @@
 
 use noise::Seedable;
 
-use crate::voxel::biome::biome_picker::BiomeGenerator;
-
 use self::positional_random::PositionalRandomFactory;
 
 use super::{voxeltypes::BlockEntry, chunk_storage::PaletteStorage};
@@ -13,8 +11,6 @@ pub mod positional_random;
 
 /// Context data for world generation.
 pub struct Context<'a> {
-    /// The biome generator. Unmodifiable.
-    pub biome_generator: &'a BiomeGenerator,
     /// The chunk. Unmodifiable through here.
     pub chunk: &'a PaletteStorage<BlockEntry>,
     /// A positional random factory.
