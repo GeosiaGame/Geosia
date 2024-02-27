@@ -361,7 +361,7 @@ impl<'a> NewGenerator<'a> {
             pa.noise = Self::make_noise(&self.noises, &pa.point);
             let mut num_water = 0;
 
-            for q in &mut p.clone().borrow_mut().corners {
+            for q in &mut p.clone().borrow_mut().corners { // can't borrow here, why???
                 if q.borrow().border {
                     pa.border = true;
                     queue.push_back(p.clone());
@@ -572,7 +572,7 @@ impl<'a> NewGenerator<'a> {
             
             if Self::contains_point(&edge_points, point) {
                 if center.borrow().biome.is_some() {
-                    return smallvec![BiomeEntry {id: center.borrow().biome.unwrap_or(default), weight: 1.0 }]
+                    return smallvec![BiomeEntry {id: center.borrow().biome.unwrap_or(default), weight: 1.0 }];
                 }
 
                 let mut to_blend: SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> = smallvec![];
