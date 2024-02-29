@@ -23,8 +23,8 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             name: PLAINS_BIOME_NAME,
             representative_color: RGBA8::new(20, 180, 10, 255),
             elevation: range(1.0..2.5),
-            temperature: range(-0.5..5.5),
-            moisture: range(-0.5..2.5),
+            temperature: range(..),
+            moisture: range(..2.5),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
                 let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
                 let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
@@ -45,7 +45,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 return None;
             },
             surface_noise: |point: DVec2, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
-                let new_point = point * 2.0;
+                let new_point = point * 1.5;
 
                 let mut value = noise.get(new_point.to_array()) * 0.75;
                 value += noise.get((new_point * 2.0).to_array()) * 0.25;
@@ -63,8 +63,8 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             name: HILLS_BIOME_NAME,
             representative_color: RGBA8::new(15, 110, 10, 255),
             elevation: range(2.5..3.5),
-            temperature: range(-0.5..5.5),
-            moisture: range(-0.5..2.5),
+            temperature: range(..),
+            moisture: range(..2.5),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
                 let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
                 let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
@@ -85,13 +85,14 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 return None;
             },
             surface_noise: |point: DVec2, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
-                let new_point = point / 8.0;
+                let new_point = point * 3.0;
                 let new_point_arr = new_point.to_array();
 
                 let mut value = noise.get(new_point_arr) * 0.6;
                 value += noise.get((new_point * 1.5).to_array()) * 0.25;
                 value += noise.get((new_point * 3.0).to_array()) * 0.15;
-                value *= 0.05;
+                value *= 4.0;
+                value += 15.0;
                 return value;
             },
             blend_influence: 1.0,
@@ -104,9 +105,9 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: MOUNTAINS_BIOME_NAME,
             representative_color: RGBA8::new(220, 220, 220, 255),
-            elevation: range(3.5..5.5),
-            temperature: range(-0.5..5.5),
-            moisture: range(-0.5..2.5),
+            elevation: range(3.5..),
+            temperature: range(..),
+            moisture: range(..2.5),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
                 let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
                 let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
@@ -150,9 +151,9 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: OCEAN_BIOME_NAME,
             representative_color: RGBA8::new(10, 120, 180, 255),
-            elevation: range(-0.5..1.0),
-            temperature: range(-0.5..5.5),
-            moisture: range(2.5..5.5),
+            elevation: range(..1.0),
+            temperature: range(..),
+            moisture: range(2.5..),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
                 let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
                 let (i_water, _) = block_registry.lookup_name_to_object(WATER_BLOCK_NAME.as_ref()).unwrap();
@@ -180,24 +181,25 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 name: BEACH_BIOME_NAME,
                 representative_color: RGBA8::new(224, 200, 130, 255),
                 elevation: range(1.0..1.5),
-                temperature: range(-0.5..5.5),
-                moisture: range(-0.5..3.0),
+                temperature: range(..),
+                moisture: range(..3.0),
                 rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
                     let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
                     let (i_sand, _) = block_registry.lookup_name_to_object(SAND_BLOCK_NAME.as_ref()).unwrap();
     
                     if context.ground_y > pos.y - 1 {
                         return Some(BlockEntry::new(i_stone, 0));
-                    } else {
+                    } else if context.ground_y == pos.y {
                         return Some(BlockEntry::new(i_sand, 0));
                     }
+                    None
                 },
                 surface_noise: |point: DVec2, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
                     noise.get(point.to_array()) * -7.5 + 1.0
                 },
                 blend_influence: 1.0,
                 block_influence: 1.0,
-                can_generate: true,
+                can_generate: false,
             })
             .unwrap();
 
@@ -205,9 +207,9 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 .push_object(BiomeDefinition {
                     name: RIVER_BIOME_NAME,
                     representative_color: RGBA8::new(224, 200, 130, 255),
-                    elevation: range(-0.5..5.5),
-                    temperature: range(-0.5..5.5),
-                    moisture: range(-0.5..5.5),
+                    elevation: range(..),
+                    temperature: range(..),
+                    moisture: range(..),
                     rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
                         let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
                         let (i_sand, _) = block_registry.lookup_name_to_object(SAND_BLOCK_NAME.as_ref()).unwrap();
@@ -222,11 +224,11 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                         }
                     },
                     surface_noise: |point: DVec2, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
-                        noise.get(point.to_array()) * -7.5 + 1.0
+                        noise.get(point.to_array()) * -1.5 + 1.0
                     },
                     blend_influence: 1.0,
                     block_influence: 1.0,
-                    can_generate: true,
+                    can_generate: false,
                 })
                 .unwrap();
 }

@@ -123,6 +123,7 @@ fn player_move(
 ) {
     if let Ok(window) = primary_window.get_single() {
         let mut camera_pos = Vec3::ZERO;
+        let mut camera_angle = Quat::IDENTITY;
         for (_camera, mut transform) in camera_query.iter_mut() {
             let mut velocity = Vec3::ZERO;
             let local_z = transform.local_z();
@@ -155,6 +156,7 @@ fn player_move(
                 transform.translation += velocity * time.delta_seconds() * settings.speed;
             }
             camera_pos = transform.translation;
+            camera_angle = transform.rotation;
         }
         for mut text in &mut set.p0() {
             let i_camera_pos = camera_pos.as_ivec3();
@@ -169,6 +171,9 @@ fn player_move(
         }
         for mut text in &mut set.p1() {
             text.sections[1].value = camera_pos.to_string();
+            let euler = camera_angle.to_euler(EulerRot::XYZ);
+            let euler = (euler.0 * 1.0, euler.1 * 1.0, euler.2 * 1.0);
+            text.sections[3].value = format!("{:?}", euler);
         }
     } else {
         warn!("Primary window not found for `player_move`!");
@@ -276,7 +281,20 @@ fn spawn_debug_text(
                 font: font.clone(),
                 font_size: 15.0,
                 color: Color::rgb(0.9, 0.9, 0.9),
-            })
+            }),
+            TextSection::new(
+            "\nCurrent Rotation:", 
+            TextStyle {
+                font: font.clone(),
+                font_size: 15.0,
+                color: Color::rgb(0.9, 0.9, 0.9),
+            }),
+            TextSection::from_style(
+                TextStyle {
+                font: font.clone(),
+                font_size: 15.0,
+                color: Color::rgb(0.9, 0.9, 0.9),
+            }),
         ]),
         PositionText
     ));

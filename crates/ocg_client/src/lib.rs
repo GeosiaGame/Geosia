@@ -124,7 +124,7 @@ mod debug_window {
 
         setup_basic_biomes(&mut biome_reg);
 
-        let mut generator = NewGenerator::new(0, WORLD_SIZE_XZ * 2, 6, biome_map);
+        let mut generator = NewGenerator::new(0, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 8, biome_map);
         generator.generate_world_biomes(&biome_reg);
 
         let start = Instant::now();
@@ -157,7 +157,7 @@ mod debug_window {
         }
 
         let duration = start.elapsed();
-        println!("chunk generation took {:?} ms", duration);
+        println!("chunk generation took {:?}", duration);
         
         commands.spawn(DirectionalLightBundle {
             directional_light: DirectionalLight {

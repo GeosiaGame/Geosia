@@ -80,7 +80,6 @@
             "cargo": {
                 "args": [
                     "build",
-                    "-r",
                     "--bin=ocg_client",
                     "--package=ocg_client"
                 ],
