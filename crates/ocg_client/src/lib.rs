@@ -4,6 +4,7 @@
 //! The clientside of OpenCubeGame
 pub mod voxel;
 mod debugcam;
+mod voronoi_renderer;
 
 use bevy::a11y::AccessibilityPlugin;
 use bevy::audio::AudioPlugin;
@@ -88,6 +89,7 @@ mod debug_window {
     use ocg_schemas::voxel::biome::biome_map::BiomeMap;
     use ocg_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME};
 
+    use crate::voronoi_renderer;
     use crate::voxel::meshgen::mesh_from_chunk;
     use crate::voxel::{ClientChunk, ClientChunkGroup};
 
@@ -105,6 +107,7 @@ mod debug_window {
         mut commands: Commands,
         asset_server: Res<AssetServer>,
         biome_map: ResMut<BiomeMap>,
+        mut images: ResMut<Assets<Image>>,
         mut biome_reg: ResMut<BiomeRegistry>,
         mut meshes: ResMut<Assets<Mesh>>,
         mut materials: ResMut<Assets<StandardMaterial>>,
@@ -126,6 +129,8 @@ mod debug_window {
 
         let mut generator = NewGenerator::new(0, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 8, biome_map);
         generator.generate_world_biomes(&biome_reg);
+        let world_size_blocks = generator.size_blocks_xz() as usize;
+        let img_handle = images.add(voronoi_renderer::draw_voronoi(generator.voronoi(), &generator, &biome_reg, world_size_blocks, world_size_blocks));
 
         let start = Instant::now();
 
@@ -176,6 +181,7 @@ mod debug_window {
                     height: Val::Percent(25.0),
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
+                    flex_shrink: 0.0,
                     ..default()
                 },
                 background_color: Color::CRIMSON.into(),
@@ -192,6 +198,17 @@ mod debug_window {
                 ));
                 log::warn!("Child made");
             });
+        
+        commands.spawn(ImageBundle {
+            image: UiImage::new(img_handle),
+            style: Style {
+                width: Val::Px(100.0),
+                height: Val::Px(100.0),
+                flex_shrink: 0.0,
+                ..default()
+            },
+            ..default()
+        });
         log::warn!("Setting up debug window done");
     }
 }

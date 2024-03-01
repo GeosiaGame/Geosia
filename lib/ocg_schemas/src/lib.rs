@@ -32,4 +32,8 @@ pub mod dependencies {
     pub use serde;
     pub use smallvec;
     pub use thiserror;
+    pub use voronoice;
+    pub use image;
+    pub use rand;
+    pub use rand_xoshiro;
 }

@@ -41,6 +41,8 @@ noise.workspace = true
 typetag.workspace = true
 dyn-clone.workspace = true
 lazy_static.workspace = true
+voronoice.workspace = true
+image.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

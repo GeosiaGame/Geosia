@@ -2,8 +2,8 @@ use std::{cell::RefCell, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::
 
 use bevy::{ecs::system::ResMut, utils::hashbrown::HashMap};
 use bevy_math::{DVec2, IVec2, IVec3};
-use noise::SuperSimplex;
-use ocg_schemas::{coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIMZ}, dependencies::{itertools::{iproduct, Itertools}, smallvec::{smallvec, SmallVec}}, registry::RegistryId, voxel::{biome::{biome_map::{BiomeMap, EXPECTED_BIOME_COUNT, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD}, BiomeDefinition, BiomeEntry, BiomeRegistry, Noises, PLAINS_BIOME_NAME}, chunk_storage::{ChunkStorage, PaletteStorage}, generation::{fbm_noise::Fbm, positional_random::PositionalRandomFactory, Context}, voxeltypes::{BlockEntry, BlockRegistry}}};
+use noise::OpenSimplex;
+use ocg_schemas::{coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIMZ}, dependencies::{itertools::{iproduct, Itertools}, smallvec::{smallvec, SmallVec}}, registry::RegistryId, voxel::{biome::{biome_map::{BiomeMap, EXPECTED_BIOME_COUNT, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD}, BiomeDefinition, BiomeEntry, BiomeRegistry, Noises, PLAINS_BIOME_NAME}, chunk_storage::{ChunkStorage, PaletteStorage}, generation::{fbm_noise::Fbm, positional_random::PositionalRandomFactory, Context, Noise4DTo2D}, voxeltypes::{BlockEntry, BlockRegistry}}};
 use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoshiro128StarStar;
 use serde::{Deserialize, Serialize};
@@ -31,6 +31,7 @@ pub struct NewGenerator<'a> {
     biome_map: ResMut<'a, BiomeMap>,
     noises: Noises,
 
+    voronoi: Option<Voronoi>,
     points: Vec<Point>,
     centers: Vec<Rc<RefCell<Center>>>,
     corners: Vec<Rc<RefCell<Corner>>>,
@@ -48,12 +49,13 @@ impl<'a> NewGenerator<'a> {
             random: Xoshiro128StarStar::seed_from_u64(seed),
             biome_map,
             noises: Noises {
-                base_terrain_noise: Box::new(Fbm::<SuperSimplex>::new(seed_int).set_octaves(vec![-4.0, 1.0, 1.0, 0.0])),
-                elevation_noise: Box::new(Fbm::<SuperSimplex>::new(seed_int + 1).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
-                temperature_noise: Box::new(Fbm::<SuperSimplex>::new(seed_int + 2).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
-                moisture_noise: Box::new(Fbm::<SuperSimplex>::new(seed_int + 3).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
+                base_terrain_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int).set_octaves(vec![-4.0, 1.0, 1.0, 0.0])),
+                elevation_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int + 1).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
+                temperature_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int + 2).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
+                moisture_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int + 3).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
             },
 
+            voronoi: None,
             points: vec![],
             centers: vec![],
             corners: vec![],
@@ -75,10 +77,9 @@ impl<'a> NewGenerator<'a> {
         println!("starting biome generation");
 
         let size = (self.size_chunks_xz * CHUNK_DIM) as f64;
-        let count = self.biome_point_count as u32;
 
         let start = Instant::now();
-        self.pick_biome_points(count, size, size);
+        self.pick_biome_points(self.biome_point_count, size, size);
         self.make_diagram(size, size, self.points.clone());
         let duration = start.elapsed();
         println!("picking points & building graph took {:?}", duration);
@@ -175,8 +176,8 @@ impl<'a> NewGenerator<'a> {
     
 
     fn pick_biome_points(&mut self, count: u32, x_size: f64, y_size: f64) {
-        let range_x = Uniform::new(0.0, x_size);
-        let range_y = Uniform::new(0.0, y_size);
+        let range_x = Uniform::new(-x_size/2.0, x_size/2.0);
+        let range_y = Uniform::new(-x_size/2.0, y_size/2.0);
         for _ in 0..count {
             let x = self.random.sample(range_x);
             let y = self.random.sample(range_y);
@@ -186,13 +187,13 @@ impl<'a> NewGenerator<'a> {
     }
 
     fn make_diagram(&mut self, x_size: f64, y_size: f64, points: Vec<Point>) {
-        // map to a xy -1~1 area
-        let voronoi_points = points.iter().map(|p| Point {x: p.x / x_size - 0.5, y: p.y / y_size - 0.5}).collect_vec();
         let diagram = VoronoiBuilder::default()
-            .set_sites(voronoi_points)
+            .set_sites(points.clone())
             .set_lloyd_relaxation_iterations(2)
-            .build()
-            .unwrap();
+            .set_bounding_box(BoundingBox::new_centered(x_size, y_size))
+            .build();
+        self.voronoi = diagram;
+        let diagram = self.voronoi.as_ref().unwrap();
         let mut center_lookup: HashMap<[i32; 2], Rc<RefCell<Center>>> = HashMap::new();
 
         for point in &points {
@@ -242,7 +243,7 @@ impl<'a> NewGenerator<'a> {
             }
         };
 
-        let edges = Self::make_edges(&diagram, &points, x_size, y_size);
+        let edges = Self::make_edges(diagram, &points, x_size, y_size);
         for (delaunay_edge, voronoi_edge) in edges {
             let mut edge = Edge::new();
             edge.midpoint = lerp(&voronoi_edge.0, &voronoi_edge.1, 0.5);
@@ -333,10 +334,10 @@ impl<'a> NewGenerator<'a> {
         for cell in voronoi.iter_cells() {
             let vertices = cell.iter_vertices().collect::<Vec<&Point>>();
             for i in 0..vertices.len() {
-                let vertex_1 = vertices[i];
-                let vertex_1 = Point {x: vertex_1.x * x_size + 0.5, y: vertex_1.y * y_size + 0.5};
-                let vertex_2 = vertices[(i+1) % vertices.len()];
-                let vertex_2 = Point {x: vertex_2.x * x_size + 0.5, y: vertex_2.y * y_size + 0.5};
+                let vertex_1 = vertices[i].to_owned();
+                //let vertex_1 = Point {x: vertex_1.x * x_size + 0.5, y: vertex_1.y * y_size + 0.5};
+                let vertex_2 = vertices[(i+1) % vertices.len()].to_owned();
+                //let vertex_2 = Point {x: vertex_2.x * x_size + 0.5, y: vertex_2.y * y_size + 0.5};
                 list_of_voronoi_edges.push(PointEdge(vertex_1,vertex_2));
             }
         }
@@ -345,10 +346,10 @@ impl<'a> NewGenerator<'a> {
     }
 
     fn make_noise(noises: &Noises, point: &Point) -> NoiseValues {
-        let point = [point.x, point.y];
-        let elevation = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.elevation_noise.get(point));
-        let temperature = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.temperature_noise.get(point));
-        let moisture: f64 = Self::map_range((-1.0, 1.0), (0.0, 5.0), noises.moisture_noise.get(point));
+        let point = [point.x * 10.0, point.y * 10.0];
+        let elevation = Self::map_range((-1.5, 1.5), (0.0, 5.0), noises.elevation_noise.get_2d(point));
+        let temperature = Self::map_range((-1.5, 1.5), (0.0, 5.0), noises.temperature_noise.get_2d(point));
+        let moisture: f64 = Self::map_range((-1.5, 1.5), (0.0, 5.0), noises.moisture_noise.get_2d(point));
 
         NoiseValues { elevation, temperature, moisture }
     }
@@ -392,8 +393,9 @@ impl<'a> NewGenerator<'a> {
                 break;
             }
             for r in &p.unwrap().borrow().neighbors {
-                let r_b = r.borrow();
-                if ocean.moisture.contains(r_b.noise.moisture) && ocean.elevation.contains(r_b.noise.elevation) {
+                let mut r_b = r.borrow_mut();
+                if ocean.moisture.contains(r_b.noise.moisture) && ocean.elevation.contains(r_b.noise.elevation) && r_b.biome != Some(ocean_id) {
+                    r_b.biome = Some(ocean_id);
                     queue.push_back(r.clone());
                 }
             }
@@ -573,7 +575,9 @@ impl<'a> NewGenerator<'a> {
                 }
             }
             if !found {
-                //println!("found no biome for point {:?}, noise values: {:?}", center.point, center.noise);
+                println!("found no biome for point {:?}, noise values: {:?}. Picking randomly.", center.point, center.noise);
+                let index = self.random.gen_range(0..self.biome_map.generatable_biomes.len());
+                center.biome = Some(self.biome_map.generatable_biomes[index].0);
             }
         }
     }
@@ -587,7 +591,7 @@ impl<'a> NewGenerator<'a> {
         None
     }
 
-    fn find_biomes_at_point(&mut self, point: &Point, default: RegistryId) -> SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> {
+    pub fn find_biomes_at_point(&mut self, point: &Point, default: RegistryId) -> SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> {
         let sqr_distance = |a: &Point, b: &Point| {
             let x = b.x - a.x;
             let y = b.y - a.y;
@@ -604,19 +608,19 @@ impl<'a> NewGenerator<'a> {
             if Self::contains_point(&edge_points, point) {
                 let mut to_blend: SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> = smallvec![];
 
-                to_blend.push(BiomeEntry {id: center.biome.unwrap_or(default), weight: 5.0 });
+                to_blend.push(BiomeEntry {id: center.biome.unwrap_or(default), weight: 1.0 });
 
-                for neighbor in &center.neighbors {
-                    let neighbor = neighbor.borrow();
-                    let total_distance_sqr = sqr_distance(&center.point, &neighbor.point).abs();
-                    let distance_sqr = sqr_distance(point, &neighbor.point).abs();
+                for corner in &center.corners {
+                    let corner = corner.borrow();
+                    let total_distance_sqr = sqr_distance(&center.point, &corner.point).abs();
+                    let distance_sqr = sqr_distance(point, &corner.point).abs();
                     let percent = distance_sqr.min(total_distance_sqr) / total_distance_sqr.max(distance_sqr);
                     // weight at this point is distance from neighbor as % of travel
-                    let blend = to_blend.iter_mut().find(|e| e.id == neighbor.biome.unwrap_or(default));
+                    let blend = to_blend.iter_mut().find(|e| e.id == corner.biome.unwrap_or(default));
                     if let Some(blend) = blend {
                         blend.weight += percent;
                     } else {
-                        to_blend.push(BiomeEntry {id: neighbor.biome.unwrap_or(default), weight: percent});
+                        to_blend.push(BiomeEntry {id: corner.biome.unwrap_or(default), weight: percent});
                     }
                 }
 
@@ -626,6 +630,22 @@ impl<'a> NewGenerator<'a> {
             }
         }
         smallvec![]
+    }
+
+    
+    pub fn get_biomes_at_point(&self, point: &Point) -> Option<&SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>> {
+        for center in &self.centers {
+            let center = center.borrow();
+            let edge_points = center.corners.iter()
+                .map(|p| p.borrow().point.clone())
+                .collect_vec();
+            
+            if Self::contains_point(&edge_points, point) {
+                let p = [center.point.x.round() as i32, center.point.y.round() as i32];
+                return self.biome_map.map.get(&p)
+            }
+        }
+        None
     }
 
     fn contains_point(points: &Vec<Point>, test: &Point) -> bool {
@@ -666,7 +686,18 @@ impl<'a> NewGenerator<'a> {
     fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {
         to_range.0 + (s - from_range.0) * (to_range.1 - to_range.0) / (from_range.1 - from_range.0)
     }
-    
+
+    pub fn voronoi(&self) -> &Voronoi {
+        self.voronoi.as_ref().unwrap()
+    }
+
+    pub fn size_blocks_xz(&self) -> i32 {
+        self.size_chunks_xz * CHUNK_DIM
+    }
+
+    pub fn biome_map(&self) -> &BiomeMap {
+        &self.biome_map
+    }
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, Default, PartialEq, Debug)]

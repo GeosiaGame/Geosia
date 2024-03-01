@@ -1,6 +1,6 @@
 //! Random biome picker
 
-use crate::{coordinates::{REGION_SIZE, REGION_SIZE2Z}, voxel::biome::biome_map::BiomeMap};
+use crate::{coordinates::{REGION_SIZE, REGION_SIZE2Z}, voxel::{biome::biome_map::BiomeMap, generation::Noise4DTo2D}};
 use itertools::iproduct;
 use serde::{Serialize, Deserialize};
 use smallvec::{smallvec, SmallVec};
@@ -35,9 +35,9 @@ impl BiomeGenerator {
 
     fn pick_biome<'a>(pos: [i32; 2], map: &'a BiomeMap, noises: &mut Noises) -> SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> {
         let pos_d = [pos[0] as f64 / GLOBAL_BIOME_SCALE, pos[1] as f64 / GLOBAL_BIOME_SCALE];
-        let height = Self::map_range((0.0, 1.0), (0.0, 5.0), noises.elevation_noise.get(pos_d));
-        let moisture: f64 = Self::map_range((0.0, 1.0), (0.0, 5.0), noises.moisture_noise.get(pos_d));
-        let temperature = Self::map_range((0.0, 1.0), (0.0, 5.0), noises.temperature_noise.get(pos_d));
+        let height = Self::map_range((0.0, 1.0), (0.0, 5.0), noises.elevation_noise.get_2d(pos_d));
+        let moisture: f64 = Self::map_range((0.0, 1.0), (0.0, 5.0), noises.moisture_noise.get_2d(pos_d));
+        let temperature = Self::map_range((0.0, 1.0), (0.0, 5.0), noises.temperature_noise.get_2d(pos_d));
 
         let mut biomes = smallvec![];
 

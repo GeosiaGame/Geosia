@@ -99,13 +99,13 @@ impl BiomeDefinition {}
 /// Different noise layers for biome generation.
 pub struct Noises {
     /// Base noise from which all other noises are derived from
-    pub base_terrain_noise: Box<dyn NoiseFn<f64, 2>>,
+    pub base_terrain_noise: Box<dyn NoiseFn<f64, 2>>, // change to <f64, 4> once the kinks are worked out, currently it loops way too soon
     /// Height noise (0~5)
-    pub elevation_noise: Box<dyn NoiseFn<f64, 2>>,
+    pub elevation_noise: Box<dyn NoiseFn<f64, 2>>, // change to <f64, 4> ...
     /// Temperature noise (0~5)
-    pub temperature_noise: Box<dyn NoiseFn<f64, 2>>,
+    pub temperature_noise: Box<dyn NoiseFn<f64, 2>>, // change to <f64, 4> ...
     /// Moisture noise (0~5)
-    pub moisture_noise: Box<dyn NoiseFn<f64, 2>>,
+    pub moisture_noise: Box<dyn NoiseFn<f64, 2>>, // change to <f64, 4> ...
 }
 
 /// Name of the default-er plains biome.

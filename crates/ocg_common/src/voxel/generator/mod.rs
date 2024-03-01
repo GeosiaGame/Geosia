@@ -2,7 +2,7 @@
 
 use bevy::{math::{IVec2, DVec2}, prelude::ResMut};
 use bevy_math::IVec3;
-use noise::SuperSimplex;
+use noise::OpenSimplex;
 use ocg_schemas::{coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM2Z}, dependencies::{itertools::iproduct, smallvec::SmallVec}, registry::RegistryId, voxel::{biome::{biome_map::{BiomeMap, CHUNK_SIZE_EXPONENT, EXPECTED_BIOME_COUNT, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD, REGION_SIZE_EXPONENT}, biome_picker::BiomeGenerator, BiomeDefinition, BiomeEntry, BiomeRegistry, Noises}, chunk_storage::{ChunkStorage, PaletteStorage}, generation::{fbm_noise::Fbm, positional_random::PositionalRandomFactory, Context}, voxeltypes::{BlockEntry, BlockRegistry}}};
 use std::cell::RefCell;
 use std::mem::MaybeUninit;
@@ -13,7 +13,7 @@ use ocg_schemas::coordinates::{CHUNK_DIM, CHUNK_DIMZ};
 pub mod newgen;
 
 pub const WORLD_SIZE_XZ: i32 = 8;
-pub const WORLD_SIZE_Y: i32 = 4;
+pub const WORLD_SIZE_Y: i32 = 8;
 
 struct CellGen {
     seed: u64,
@@ -76,10 +76,10 @@ impl<'a> StdGenerator<'a> {
             biome_map: biome_map,
             //biome_blender: SimpleBiomeBlender::new(),
             noises: Noises {
-                base_terrain_noise: Box::new(Fbm::<SuperSimplex>::new(seed_int).set_octaves(vec![-4.0, 1.0, 1.0, 0.0])),
-                elevation_noise: Box::new(Fbm::<SuperSimplex>::new(seed_int + 1).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
-                temperature_noise: Box::new(Fbm::<SuperSimplex>::new(seed_int + 2).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
-                moisture_noise: Box::new(Fbm::<SuperSimplex>::new(seed_int + 3).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
+                base_terrain_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int).set_octaves(vec![-4.0, 1.0, 1.0, 0.0])),
+                elevation_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int + 1).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
+                temperature_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int + 2).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
+                moisture_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int + 3).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
             },
             cell_gen: ThreadLocal::new(),
         }

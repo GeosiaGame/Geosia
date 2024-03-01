@@ -48,6 +48,7 @@ typetag = "0.2.12"
 dyn-clone = "1.0.12"
 lazy_static = "1.4.0"
 voronoice = "0.2.0"
+image = "0.24.9"
 
 # Remote, testing
 criterion = { version = "0.5.1", features = ["html_reports"] }

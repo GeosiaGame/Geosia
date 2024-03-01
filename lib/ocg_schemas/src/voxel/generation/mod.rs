@@ -1,6 +1,8 @@
 //! World generation related methods.
 
-use noise::Seedable;
+use std::f64::consts::{SQRT_2, TAU};
+
+use noise::{NoiseFn, Seedable};
 
 use self::positional_random::PositionalRandomFactory;
 
@@ -31,4 +33,38 @@ where
         sources.push(source.set_seed(seed + (octaves[x] * 100.0) as u32));
     }
     sources
+}
+
+const CONVERT_NOISE_SCALE: f64 = 1.0;
+
+/// Get a point of 4D "torus" noise as if it were a plane of 2D noise
+pub trait Noise4DTo2D<const T: usize> {
+    /// get the noise value as a 2D point.
+    fn get_2d(&self, point: [f64; 2]) -> f64;
+}
+
+impl<T> Noise4DTo2D<4> for T where T: NoiseFn<f64, 4> + ?Sized {
+    fn get_2d(&self, point: [f64; 2]) -> f64 {
+        let angle_x = TAU * point[0];
+        let angle_y = TAU * point[1];
+        self.get([angle_x.cos() / TAU * CONVERT_NOISE_SCALE, 
+                        angle_x.sin() / TAU * CONVERT_NOISE_SCALE, 
+                        angle_y.cos() / TAU * CONVERT_NOISE_SCALE, 
+                        angle_y.sin() / TAU * CONVERT_NOISE_SCALE]
+            ) * SQRT_2
+    }
+}
+
+impl<T> Noise4DTo2D<3> for T where T: NoiseFn<f64, 3> + ?Sized {
+    fn get_2d(&self, point: [f64; 2]) -> f64 {
+        let angle_x = TAU * point[0];
+        let y = point[1];
+        self.get([angle_x.cos() / TAU, angle_x.sin() / TAU, y])
+    }
+}
+
+impl<T> Noise4DTo2D<2> for T where T: NoiseFn<f64, 2> + ?Sized {
+    fn get_2d(&self, point: [f64; 2]) -> f64 {
+        self.get(point)
+    }
 }

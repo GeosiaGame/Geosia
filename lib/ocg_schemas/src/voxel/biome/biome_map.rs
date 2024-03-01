@@ -26,7 +26,7 @@ pub const PADDED_REGION_SIZE2Z: usize = (PADDED_REGION_SIZE * PADDED_REGION_SIZE
 /// Global scale modification, every other value is multiplied with this.
 pub const GLOBAL_SCALE_MOD: f64 = 1.0;
 /// Biome scale.
-pub const GLOBAL_BIOME_SCALE: f64 = 256.0;
+pub const GLOBAL_BIOME_SCALE: f64 = 64.0;
 
 /// Expected amount of biomes per chunk
 pub const EXPECTED_BIOME_COUNT: usize = 4;
