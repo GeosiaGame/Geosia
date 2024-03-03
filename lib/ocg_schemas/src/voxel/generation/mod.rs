@@ -30,7 +30,7 @@ where
     let mut sources = Vec::with_capacity(octaves.len());
     for x in 0..octaves.len() {
         let source = Source::default();
-        sources.push(source.set_seed(seed + (octaves[x] * 100.0) as u32));
+        sources.push(source.set_seed(seed ^ (octaves[x] * 4037543.0) as u32));
     }
     sources
 }

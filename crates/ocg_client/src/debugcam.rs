@@ -160,7 +160,7 @@ fn player_move(
         }
         for mut text in &mut set.p0() {
             let i_camera_pos = camera_pos.as_ivec3();
-            let biomes = biome_map.map.get(&[i_camera_pos.x, i_camera_pos.z]);
+            let biomes = biome_map.biome_map.get(&[i_camera_pos.x, i_camera_pos.z]);
             if biomes.is_some() {
                 let mut t = String::new();
                 for (i, biome) in biomes.unwrap().iter().enumerate() {

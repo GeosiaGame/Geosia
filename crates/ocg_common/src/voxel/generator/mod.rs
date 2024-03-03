@@ -13,7 +13,7 @@ use ocg_schemas::coordinates::{CHUNK_DIM, CHUNK_DIMZ};
 pub mod newgen;
 
 pub const WORLD_SIZE_XZ: i32 = 8;
-pub const WORLD_SIZE_Y: i32 = 8;
+pub const WORLD_SIZE_Y: i32 = 4;
 
 struct CellGen {
     seed: u64,

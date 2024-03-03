@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::Instant};
+use std::{cell::RefCell, cmp::Ordering, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::Instant};
 
 use bevy::{ecs::system::ResMut, utils::hashbrown::HashMap};
 use bevy_math::{DVec2, IVec2, IVec3};
@@ -13,7 +13,7 @@ use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME, RIVER_BIOME_NAME}
 
 
 const TRIANGLE_VERTICES: [(usize, usize); 3] = [(0,1),(1,2),(2,0)];
-pub const WATER_TRESHOLD: f64 = 0.3;
+pub const LAKE_TRESHOLD: f64 = 0.3;
 
 /// gosh this is jank why can't I just use DVec2
 fn lerp(start: &Point, end: &Point, value: f64) -> Point {
@@ -50,9 +50,9 @@ impl<'a> NewGenerator<'a> {
             biome_map,
             noises: Noises {
                 base_terrain_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int).set_octaves(vec![-4.0, 1.0, 1.0, 0.0])),
-                elevation_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int + 1).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
-                temperature_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int + 2).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
-                moisture_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int + 3).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
+                elevation_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(1347)).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
+                temperature_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(2349)).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
+                moisture_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(3243)).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
             },
 
             voronoi: None,
@@ -85,20 +85,20 @@ impl<'a> NewGenerator<'a> {
         println!("picking points & building graph took {:?}", duration);
 
         let start = Instant::now();
-        self.assign_noise_and_oceans(biome_registry);
+        self.assign_noise_and_oceans();
         //self.assign_polygon_noise();
         let duration = start.elapsed();
         println!("height calculations took {:?}", duration);
 
         let start = Instant::now();
         self.calculate_downslopes();
-        //self.calculate_watersheds(biome_registry); // very broken. also doesn't do anything rn.
+        self.calculate_watersheds(biome_registry);
         //self.create_rivers(biome_registry); // stack overflow???
         let duration = start.elapsed();
         println!("moisture calculations took {:?}", duration);
 
         let start = Instant::now();
-        self.assign_biomes();
+        self.assign_biomes(biome_registry);
         let duration = start.elapsed();
         println!("biome map lookup took {:?}", duration);
 
@@ -111,18 +111,16 @@ impl<'a> NewGenerator<'a> {
         let (plains_id, _) = biome_registry.lookup_name_to_object(PLAINS_BIOME_NAME.as_ref()).unwrap();
 
         let mut blended = vec![smallvec![]; CHUNK_DIM2Z];
-        for (ix, iz) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM) {
-            let point = Point {x: (c_pos.x * CHUNK_DIM + ix) as f64, y: (c_pos.y * CHUNK_DIM + iz) as f64};
-            blended[(ix + iz * CHUNK_DIM) as usize] = self.find_biomes_at_point(&point, plains_id);
-        }
 
         let vparams: [i32; CHUNK_DIM2Z] = {
             let mut vparams: [MaybeUninit<i32>; CHUNK_DIM2Z] =
                 unsafe { std::mem::MaybeUninit::uninit().assume_init() };
             for (i, v) in vparams[..].iter_mut().enumerate() {
-                let in_chunk_x = (i % CHUNK_DIMZ) as i32;
-                let in_chunk_z = ((i / CHUNK_DIMZ) % CHUNK_DIMZ) as i32;
-                let p = Self::elevation_noise(IVec2::new(in_chunk_x, in_chunk_z), IVec2::new(c_pos.x, c_pos.z), biome_registry, &blended, &mut self.noises).round() as i32;
+                let ix = (i % CHUNK_DIMZ) as i32;
+                let iz = ((i / CHUNK_DIMZ) % CHUNK_DIMZ) as i32;
+                let point = Point {x: (ix + c_pos.x * CHUNK_DIM) as f64, y: (iz + c_pos.z * CHUNK_DIM) as f64};
+                blended[(ix + iz * CHUNK_DIM) as usize] = self.find_biomes_at_point(&point, plains_id);
+                let p = Self::elevation_noise(IVec2::new(ix, iz), IVec2::new(c_pos.x, c_pos.z), biome_registry, &blended, &mut self.noises).round() as i32;
                 unsafe {
                     std::ptr::write(v.as_mut_ptr(), p);
                 }
@@ -146,7 +144,7 @@ impl<'a> NewGenerator<'a> {
             biomes.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or_else(|| biome_registry.lookup_object_to_id(a.0).cmp(&biome_registry.lookup_object_to_id(b.0))));
 
             for (biome, _) in biomes.iter() {
-                let ctx = Context { chunk: chunk, random: PositionalRandomFactory::default(), ground_y: height, sea_level: 0 /* hardcoded for now... */ };
+                let ctx = Context { chunk, random: PositionalRandomFactory::default(), ground_y: height, sea_level: 0 /* hardcoded for now... */ };
                 let result = (biome.rule_source)(&g_pos, &ctx, &block_registry);
                 if result.is_some() {
                     chunk.put(b_pos, result.unwrap());
@@ -163,7 +161,7 @@ impl<'a> NewGenerator<'a> {
 
         let mut heights = 0.0;
         let mut weights = 0.0;
-        for entry in blend.iter() {
+        for entry in blend {
             let biome = entry.lookup(biome_registry).unwrap();
             let noise = nf(global_pos / scale_factor, biome);
             let strength = (biome.blend_influence - entry.weight) / biome.blend_influence;
@@ -183,7 +181,6 @@ impl<'a> NewGenerator<'a> {
             let y = self.random.sample(range_y);
             self.points.push(Point {x, y});
         }
-        println!("points: {:?}", self.points)
     }
 
     fn make_diagram(&mut self, x_size: f64, y_size: f64, points: Vec<Point>) {
@@ -196,7 +193,7 @@ impl<'a> NewGenerator<'a> {
         let diagram = self.voronoi.as_ref().unwrap();
         let mut center_lookup: HashMap<[i32; 2], Rc<RefCell<Center>>> = HashMap::new();
 
-        for point in &points {
+        for point in diagram.sites() {
             let center = Rc::new(RefCell::new(Center::new(point.clone())));
             self.centers.push(center.clone());
             center_lookup.insert([point.x.round() as i32, point.y.round() as i32], center);
@@ -204,13 +201,13 @@ impl<'a> NewGenerator<'a> {
 
         let mut corner_map: Vec<Vec<Rc<RefCell<Corner>>>> = vec![];
         let mut make_corner = |point: Point| {
-            let mut bucket = point.x.abs() as i32 - 1;
-            while bucket < point.x.abs() as i32 + 1 {
-                if corner_map.get(bucket as usize).is_none() {
+            let mut bucket = point.x.abs() as usize;
+            while bucket <= point.x.abs() as usize + 2 {
+                if corner_map.get(bucket).is_none() {
                     break;
                 }
-                for q in &corner_map[bucket as usize] {
-                    let dx = point.x - q.borrow().point.x;
+                for q in &corner_map[bucket] {
+                    let dx = - q.borrow().point.x;
                     let dy = point.y - q.borrow().point.y;
                     if dx*dx + dy*dy < 1e-6 {
                         return q.clone();
@@ -219,13 +216,13 @@ impl<'a> NewGenerator<'a> {
                 bucket += 1;
             }
 
-            let bucket = point.x.abs() as usize;
+            let bucket = point.x.abs() as usize + 1;
             while corner_map.get(bucket).is_none() {
                 corner_map.push(vec![]);
             }
             let mut q = Corner::new(point);
-            q.border = q.point.x == -x_size || q.point.x == x_size
-                        || q.point.y == -y_size || q.point.y == y_size;
+            //q.border = q.point.x == -x_size/2.0 || q.point.x == x_size/2.0
+            //            || q.point.y == -y_size/2.0 || q.point.y == y_size/2.0;
             let q = Rc::new(RefCell::new(q));
             self.corners.push(q.clone());
             corner_map[bucket].push(q.clone());
@@ -243,7 +240,7 @@ impl<'a> NewGenerator<'a> {
             }
         };
 
-        let edges = Self::make_edges(diagram, &points, x_size, y_size);
+        let edges = Self::make_edges(diagram, diagram.sites());
         for (delaunay_edge, voronoi_edge) in edges {
             let mut edge = Edge::new();
             edge.midpoint = lerp(&voronoi_edge.0, &voronoi_edge.1, 0.5);
@@ -309,7 +306,7 @@ impl<'a> NewGenerator<'a> {
     }
     
     /// returns: \[(delaunay edges, voronoi edges)\]
-    fn make_edges(voronoi: &Voronoi, points: &Vec<Point>, x_size: f64, y_size: f64) -> Vec<(PointEdge, PointEdge)> {
+    fn make_edges(voronoi: &Voronoi, points: &Vec<Point>) -> Vec<(PointEdge, PointEdge)> {
         let mut list_of_delaunay_edges: Vec<PointEdge> = vec![];
     
         let triangles = &voronoi.triangulation().triangles;
@@ -346,7 +343,8 @@ impl<'a> NewGenerator<'a> {
     }
 
     fn make_noise(noises: &Noises, point: &Point) -> NoiseValues {
-        let point = [point.x * 10.0, point.y * 10.0];
+        let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
+        let point = [point.x / scale_factor, point.y / scale_factor];
         let elevation = Self::map_range((-1.5, 1.5), (0.0, 5.0), noises.elevation_noise.get_2d(point));
         let temperature = Self::map_range((-1.5, 1.5), (0.0, 5.0), noises.temperature_noise.get_2d(point));
         let moisture: f64 = Self::map_range((-1.5, 1.5), (0.0, 5.0), noises.moisture_noise.get_2d(point));
@@ -360,10 +358,7 @@ impl<'a> NewGenerator<'a> {
     /// map. In the first pass, mark the edges of the map as ocean;
     /// in the second pass, mark any water-containing polygon
     /// connected to an ocean as ocean.
-    fn assign_noise_and_oceans(&mut self, biome_registry: &BiomeRegistry) {
-        let (ocean_id, ocean) = biome_registry.lookup_name_to_object(OCEAN_BIOME_NAME.as_ref()).unwrap();
-        let (beach_id, _) = biome_registry.lookup_name_to_object(BEACH_BIOME_NAME.as_ref()).unwrap();
-
+    fn assign_noise_and_oceans(&mut self) {
         let mut queue = VecDeque::new();
 
         for p in &mut self.centers {
@@ -372,20 +367,18 @@ impl<'a> NewGenerator<'a> {
             p_b.noise = Self::make_noise(&self.noises, &p_b.point);
             let mut num_water = 0;
 
-            for q in &p_b.corners {
+            for q in p_b.corners.clone() {
                 let q = q.borrow();
                 if q.border {
+                    p_b.ocean = true;
+                    p_b.water = true;
                     queue.push_back(p.clone());
                 }
-                if ocean.moisture.contains(q.noise.moisture) && ocean.elevation.contains(q.noise.elevation) {
+                if q.water {
                     num_water += 1;
                 }
             }
-            p_b.biome = if num_water as f64 >= p_b.corners.len() as f64 * WATER_TRESHOLD {
-                Some(ocean_id)
-            } else {
-                None
-            };
+            p_b.water = p_b.ocean || num_water as f64 >= p_b.corners.len() as f64 * LAKE_TRESHOLD;
         }
         while queue.len() > 0 {
             let p = queue.pop_back();
@@ -394,8 +387,8 @@ impl<'a> NewGenerator<'a> {
             }
             for r in &p.unwrap().borrow().neighbors {
                 let mut r_b = r.borrow_mut();
-                if ocean.moisture.contains(r_b.noise.moisture) && ocean.elevation.contains(r_b.noise.elevation) && r_b.biome != Some(ocean_id) {
-                    r_b.biome = Some(ocean_id);
+                if r_b.water && !r_b.ocean {
+                    r_b.ocean = true;
                     queue.push_back(r.clone());
                 }
             }
@@ -408,17 +401,14 @@ impl<'a> NewGenerator<'a> {
             let mut num_ocean = 0;
             let mut num_land = 0;
             for r in &p.borrow().neighbors {
-                if r.borrow().biome == Some(ocean_id) {
+                if r.borrow().ocean {
                     num_ocean += 1;
-                } else  {
+                }
+                if !r.borrow().water {
                     num_land += 1;
                 }
             }
-            p.borrow_mut().biome = if num_land > 0 && num_ocean > 0 {
-                Some(beach_id)
-            } else {
-                None
-            };
+            p.borrow_mut().coast = num_land > 0 && num_ocean > 0;
         }
 
         // Set the corner attributes based on the computed polygon
@@ -431,19 +421,16 @@ impl<'a> NewGenerator<'a> {
             let mut num_ocean = 0;
             let mut num_land = 0;
             for p in &q_b.touches {
-                if p.borrow().biome == Some(ocean_id) {
+                if p.borrow().ocean {
                     num_ocean += 1;
-                } else  {
+                }
+                if !p.borrow().water {
                     num_land += 1;
                 }
             }
-            q_b.biome = if num_ocean == q_b.touches.len() {
-                Some(ocean_id)
-            } else if num_land > 0 && num_ocean > 0 {
-                Some(beach_id)
-            } else {
-                None
-            };
+            q_b.ocean = num_ocean == q_b.touches.len();
+            q_b.coast = num_land > 0 && num_ocean > 0;
+            q_b.water = q_b.border || ((num_land != q_b.touches.len()) && !q_b.coast);
         }
     }
 
@@ -508,10 +495,14 @@ impl<'a> NewGenerator<'a> {
                 if Rc::ptr_eq(q_b.watershed.as_ref().unwrap(), &q) {
                     continue;
                 }
-                if q_b.biome != Some(ocean_id) && q_b.biome != Some(beach_id) && q_b.watershed.as_ref().unwrap().borrow().biome != Some(beach_id) {
-                    let r = q_b.watershed.as_ref().unwrap();
-                    if r.borrow().biome != Some(ocean_id) {
-                        q_b.watershed = Some(r.clone());
+                if !q_b.ocean  && !q_b.coast && !q_b.watershed.as_ref().unwrap().borrow().coast {
+                    if {
+                        let downslope = q_b.downslope.as_ref().unwrap().borrow();
+                        let r = downslope.watershed.as_ref().unwrap().borrow();
+                        !r.ocean
+                    } {
+                        let downslope_watershed = q_b.downslope.as_ref().unwrap().borrow().watershed.clone().unwrap();
+                        q_b.watershed = Some(downslope_watershed);
                         changed = true;
                     }
                 }
@@ -534,18 +525,16 @@ impl<'a> NewGenerator<'a> {
     }
 
     fn create_rivers(&mut self, biome_registry: &BiomeRegistry) {
-        let (ocean_id, _) = biome_registry.lookup_name_to_object(OCEAN_BIOME_NAME.as_ref()).unwrap();
-        let (beach_id, _) = biome_registry.lookup_name_to_object(BEACH_BIOME_NAME.as_ref()).unwrap();
         let (river_id, _) = biome_registry.lookup_name_to_object(RIVER_BIOME_NAME.as_ref()).unwrap();
 
         for _ in 0..(self.size_chunks_xz / 2) {
             let mut q = self.corners[self.random.gen_range(0..self.corners.len())].clone();
-            if q.borrow_mut().biome == Some(ocean_id) || q.borrow_mut().noise.elevation < 0.3 || q.borrow_mut().noise.elevation > 0.9 {
+            if q.borrow_mut().ocean || q.borrow_mut().noise.elevation < 1.0 || q.borrow_mut().noise.elevation > 3.5 {
                 continue;
             }
-            while q.borrow().biome != Some(beach_id) {
+            while !q.borrow().coast {
                 if Rc::ptr_eq(&q, q.borrow().downslope.as_ref().unwrap()) {
-                    continue;
+                    break;
                 }
                 let edge = Self::lookup_edge_from_corner(&q, &q.borrow().downslope.as_ref().unwrap()).unwrap();
                 edge.borrow_mut().river += 1;
@@ -559,10 +548,45 @@ impl<'a> NewGenerator<'a> {
         }
     }
 
-    fn assign_biomes(&mut self) {
+    fn assign_biomes(&mut self, biome_registry: &BiomeRegistry) {
+        // go over all centers and assign biomes to them based on noise & other parameters.
         for p in &mut self.centers {
             let mut center = p.borrow_mut();
+
+            // first assign the corners' biomes
+            for corner in &center.corners {
+                let mut corner = corner.borrow_mut();
+                if corner.ocean {
+                    corner.biome = Some(biome_registry.lookup_name_to_object(OCEAN_BIOME_NAME.as_ref()).unwrap().0);
+                    continue;
+                } else if corner.water {
+                    // TODO make lake biome(s)
+                    corner.biome = Some(biome_registry.lookup_name_to_object(OCEAN_BIOME_NAME.as_ref()).unwrap().0);
+                    continue;
+                } else if corner.coast {
+                    corner.biome = Some(biome_registry.lookup_name_to_object(BEACH_BIOME_NAME.as_ref()).unwrap().0);
+                    continue;
+                }
+                for (id, biome) in &self.biome_map.generatable_biomes {
+                    if biome.elevation.contains(corner.noise.elevation) && biome.temperature.contains(corner.noise.temperature) && biome.moisture.contains(corner.noise.moisture) {
+                        corner.biome = Some(*id);
+                        break;
+                    }
+                }
+            }
+
             if center.biome.is_some() {
+                continue;
+            }
+            if center.ocean {
+                center.biome = Some(biome_registry.lookup_name_to_object(OCEAN_BIOME_NAME.as_ref()).unwrap().0);
+                continue;
+            } else if center.water {
+                // TODO make lake biome(s)
+                center.biome = Some(biome_registry.lookup_name_to_object(OCEAN_BIOME_NAME.as_ref()).unwrap().0);
+                continue;
+            } else if center.coast {
+                center.biome = Some(biome_registry.lookup_name_to_object(BEACH_BIOME_NAME.as_ref()).unwrap().0);
                 continue;
             }
             let mut found = false;
@@ -578,6 +602,7 @@ impl<'a> NewGenerator<'a> {
                 println!("found no biome for point {:?}, noise values: {:?}. Picking randomly.", center.point, center.noise);
                 let index = self.random.gen_range(0..self.biome_map.generatable_biomes.len());
                 center.biome = Some(self.biome_map.generatable_biomes[index].0);
+                println!("picked {}", biome_registry.lookup_id_to_object(center.biome.unwrap()).unwrap());
             }
         }
     }
@@ -600,87 +625,112 @@ impl<'a> NewGenerator<'a> {
         };
 
         for center in &self.centers {
-            let center = center.borrow_mut();
-            let edge_points = center.corners.iter()
+            let center_b = center.borrow();
+            let center_point = &center_b.point;
+            let edge_points = center_b.corners.iter()
                 .map(|p| p.borrow().point.clone())
+                .sorted_by(|a, b| {
+                    let determinant = (a.x - center_point.x) * (b.y - center_point.y) - (b.x - center_point.x) * (a.y * center_point.y);
+                    if determinant > 0.0 {
+                        return Ordering::Less;
+                    }
+                    if determinant < 0.0 {
+                        return Ordering::Greater;
+                    }
+                    Ordering::Equal
+                })
                 .collect_vec();
             
             if Self::contains_point(&edge_points, point) {
-                let mut to_blend: SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> = smallvec![];
+                let mut point_elevation = center_b.noise.elevation;
+                let mut point_temperature = center_b.noise.temperature;
+                let mut point_moisture = center_b.noise.moisture;
+                
+                let mut to_blend: SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> = smallvec![BiomeEntry {id: center_b.biome.unwrap_or(default), weight: 1.0}];
 
-                to_blend.push(BiomeEntry {id: center.biome.unwrap_or(default), weight: 1.0 });
+                let mut counter = center_b.neighbors.len();
+                let mut current_center = center;
+                let mut visited_corners = vec![];
 
-                for corner in &center.corners {
-                    let corner = corner.borrow();
-                    let total_distance_sqr = sqr_distance(&center.point, &corner.point).abs();
-                    let distance_sqr = sqr_distance(point, &corner.point).abs();
-                    let percent = distance_sqr.min(total_distance_sqr) / total_distance_sqr.max(distance_sqr);
-                    // weight at this point is distance from neighbor as % of travel
-                    let blend = to_blend.iter_mut().find(|e| e.id == corner.biome.unwrap_or(default));
-                    if let Some(blend) = blend {
-                        blend.weight += percent;
-                    } else {
-                        to_blend.push(BiomeEntry {id: corner.biome.unwrap_or(default), weight: percent});
+                while counter > 0 {
+                    for corner in &current_center.borrow().corners {
+                        if visited_corners.iter().any(|c| Rc::ptr_eq(c, corner)) {
+                            continue;
+                        }
+                        visited_corners.push(corner.clone());
+                        let corner = corner.borrow();
+                        let total_distance_sqr = sqr_distance(&center_b.point, &corner.point).abs();
+                        let distance_sqr = sqr_distance(&corner.point, point).abs();
+                        let weight = distance_sqr.min(total_distance_sqr) / total_distance_sqr.max(distance_sqr);
+                        let weight = 1.0 / distance_sqr;
+                        // weight at this point is distance fro as % of travel
+                        let blend = to_blend.iter_mut().find(|e| e.id == corner.biome.unwrap_or(default));
+                        if let Some(blend) = blend {
+                            blend.weight += weight;
+                        } else {
+                            to_blend.push(BiomeEntry {id: corner.biome.unwrap_or(default), weight});
+                        }
+    
+                        point_elevation += corner.noise.elevation * weight;
+                        point_temperature += corner.noise.temperature * weight;
+                        point_moisture += corner.noise.moisture * weight;
                     }
+                    
+
+                    current_center = &center_b.neighbors[counter - 1];
+                    counter -= 1;
                 }
 
                 let p = [point.x.round() as i32, point.y.round() as i32];
-                self.biome_map.map.insert(p, to_blend);
-                return self.biome_map.map[&p].clone();
+                self.biome_map.biome_map.insert(p, to_blend);
+                self.biome_map.noise_map.insert(p, (point_elevation, point_temperature, point_moisture));
+                return self.biome_map.biome_map[&p].clone();
             }
         }
-        smallvec![]
+        smallvec![BiomeEntry {id: default, weight: 1.0}]
     }
-
     
     pub fn get_biomes_at_point(&self, point: &Point) -> Option<&SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>> {
-        for center in &self.centers {
-            let center = center.borrow();
-            let edge_points = center.corners.iter()
-                .map(|p| p.borrow().point.clone())
-                .collect_vec();
-            
-            if Self::contains_point(&edge_points, point) {
-                let p = [center.point.x.round() as i32, center.point.y.round() as i32];
-                return self.biome_map.map.get(&p)
-            }
-        }
-        None
+        let p = [point.x.round() as i32, point.y.round() as i32];
+        self.biome_map.biome_map.get(&p)
+    }
+    
+    pub fn get_noises_at_point(&self, point: &Point) -> Option<&(f64, f64, f64)> {
+        let p = [point.x.round() as i32, point.y.round() as i32];
+        self.biome_map.noise_map.get(&p)
     }
 
     fn contains_point(points: &Vec<Point>, test: &Point) -> bool {
-        let v_sub = |p1: &Point, p2: &Point| Point { x: p1.x - p2.x, y: p1.y - p2.y };
-        let cosine_sign = |p1: &Point, p2: &Point| p1.x*p2.y - p1.y*p2.x;
-        let get_side = |a: &Point, b: &Point| -> Option<Side> {
-            let x = cosine_sign(a, b);
-            if x < 0.0 {
-                Some(Side::Left)
-            } else if x > 0.0 {
-                Some(Side::Right)
-            } else {
-                None
-            }
-        };
-
-        let mut previvous_side = None;
-        let point_count = points.len();
-        for n in 0..point_count {
-            let a = &points[n];
-            let b = &points[(n+1) % point_count];
-            let affine_segment = v_sub(b, a);
-            let affine_point = v_sub(test, a);
-            let current_side = get_side(&affine_segment, &affine_point);
-            if current_side.is_none() {
-                return false;
-            } else if previvous_side.is_none() {
-                previvous_side = current_side;
-            } else if previvous_side != current_side {
-                return false;
-            } else {
-                return true;
-            }
+        // check bounds first
+        let mut min_x = points[0].x;
+        let mut max_x = points[0].x;
+        let mut min_y = points[0].y;
+        let mut max_y = points[0].y;
+        for q in points.iter() {
+            min_x = min_x.min(q.x);
+            max_x = max_x.max(q.x);
+            min_y = min_y.min(q.y);
+            max_y = max_y.max(q.y);
         }
-        false
+
+        if test.x < min_x || test.x > max_x || test.y < min_y || test.y > max_y {
+            return false;
+        }
+
+        // then do a check for the area. 
+        let mut inside = false;
+        let num_vertices = points.len();
+        let mut j = num_vertices-1;
+        for i in 0..num_vertices {
+            let cur = &points[i];
+            let next = &points[j];
+            if ((cur.y > test.y) != (next.y > test.y)) && 
+                (test.x < (next.x-cur.x) * (test.y-cur.y) / (next.y-cur.y) + cur.x) {
+                inside = !inside;
+            }
+            j = i;
+        }
+        inside
     }
 
     fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {
@@ -688,7 +738,7 @@ impl<'a> NewGenerator<'a> {
     }
 
     pub fn voronoi(&self) -> &Voronoi {
-        self.voronoi.as_ref().unwrap()
+        self.voronoi.as_ref().expect("voronoi map should exist.")
     }
 
     pub fn size_blocks_xz(&self) -> i32 {
@@ -713,6 +763,10 @@ pub struct Center {
     noise: NoiseValues,
     biome: Option<RegistryId>,
 
+    water: bool,
+    ocean: bool,
+    coast: bool,
+
     neighbors: Vec<Rc<RefCell<Center>>>,
     borders: Vec<Rc<RefCell<Edge>>>,
     corners: Vec<Rc<RefCell<Corner>>>,
@@ -724,6 +778,10 @@ impl Center {
             point,
             noise: NoiseValues::default(),
             biome: None,
+
+            water: false,
+            ocean: false,
+            coast: false,
 
             neighbors: vec![],
             borders: vec![],
@@ -769,6 +827,9 @@ pub struct Corner {
     watershed: Option<Rc<RefCell<Corner>>>,
     watershed_size: i32,
 
+    water: bool,
+    ocean: bool,
+    coast: bool,
     river: i32,
 
     touches: Vec<Rc<RefCell<Center>>>,
@@ -788,6 +849,9 @@ impl Corner {
             watershed: None,
             watershed_size: 0,
 
+            water: false,
+            ocean: false,
+            coast: false,
             river: 0,
 
             touches: vec![],
@@ -795,9 +859,4 @@ impl Corner {
             adjacent: vec![],
         }
     }
-}
-
-#[derive(PartialEq)]
-pub enum Side {
-    Left, Right
 }

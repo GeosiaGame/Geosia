@@ -127,10 +127,9 @@ mod debug_window {
 
         setup_basic_biomes(&mut biome_reg);
 
-        let mut generator = NewGenerator::new(0, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 8, biome_map);
+        let mut generator = NewGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 16, biome_map);
         generator.generate_world_biomes(&biome_reg);
         let world_size_blocks = generator.size_blocks_xz() as usize;
-        let img_handle = images.add(voronoi_renderer::draw_voronoi(generator.voronoi(), &generator, &biome_reg, world_size_blocks, world_size_blocks));
 
         let start = Instant::now();
 
@@ -160,6 +159,8 @@ mod debug_window {
                 });
             }
         }
+        // generate biome map image AFTER placing blocks as the points are added to the map when placing blocks.
+        let img_handle = images.add(voronoi_renderer::draw_voronoi(generator.voronoi(), &generator, &biome_reg, world_size_blocks, world_size_blocks));
 
         let duration = start.elapsed();
         println!("chunk generation took {:?}", duration);

@@ -70,11 +70,11 @@ impl BiomeGenerator {
 
             let biome;
             let pos = [x, z];
-            if biome_map.map.contains_key(&pos) {
-                biome = biome_map.map.get(&pos).unwrap().to_owned();
+            if biome_map.biome_map.contains_key(&pos) {
+                biome = biome_map.biome_map.get(&pos).unwrap().to_owned();
             } else {
                 biome = BiomeGenerator::pick_biome(pos, biome_map, noises);
-                biome_map.map.insert(pos, biome.clone());
+                biome_map.biome_map.insert(pos, biome.clone());
             }
 
             biomes[(rx + rz * REGION_SIZE) as usize] = biome;

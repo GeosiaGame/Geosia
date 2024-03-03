@@ -44,12 +44,13 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 }
                 return None;
             },
-            surface_noise: |point: DVec2, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
+            surface_noise: |point, noise| {
                 let new_point = point * 1.5;
 
                 let mut value = noise.get_2d(new_point.to_array()) * 0.75;
                 value += noise.get_2d((new_point * 2.0).to_array()) * 0.25;
                 value *= 5.0;
+                value += 10.0;
                 return value;
             },
             blend_influence: 0.5,
@@ -84,7 +85,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 }
                 return None;
             },
-            surface_noise: |point: DVec2, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
+            surface_noise: |point, noise| {
                 let new_point = point / 3.0;
                 let new_point_arr = new_point.to_array();
 
@@ -127,7 +128,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 }
                 return None;
             },
-            surface_noise: |point: DVec2, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
+            surface_noise: |point, noise| {
                 let new_point = point / 4.0;
                 let new_point_arr = new_point.to_array();
                 let h_n = |p| (noise.get_2d(p) + 1.0) / 2.0;
@@ -151,7 +152,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: OCEAN_BIOME_NAME,
             representative_color: RGBA8::new(10, 120, 180, 255),
-            elevation: range(..),
+            elevation: range(..1.0),
             temperature: range(..),
             moisture: range(2.5..),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
@@ -167,10 +168,10 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 }
                 return None;
             },
-            surface_noise: |point: DVec2, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
+            surface_noise: |point, noise| {
                 noise.get_2d(point.to_array()) * -7.5 + 1.0
             },
-            blend_influence: 1.0,
+            blend_influence: 10.0,
             block_influence: 1.0,
             can_generate: true,
         })
@@ -194,7 +195,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                     }
                     None
                 },
-                surface_noise: |point: DVec2, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
+                surface_noise: |point, noise| {
                     noise.get_2d(point.to_array()) * 1.0 + 1.0
                 },
                 blend_influence: 1.0,
@@ -223,7 +224,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                             return Some(BlockEntry::new(i_water, 0));
                         }
                     },
-                    surface_noise: |point: DVec2, noise: &mut Box<dyn NoiseFn<f64, 2>>| {
+                    surface_noise: |point, noise| {
                         noise.get_2d(point.to_array()) * -1.5 + 1.0
                     },
                     blend_influence: 1.0,
