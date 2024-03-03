@@ -127,7 +127,7 @@ mod debug_window {
 
         setup_basic_biomes(&mut biome_reg);
 
-        let mut generator = NewGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 16, biome_map);
+        let mut generator = NewGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4, biome_map);
         generator.generate_world_biomes(&biome_reg);
         let world_size_blocks = generator.size_blocks_xz() as usize;
 

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, cmp::Ordering, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::Instant};
+use std::{cell::RefCell, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::Instant};
 
 use bevy::{ecs::system::ResMut, utils::hashbrown::HashMap};
 use bevy_math::{DVec2, IVec2, IVec3};
@@ -624,70 +624,65 @@ impl<'a> NewGenerator<'a> {
             x*x + y*y
         };
 
+        let mut closest = &self.centers[0];
+        let mut closest_distance = sqr_distance(point, &closest.borrow().point);
+
+        // just get the closest point because getting it by contained center didn't work as I expected.
+        // oh i guess this just works perfectly??
         for center in &self.centers {
-            let center_b = center.borrow();
-            let center_point = &center_b.point;
-            let edge_points = center_b.corners.iter()
-                .map(|p| p.borrow().point.clone())
-                .sorted_by(|a, b| {
-                    let determinant = (a.x - center_point.x) * (b.y - center_point.y) - (b.x - center_point.x) * (a.y * center_point.y);
-                    if determinant > 0.0 {
-                        return Ordering::Less;
-                    }
-                    if determinant < 0.0 {
-                        return Ordering::Greater;
-                    }
-                    Ordering::Equal
-                })
-                .collect_vec();
-            
-            if Self::contains_point(&edge_points, point) {
-                let mut point_elevation = center_b.noise.elevation;
-                let mut point_temperature = center_b.noise.temperature;
-                let mut point_moisture = center_b.noise.moisture;
-                
-                let mut to_blend: SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> = smallvec![BiomeEntry {id: center_b.biome.unwrap_or(default), weight: 1.0}];
-
-                let mut counter = center_b.neighbors.len();
-                let mut current_center = center;
-                let mut visited_corners = vec![];
-
-                while counter > 0 {
-                    for corner in &current_center.borrow().corners {
-                        if visited_corners.iter().any(|c| Rc::ptr_eq(c, corner)) {
-                            continue;
-                        }
-                        visited_corners.push(corner.clone());
-                        let corner = corner.borrow();
-                        let total_distance_sqr = sqr_distance(&center_b.point, &corner.point).abs();
-                        let distance_sqr = sqr_distance(&corner.point, point).abs();
-                        let weight = distance_sqr.min(total_distance_sqr) / total_distance_sqr.max(distance_sqr);
-                        let weight = 1.0 / distance_sqr;
-                        // weight at this point is distance fro as % of travel
-                        let blend = to_blend.iter_mut().find(|e| e.id == corner.biome.unwrap_or(default));
-                        if let Some(blend) = blend {
-                            blend.weight += weight;
-                        } else {
-                            to_blend.push(BiomeEntry {id: corner.biome.unwrap_or(default), weight});
-                        }
-    
-                        point_elevation += corner.noise.elevation * weight;
-                        point_temperature += corner.noise.temperature * weight;
-                        point_moisture += corner.noise.moisture * weight;
-                    }
-                    
-
-                    current_center = &center_b.neighbors[counter - 1];
-                    counter -= 1;
-                }
-
-                let p = [point.x.round() as i32, point.y.round() as i32];
-                self.biome_map.biome_map.insert(p, to_blend);
-                self.biome_map.noise_map.insert(p, (point_elevation, point_temperature, point_moisture));
-                return self.biome_map.biome_map[&p].clone();
+            let distance = sqr_distance(point, &center.borrow().point);
+            if distance < closest_distance {
+                closest = center;
+                closest_distance = distance;
             }
         }
-        smallvec![BiomeEntry {id: default, weight: 1.0}]
+        let center_b = closest.borrow();
+
+        let mut point_elevation = center_b.noise.elevation;
+        let mut point_temperature = center_b.noise.temperature;
+        let mut point_moisture = center_b.noise.moisture;
+        
+        let weight = sqr_distance(&center_b.point, point).abs().sqrt() / 10.0;
+        let mut to_blend: SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> = smallvec![BiomeEntry {id: center_b.biome.unwrap_or(default), weight: weight}];
+
+        for corner in &center_b.corners {
+            let corner = corner.borrow();
+            let total_distance_sqr = sqr_distance(&center_b.point, &corner.point).abs();
+            let distance_sqr = sqr_distance(&corner.point, point).abs();
+            let weight = distance_sqr / total_distance_sqr.max(1.0);
+            // weight at this point is distance fro as % of travel
+            let blend = to_blend.iter_mut().find(|e| e.id == corner.biome.unwrap_or(default));
+            if let Some(blend) = blend {
+                blend.weight += weight;
+            } else {
+                to_blend.push(BiomeEntry {id: corner.biome.unwrap_or(default), weight});
+            }
+
+            point_elevation += corner.noise.elevation * weight;
+            point_temperature += corner.noise.temperature * weight;
+            point_moisture += corner.noise.moisture * weight;
+        }
+        for neighbor in &center_b.neighbors {
+            let neighbor = neighbor.borrow();
+            let distance_sqr = sqr_distance(&neighbor.point, point).abs();
+            let weight = distance_sqr.sqrt();
+
+            let blend = to_blend.iter_mut().find(|e| e.id == neighbor.biome.unwrap_or(default));
+            if let Some(blend) = blend {
+                blend.weight += weight;
+            } else {
+                to_blend.push(BiomeEntry {id: neighbor.biome.unwrap_or(default), weight});
+            }
+
+            point_elevation += neighbor.noise.elevation * weight;
+            point_temperature += neighbor.noise.temperature * weight;
+            point_moisture += neighbor.noise.moisture * weight;
+        }
+
+        let p = [point.x.round() as i32, point.y.round() as i32];
+        self.biome_map.biome_map.insert(p, to_blend);
+        self.biome_map.noise_map.insert(p, (point_elevation, point_temperature, point_moisture));
+        self.biome_map.biome_map[&p].clone()
     }
     
     pub fn get_biomes_at_point(&self, point: &Point) -> Option<&SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>> {
@@ -698,39 +693,6 @@ impl<'a> NewGenerator<'a> {
     pub fn get_noises_at_point(&self, point: &Point) -> Option<&(f64, f64, f64)> {
         let p = [point.x.round() as i32, point.y.round() as i32];
         self.biome_map.noise_map.get(&p)
-    }
-
-    fn contains_point(points: &Vec<Point>, test: &Point) -> bool {
-        // check bounds first
-        let mut min_x = points[0].x;
-        let mut max_x = points[0].x;
-        let mut min_y = points[0].y;
-        let mut max_y = points[0].y;
-        for q in points.iter() {
-            min_x = min_x.min(q.x);
-            max_x = max_x.max(q.x);
-            min_y = min_y.min(q.y);
-            max_y = max_y.max(q.y);
-        }
-
-        if test.x < min_x || test.x > max_x || test.y < min_y || test.y > max_y {
-            return false;
-        }
-
-        // then do a check for the area. 
-        let mut inside = false;
-        let num_vertices = points.len();
-        let mut j = num_vertices-1;
-        for i in 0..num_vertices {
-            let cur = &points[i];
-            let next = &points[j];
-            if ((cur.y > test.y) != (next.y > test.y)) && 
-                (test.x < (next.x-cur.x) * (test.y-cur.y) / (next.y-cur.y) + cur.x) {
-                inside = !inside;
-            }
-            j = i;
-        }
-        inside
     }
 
     fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {

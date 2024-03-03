@@ -46,9 +46,9 @@ pub fn draw_voronoi(voronoi: &Voronoi, generator: &NewGenerator<'_>, biome_regis
 
         let noises = generator.get_noises_at_point(&point);
         if let Some(noises) = noises {
-            let elevation = map_range((0.0, 5.0), (0.0, 255.0), noises.0) as u8;
-            let temperature = map_range((0.0, 5.0), (0.0, 255.0), noises.1) as u8;
-            let moisture = map_range((0.0, 5.0), (0.0, 255.0), noises.2) as u8;
+            let elevation = map_range((0.0, 25.0), (0.0, 255.0), noises.0) as u8;
+            let temperature = map_range((0.0, 25.0), (0.0, 255.0), noises.1) as u8;
+            let moisture = map_range((0.0, 25.0), (0.0, 255.0), noises.2) as u8;
             noise_img.put_pixel(x, y, Rgba([elevation, temperature, moisture, 255]));
 
             elevation_img.put_pixel(x, y, Rgba([elevation, elevation, elevation, 255]));
@@ -62,7 +62,6 @@ pub fn draw_voronoi(voronoi: &Voronoi, generator: &NewGenerator<'_>, biome_regis
     elevation_img.save("./output/elevation_noise_map.png").expect("failed to save elevation noise map image");
     temperature_img.save("./output/temperature_noise_map.png").expect("failed to save temperature noise map image");
     moisture_img.save("./output/moisture_noise_map.png").expect("failed to save moisture noise map image");
-    biome_img.save("./output/biome_map_novoxelize.png").expect("failed to save nonvoxelized biome map image");
 
     // keep track of accumulated color per cell
     let mut cells = vec![(0_usize, 0_usize, 0_usize, 0_usize); voronoi.sites().len()];
