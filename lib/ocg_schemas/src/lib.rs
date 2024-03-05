@@ -1,9 +1,6 @@
 #![warn(missing_docs)]
 #![deny(clippy::disallowed_types)]
 
-#![feature(trivial_bounds)]
-#![feature(type_alias_impl_trait)]
-
 //! A library crate of the in-memory, on-disk and network representations of the game's core data.
 
 pub mod coordinates;
@@ -13,7 +10,6 @@ pub mod registry;
 pub mod schemas;
 pub mod voxel;
 pub mod range;
-pub mod utils;
 
 /// Re-exported dependencies used in API types
 pub mod dependencies {

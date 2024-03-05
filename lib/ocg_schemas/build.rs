@@ -1,5 +1,5 @@
 fn main() {
-    //#[cfg(feature = "regenerate-capnp")]
+    #[cfg(feature = "regenerate-capnp")]
     {
         use capnpc::CompilerCommand as Capnp;
 
