@@ -13,7 +13,6 @@ use super::{generation::Context, voxeltypes::{BlockRegistry, BlockEntry}};
 
 
 pub mod biome_map;
-pub mod biome_picker;
 
 /// A biome entry stored in the per-planet biome map.
 #[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Serialize, Deserialize)]

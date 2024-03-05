@@ -1,5 +1,5 @@
 
-use ocg_common::voxel::generator::newgen::NewGenerator;
+use ocg_common::voxel::generator::StdGenerator;
 use ocg_schemas::{dependencies::{image::{self, GenericImage, Rgba}, itertools::{iproduct, Itertools}}, voxel::biome::BiomeRegistry};
 use bevy::render::texture::Image;
 
@@ -8,7 +8,7 @@ fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {
 }
 
 /// Make a bevy image out of the voronoi diagram.
-pub fn draw_voronoi(generator: &NewGenerator<'_>, biome_registry: &BiomeRegistry, width: usize, height: usize) -> Image {
+pub fn draw_voronoi(generator: &StdGenerator<'_>, biome_registry: &BiomeRegistry, width: usize, height: usize) -> Image {
     let width_u32 = width as u32;
     let height_u32 = height as u32;
     let mut biome_img = image::DynamicImage::new_rgba8(width_u32, height_u32);

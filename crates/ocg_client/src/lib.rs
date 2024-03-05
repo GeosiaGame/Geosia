@@ -80,7 +80,7 @@ mod debug_window {
     use bevy::prelude::*;
     use ocg_common::voxel::biomes::setup_basic_biomes;
     use ocg_common::voxel::blocks::setup_basic_blocks;
-    use ocg_common::voxel::generator::newgen::NewGenerator;
+    use ocg_common::voxel::generator::StdGenerator;
     use ocg_common::voxel::generator::WORLD_SIZE_XZ;
     use ocg_common::voxel::generator::WORLD_SIZE_Y;
     use ocg_schemas::coordinates::AbsChunkPos;
@@ -127,7 +127,7 @@ mod debug_window {
 
         setup_basic_biomes(&mut biome_reg);
 
-        let mut generator = NewGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 8, biome_map);
+        let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 8, biome_map);
         generator.generate_world_biomes(&biome_reg);
         let world_size_blocks = generator.size_blocks_xz() as usize;
         let img_handle = images.add(voronoi_renderer::draw_voronoi(&generator, &biome_reg, world_size_blocks, world_size_blocks));
