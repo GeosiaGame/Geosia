@@ -9,36 +9,39 @@ fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {
 
 /// Make a bevy image out of the voronoi diagram.
 pub fn draw_voronoi(generator: &NewGenerator<'_>, biome_registry: &BiomeRegistry, width: usize, height: usize) -> Image {
-    let mut biome_img = image::DynamicImage::new_rgba8(width as u32, height as u32);
+    let width_u32 = width as u32;
+    let height_u32 = height as u32;
+    let mut biome_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
     
-    let mut noise_img = image::DynamicImage::new_rgba8(width as u32, height as u32);
-    let mut elevation_img = image::DynamicImage::new_rgba8(width as u32, height as u32);
-    let mut temperature_img = image::DynamicImage::new_rgba8(width as u32, height as u32);
-    let mut moisture_img = image::DynamicImage::new_rgba8(width as u32, height as u32);
+    let mut noise_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
+    let mut elevation_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
+    let mut temperature_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
+    let mut moisture_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
     
-    for (x,y) in iproduct!(0..width as u32, 0..height as u32) {
-        let mapped_x = map_range((0.0, width as f64), (-((width/2) as f64), (width/2) as f64), x as f64) as i32;
-        let mapped_y = map_range((0.0, height as f64), (-((height/2) as f64), (height/2) as f64), y as f64) as i32;
+    for (x,y) in iproduct!(0..width_u32, 0..height_u32) {
+        let mapped_x = x as i32 - (width/2) as i32;
+        let mapped_y = y as i32 - (height/2) as i32;
         let point = [mapped_x, mapped_y];
         let biomes = generator.get_biomes_at_point(&point);
 
         if biomes.is_some() {
             let average_color = biomes.unwrap().iter()
-                .map(|p| p.lookup(biome_registry).unwrap().representative_color)
+                .map(|p| (p.weight, p.lookup(biome_registry).unwrap().representative_color))
                 .collect_vec();
-            let mut color = [0_u32; 4];
-            for c in &average_color {
-                color[0] += c.r as u32;
-                color[1] += c.g as u32;
-                color[2] += c.b as u32;
-                color[3] += c.a as u32;
+            let mut color = [0.0; 3];
+            let mut total_weight = 0.0;
+            for (w, c) in &average_color {
+                color[0] += c.r as f64 * w;
+                color[2] += c.b as f64 * w;
+                color[1] += c.g as f64 * w;
+                total_weight += w;
             }
-            let length = average_color.len() as u32;
-            color[0] /= length;
-            color[1] /= length;
-            color[2] /= length;
-            color[3] /= length;
-            let color = [color[0] as u8, color[1] as u8, color[2] as u8, color[3] as u8];
+            if total_weight != 0.0 { 
+                color[0] /= total_weight;
+                color[1] /= total_weight;
+                color[2] /= total_weight;
+            }
+            let color = [color[0].round() as u8, color[1].round() as u8, color[2].round() as u8, 255];
             
             biome_img.put_pixel(x, y, Rgba(color));
         } else {
