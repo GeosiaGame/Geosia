@@ -319,9 +319,7 @@ impl<'a> StdGenerator<'a> {
         for triangle in triangles {
             for e in TRIANGLE_VERTICES { // for all edges of triangle
                 let vertex_1 = triangle[e.0].to_owned();
-                //let vertex_1 = Point {x: vertex_1.x * x_size + 0.5, y: vertex_1.y * y_size + 0.5};
                 let vertex_2 = triangle[e.1].to_owned();
-                //let vertex_2 = Point {x: vertex_2.x * x_size + 0.5, y: vertex_2.y * y_size + 0.5};
                 list_of_delaunay_edges.push(PointEdge(vertex_1,vertex_2)); // always lesser index first
             }
         }
@@ -332,9 +330,7 @@ impl<'a> StdGenerator<'a> {
             let vertices = cell.iter_vertices().collect::<Vec<&Point>>();
             for i in 0..vertices.len() {
                 let vertex_1 = vertices[i].to_owned();
-                //let vertex_1 = Point {x: vertex_1.x * x_size + 0.5, y: vertex_1.y * y_size + 0.5};
                 let vertex_2 = vertices[(i+1) % vertices.len()].to_owned();
-                //let vertex_2 = Point {x: vertex_2.x * x_size + 0.5, y: vertex_2.y * y_size + 0.5};
                 list_of_voronoi_edges.push(PointEdge(vertex_1,vertex_2));
             }
         }

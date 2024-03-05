@@ -80,7 +80,7 @@ pub struct BiomeDefinition {
     /// The block placement rule source for this biome.
     pub rule_source: fn(pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>,
     /// The noise function for this biome.
-    pub surface_noise: fn(pos: DVec2, noise: &mut Box<dyn NoiseFn<f64, 2>>) -> f64,
+    pub surface_noise: fn(pos: DVec2, noise: &mut Box<dyn NoiseFn<f64, 4>>) -> f64,
     /// The strength of this biome in the blending step.
     pub blend_influence: f64,
     /// The strength of this biome in the block placement step.
@@ -114,13 +114,13 @@ impl RegistryObject for BiomeDefinition {
 /// Different noise layers for biome generation.
 pub struct Noises {
     /// Base noise from which all other noises are derived from
-    pub base_terrain_noise: Box<dyn NoiseFn<f64, 2>>, // change to <f64, 4> once the kinks are worked out, currently it loops way too soon
+    pub base_terrain_noise: Box<dyn NoiseFn<f64, 4>>,
     /// Height noise (0~5)
-    pub elevation_noise: Box<dyn NoiseFn<f64, 2>>, // change to <f64, 4> ...
+    pub elevation_noise: Box<dyn NoiseFn<f64, 4>>,
     /// Temperature noise (0~5)
-    pub temperature_noise: Box<dyn NoiseFn<f64, 2>>, // change to <f64, 4> ...
+    pub temperature_noise: Box<dyn NoiseFn<f64, 4>>,
     /// Moisture noise (0~5)
-    pub moisture_noise: Box<dyn NoiseFn<f64, 2>>, // change to <f64, 4> ...
+    pub moisture_noise: Box<dyn NoiseFn<f64, 4>>,
 }
 
 /// Name of the default void biome.
