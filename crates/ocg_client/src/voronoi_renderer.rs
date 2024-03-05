@@ -17,9 +17,9 @@ pub fn draw_voronoi(voronoi: &Voronoi, generator: &NewGenerator<'_>, biome_regis
     let mut moisture_img = image::DynamicImage::new_rgba8(width as u32, height as u32);
     
     for (x,y) in iproduct!(0..width as u32, 0..height as u32) {
-        let mapped_x = map_range((0.0, width as f64), (-((width/2) as f64), (width/2) as f64), x as f64);
-        let mapped_y = map_range((0.0, height as f64), (-((height/2) as f64), (height/2) as f64), y as f64);
-        let point = Point {x: mapped_x, y: mapped_y};
+        let mapped_x = map_range((0.0, width as f64), (-((width/2) as f64), (width/2) as f64), x as f64) as i32;
+        let mapped_y = map_range((0.0, height as f64), (-((height/2) as f64), (height/2) as f64), y as f64) as i32;
+        let point = [mapped_x, mapped_y];
         let biomes = generator.get_biomes_at_point(&point);
 
         if biomes.is_some() {
@@ -46,9 +46,9 @@ pub fn draw_voronoi(voronoi: &Voronoi, generator: &NewGenerator<'_>, biome_regis
 
         let noises = generator.get_noises_at_point(&point);
         if let Some(noises) = noises {
-            let elevation = map_range((0.0, 25.0), (0.0, 255.0), noises.0) as u8;
-            let temperature = map_range((0.0, 25.0), (0.0, 255.0), noises.1) as u8;
-            let moisture = map_range((0.0, 25.0), (0.0, 255.0), noises.2) as u8;
+            let elevation = map_range((0.0, 50.0), (0.0, 255.0), noises.0) as u8;
+            let temperature = map_range((0.0, 50.0), (0.0, 255.0), noises.1) as u8;
+            let moisture = map_range((0.0, 50.0), (0.0, 255.0), noises.2) as u8;
             noise_img.put_pixel(x, y, Rgba([elevation, temperature, moisture, 255]));
 
             elevation_img.put_pixel(x, y, Rgba([elevation, elevation, elevation, 255]));

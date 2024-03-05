@@ -1,6 +1,6 @@
 //! All Biome-related types
 
-use std::fmt::{Debug, Display};
+use std::{fmt::{Debug, Display}, ops::{Add, AddAssign}};
 
 use bevy_math::DVec2;
 use lazy_static::lazy_static;
@@ -10,6 +10,8 @@ use serde::{Serialize, Deserialize};
 
 use crate::{registry::{Registry, RegistryName, RegistryObject, RegistryId}, range::{Range, range}};
 
+use self::biome_map::EXPECTED_BIOME_COUNT;
+
 use super::{generation::Context, voxeltypes::{BlockRegistry, BlockEntry}};
 
 
@@ -17,13 +19,27 @@ pub mod biome_map;
 pub mod biome_picker;
 
 /// A biome entry stored in the per-planet biome map.
-#[derive(Clone, Debug, PartialOrd, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Serialize, Deserialize)]
 #[repr(C)]
 pub struct BiomeEntry {
     /// The biome ID in registry.
     pub id: RegistryId,
     /// Weight map
     pub weight: f64,
+}
+
+impl Add for BiomeEntry {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        BiomeEntry {id: self.id, weight: self.weight + rhs.weight}
+    }
+}
+
+impl AddAssign for BiomeEntry {
+    fn add_assign(&mut self, rhs: Self) {
+        self.weight += rhs.weight;
+    }
 }
 
 impl BiomeEntry {
