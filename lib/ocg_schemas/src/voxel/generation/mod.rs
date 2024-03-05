@@ -14,6 +14,8 @@ pub mod blur;
 
 /// Context data for world generation.
 pub struct Context<'a> {
+    /// The world seed.
+    pub seed: u64,
     /// The chunk. Unmodifiable through here.
     pub chunk: &'a PaletteStorage<BlockEntry>,
     /// A positional random factory.

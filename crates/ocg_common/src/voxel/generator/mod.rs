@@ -126,7 +126,7 @@ impl<'a> StdGenerator<'a> {
             biomes.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or_else(|| biome_registry.lookup_object_to_id(a.0).cmp(&biome_registry.lookup_object_to_id(b.0))));
 
             for (biome, _) in biomes.iter() {
-                let ctx = Context { chunk: chunk, random: PositionalRandomFactory::default(), ground_y: height, sea_level: 0 /* hardcoded for now... */ };
+                let ctx = Context { seed: self.seed, chunk, random: PositionalRandomFactory::default(), ground_y: height, sea_level: 0 /* hardcoded for now... */ };
                 let result = (biome.rule_source)(&g_pos, &ctx, &block_registry);
                 if result.is_some() {
                     chunk.put(b_pos, result.unwrap());

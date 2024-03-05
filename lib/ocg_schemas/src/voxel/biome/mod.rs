@@ -3,14 +3,11 @@
 use std::{fmt::{Debug, Display}, ops::{Add, AddAssign}};
 
 use bevy_math::DVec2;
-use lazy_static::lazy_static;
 use noise::NoiseFn;
 use rgb::RGBA8;
 use serde::{Serialize, Deserialize};
 
-use crate::{registry::{Registry, RegistryName, RegistryObject, RegistryId}, range::{Range, range}};
-
-use self::biome_map::EXPECTED_BIOME_COUNT;
+use crate::{registry::{Registry, RegistryName, RegistryObject, RegistryId}, range::Range};
 
 use super::{generation::Context, voxeltypes::{BlockRegistry, BlockEntry}};
 
@@ -32,13 +29,18 @@ impl Add for BiomeEntry {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        BiomeEntry {id: self.id, weight: self.weight + rhs.weight}
+        if self.id == rhs.id {
+            return BiomeEntry {id: self.id, weight: self.weight + rhs.weight};
+        }
+        self
     }
 }
 
 impl AddAssign for BiomeEntry {
     fn add_assign(&mut self, rhs: Self) {
-        self.weight += rhs.weight;
+        if self.id == rhs.id {
+            self.weight += rhs.weight;
+        }
     }
 }
 
@@ -46,7 +48,7 @@ impl BiomeEntry {
     /// Helper to construct a new biome entry.
     pub fn new(id: RegistryId) -> Self {
         Self {
-            id: id,
+            id,
             weight: 0.0,
         }
     }
@@ -110,8 +112,6 @@ impl RegistryObject for BiomeDefinition {
     }
 }
 
-impl BiomeDefinition {}
-
 /// Different noise layers for biome generation.
 pub struct Noises {
     /// Base noise from which all other noises are derived from
@@ -124,23 +124,5 @@ pub struct Noises {
     pub moisture_noise: Box<dyn NoiseFn<f64, 2>>, // change to <f64, 4> ...
 }
 
-/// Name of the default-er plains biome.
-pub const PLAINS_BIOME_NAME: RegistryName = RegistryName::ocg_const("plains");
 /// Name of the default void biome.
 pub const VOID_BIOME_NAME: RegistryName = RegistryName::ocg_const("void");
-
-lazy_static! {
-    /// Registration for said biome.
-    pub static ref VOID_BIOME: BiomeDefinition = BiomeDefinition {
-        name: VOID_BIOME_NAME,
-        representative_color: RGBA8::new(0, 0, 0, 0),
-        elevation: range(-1.0..-1.0),
-        temperature: range(-1.0..-1.0),
-        moisture: range(-1.0..-1.0),
-        rule_source: |_pos: &bevy_math::IVec3, _ctx: &Context, _reg: &BlockRegistry| None,
-        surface_noise: |_point, _noise| 0.0,
-        blend_influence: 0.0,
-        block_influence: 0.0,
-        can_generate: false,
-    };
-}
