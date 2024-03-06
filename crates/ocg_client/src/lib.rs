@@ -127,7 +127,7 @@ mod debug_window {
 
         setup_basic_biomes(&mut biome_reg);
 
-        let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 8, biome_map);
+        let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4, biome_map);
         generator.generate_world_biomes(&biome_reg);
         let world_size_blocks = generator.size_blocks_xz() as usize;
         let img_handle = images.add(voronoi_renderer::draw_voronoi(&generator, &biome_reg, world_size_blocks, world_size_blocks));
@@ -145,15 +145,15 @@ mod debug_window {
             let chunks = &test_chunks
             .get_neighborhood_around(*pos)
             .transpose_option();
-            if chunks.is_some() {
-                let c00mesh = mesh_from_chunk(
+            if let Some(chunks) = chunks {
+                let chunk_mesh = mesh_from_chunk(
                     &block_reg,
-                    &chunks.as_ref().unwrap(),
+                    chunks,
                 )
                 .unwrap();
     
                 commands.spawn(PbrBundle {
-                    mesh: meshes.add(c00mesh),
+                    mesh: meshes.add(chunk_mesh),
                     material: white_material.clone(),
                     transform: Transform::from_xyz(0.0, 0.0, 0.0),
                     ..default()
