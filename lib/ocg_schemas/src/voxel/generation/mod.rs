@@ -1,6 +1,6 @@
 //! World generation related methods.
 
-use std::f64::consts::{SQRT_2, TAU};
+use std::f64::consts::TAU;
 
 use noise::{NoiseFn, Seedable};
 
@@ -54,7 +54,7 @@ impl<T> Noise4DTo2D<4> for T where T: NoiseFn<f64, 4> + ?Sized {
                         angle_x.sin() / TAU * CONVERT_NOISE_SCALE, 
                         angle_y.cos() / TAU * CONVERT_NOISE_SCALE, 
                         angle_y.sin() / TAU * CONVERT_NOISE_SCALE]
-            ) * SQRT_2
+            ) * 1.5
     }
 }
 
