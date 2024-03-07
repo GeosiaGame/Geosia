@@ -14,3 +14,13 @@ ocg_schemas.workspace = true
 # Remote
 anyhow.workspace = true
 bevy.workspace = true
+bevy_math.workspace = true
+noise.workspace = true
+rand.workspace = true
+rand_xoshiro.workspace = true
+thread_local.workspace = true
+lru.workspace = true
+lazy_static.workspace = true
+voronoice.workspace = true
+image.workspace = true
+serde.workspace = true

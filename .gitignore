@@ -12,3 +12,6 @@ crates/*/target
 Thumbs.db
 /wgpu_trace/
 .cargo/config
+.vscode/*
+
+/output/

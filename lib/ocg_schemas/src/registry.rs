@@ -140,7 +140,7 @@ impl<'a> Display for RegistryNameRef<'a> {
 }
 
 /// Needs to be implemented on any object that can be a part of a Registry
-pub trait RegistryObject {
+pub trait RegistryObject: PartialEq {
     /// Should be trivial
     fn registry_name(&self) -> RegistryNameRef;
 }
@@ -254,6 +254,23 @@ impl<Object: RegistryObject> Registry<Object> {
     pub fn lookup_id_to_object(&self, id: RegistryId) -> Option<&Object> {
         self.id_to_obj.get(id.0.get() as usize)?.as_ref()
     }
+    
+    /// Given a registry object, find look up its ID, or return `None` if it's not found.
+    pub fn lookup_object_to_id(&self, object: &Object) -> Option<RegistryId> {
+        self.id_to_obj.iter().position(|r| r.as_ref().is_some_and(|o| o == object)).map(|i| RegistryId(NonZeroU32::new(i as u32).unwrap()))
+    }
+
+    /// Gets a `Vec` of all the ID -> Object mappings in this registry.
+    pub fn get_objects_ids(&self) -> Vec<(&RegistryId, &Object)> {
+        let mut result = Vec::new();
+        for id in self.name_to_id.values().into_iter() {
+            let obj = self.lookup_id_to_object(*id);
+            if let Some(o) = obj {
+                result.push((id, o));
+            }
+        }
+        result
+    }
 }
 
 #[cfg(test)]
@@ -267,7 +284,7 @@ mod test {
         fn registry_name(&self) -> RegistryNameRef {
             self.0.as_ref()
         }
-    }
+    } 
 
     #[test]
     pub fn simple_registry() {

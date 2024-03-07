@@ -6,3 +6,5 @@ pub mod chunk_storage;
 pub mod neighborhood;
 pub mod standard_shapes;
 pub mod voxeltypes;
+pub mod biome;
+pub mod generation;

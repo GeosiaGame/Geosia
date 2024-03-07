@@ -3,6 +3,8 @@
 
 //! The clientside of OpenCubeGame
 pub mod voxel;
+mod debugcam;
+mod voronoi_renderer;
 
 use bevy::a11y::AccessibilityPlugin;
 use bevy::audio::AudioPlugin;
@@ -63,7 +65,8 @@ pub fn client_main() {
         .add_plugins(AudioPlugin::default())
         .add_plugins(GilrsPlugin)
         .add_plugins(AnimationPlugin)
-        .add_plugins(GltfPlugin::default());
+        .add_plugins(GltfPlugin::default())
+        .add_plugins(debugcam::PlayerPlugin);
 
     app.add_plugins(debug_window::DebugWindow);
 
@@ -71,15 +74,21 @@ pub fn client_main() {
 }
 
 mod debug_window {
+    use std::time::Instant;
+
     use bevy::log;
-    use bevy::math::Vec3A;
     use bevy::prelude::*;
-    use ocg_common::voxel::blocks::{setup_basic_blocks, GRASS_BLOCK_NAME, STONE_BLOCK_NAME};
-    use ocg_schemas::coordinates::{AbsChunkPos, InChunkRange};
+    use ocg_common::voxel::biomes::setup_basic_biomes;
+    use ocg_common::voxel::blocks::setup_basic_blocks;
+    use ocg_common::voxel::generator::StdGenerator;
+    use ocg_common::voxel::generator::WORLD_SIZE_XZ;
+    use ocg_common::voxel::generator::WORLD_SIZE_Y;
+    use ocg_schemas::coordinates::AbsChunkPos;
     use ocg_schemas::dependencies::itertools::iproduct;
-    use ocg_schemas::voxel::chunk_storage::ChunkStorage;
+    use ocg_schemas::voxel::biome::BiomeRegistry;
     use ocg_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME};
 
+    use crate::voronoi_renderer;
     use crate::voxel::meshgen::mesh_from_chunk;
     use crate::voxel::{ClientChunk, ClientChunkGroup};
 
@@ -94,15 +103,12 @@ mod debug_window {
     fn debug_window_setup(
         mut commands: Commands,
         asset_server: Res<AssetServer>,
+        mut images: ResMut<Assets<Image>>,
         mut meshes: ResMut<Assets<Mesh>>,
         mut materials: ResMut<Assets<StandardMaterial>>,
     ) {
         log::warn!("Setting up debug window");
         let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
-        commands.spawn(Camera3dBundle {
-            transform: Transform::from_xyz(0.0, 6., 12.0).looking_at(Vec3::new(0., 0., 0.), Vec3::Y),
-            ..default()
-        });
 
         let white_material = materials.add(StandardMaterial {
             base_color: Color::GRAY,
@@ -113,42 +119,48 @@ mod debug_window {
         setup_basic_blocks(&mut block_reg);
         let block_reg = block_reg;
         let (empty, _) = block_reg.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
-        let (stone, _) = block_reg.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
-        let (grass, _) = block_reg.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
+
+        let mut biome_reg = BiomeRegistry::default();
+        setup_basic_biomes(&mut biome_reg);
+        let biome_reg = biome_reg;
+
+        let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4);
+        generator.generate_world_biomes(&biome_reg);
+        let world_size_blocks = generator.size_blocks_xz() as usize;
+        let img_handle = images.add(voronoi_renderer::draw_voronoi(&generator, &biome_reg, world_size_blocks, world_size_blocks));
+
+        let start = Instant::now();
 
         let mut test_chunks = ClientChunkGroup::new();
-        for (cx, cy, cz) in iproduct!(-2..=2, -2..=2, -2..=2) {
+        for (cx, cy, cz) in iproduct!(-WORLD_SIZE_XZ..=WORLD_SIZE_XZ, -WORLD_SIZE_Y..=WORLD_SIZE_Y, -WORLD_SIZE_XZ..=WORLD_SIZE_XZ) {
             let cpos = AbsChunkPos::new(cx, cy, cz);
             let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
-            for pos in InChunkRange::WHOLE_CHUNK.iter_xzy() {
-                if (pos.cmpeq(IVec3::splat(0)) | pos.cmpeq(IVec3::splat(31))).any() {
-                    // Empty borders to force a full render
-                    continue;
-                }
-                let fpos = (pos.as_vec3a() / Vec3A::splat(16.0)) - Vec3A::splat(1.0);
-                if fpos.length_squared() <= 0.75 {
-                    let id = if fpos.y < 0.2 { stone } else { grass };
-                    chunk.blocks.put(pos, BlockEntry::new(id, 0));
-                }
-            }
+            generator.generate_chunk(cpos, &mut chunk.blocks, &block_reg, &biome_reg);
             test_chunks.chunks.insert(cpos, chunk);
         }
-        let c00mesh = mesh_from_chunk(
-            &block_reg,
-            &test_chunks
-                .get_neighborhood_around(AbsChunkPos::ZERO)
-                .transpose_option()
-                .unwrap(),
-        )
-        .unwrap();
+        for (pos, _) in test_chunks.chunks.iter() {
+            let chunks = &test_chunks
+            .get_neighborhood_around(*pos)
+            .transpose_option();
+            if let Some(chunks) = chunks {
+                let chunk_mesh = mesh_from_chunk(
+                    &block_reg,
+                    chunks,
+                )
+                .unwrap();
+    
+                commands.spawn(PbrBundle {
+                    mesh: meshes.add(chunk_mesh),
+                    material: white_material.clone(),
+                    transform: Transform::from_xyz(0.0, 0.0, 0.0),
+                    ..default()
+                });
+            }
+        }
 
-        commands.spawn(PbrBundle {
-            mesh: meshes.add(c00mesh),
-            material: white_material,
-            transform: Transform::from_xyz(-16.0, -45.0, -60.0),
-            ..default()
-        });
-
+        let duration = start.elapsed();
+        println!("chunk generation took {:?}", duration);
+        
         commands.spawn(DirectionalLightBundle {
             directional_light: DirectionalLight {
                 shadows_enabled: false,
@@ -166,6 +178,7 @@ mod debug_window {
                     height: Val::Percent(25.0),
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
+                    flex_shrink: 0.0,
                     ..default()
                 },
                 background_color: Color::CRIMSON.into(),
@@ -182,6 +195,17 @@ mod debug_window {
                 ));
                 log::warn!("Child made");
             });
+        
+        commands.spawn(ImageBundle {
+            image: UiImage::new(img_handle),
+            style: Style {
+                width: Val::Px(100.0),
+                height: Val::Px(100.0),
+                flex_shrink: 0.0,
+                ..default()
+            },
+            ..default()
+        });
         log::warn!("Setting up debug window done");
     }
 }
