@@ -254,10 +254,13 @@ impl<Object: RegistryObject> Registry<Object> {
     pub fn lookup_id_to_object(&self, id: RegistryId) -> Option<&Object> {
         self.id_to_obj.get(id.0.get() as usize)?.as_ref()
     }
-    
+
     /// Given a registry object, find look up its ID, or return `None` if it's not found.
     pub fn lookup_object_to_id(&self, object: &Object) -> Option<RegistryId> {
-        self.id_to_obj.iter().position(|r| r.as_ref().is_some_and(|o| o == object)).map(|i| RegistryId(NonZeroU32::new(i as u32).unwrap()))
+        self.id_to_obj
+            .iter()
+            .position(|r| r.as_ref().is_some_and(|o| o == object))
+            .map(|i| RegistryId(NonZeroU32::new(i as u32).unwrap()))
     }
 
     /// Gets a `Vec` of all the ID -> Object mappings in this registry.
@@ -284,7 +287,7 @@ mod test {
         fn registry_name(&self) -> RegistryNameRef {
             self.0.as_ref()
         }
-    } 
+    }
 
     #[test]
     pub fn simple_registry() {

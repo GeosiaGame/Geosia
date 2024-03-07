@@ -48,8 +48,8 @@ pub fn create_local_rpc_client(
 #[cfg(test)]
 mod test {
     use crate::network::transport::*;
-    use crate::GameServerControlCommand;
     use crate::prelude::*;
+    use crate::GameServerControlCommand;
 
     #[test]
     fn test_server_metadata() {
@@ -95,7 +95,10 @@ mod test {
                         let _ = rpc_server.await;
                         let _ = rpc_client.await;
                         let (shutdown_tx, shutdown_rx) = async_oneshot_channel();
-                        server.control_channel.send(GameServerControlCommand::Shutdown(shutdown_tx)).unwrap();
+                        server
+                            .control_channel
+                            .send(GameServerControlCommand::Shutdown(shutdown_tx))
+                            .unwrap();
                         shutdown_rx.await.unwrap();
                     })
                     .await;

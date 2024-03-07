@@ -4,7 +4,6 @@
 //
 //THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-
 use bevy::ecs::event::ManualEventReader;
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
@@ -199,8 +198,7 @@ fn player_look(
                 pitch = pitch.clamp(-1.54, 1.54);
 
                 // Order is important to prevent unintended roll
-                transform.rotation =
-                    Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_axis_angle(Vec3::X, pitch);
+                transform.rotation = Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_axis_angle(Vec3::X, pitch);
             }
         }
     } else {
@@ -238,59 +236,56 @@ fn initial_grab_on_flycam_spawn(
     }
 }
 
-fn spawn_debug_text(
-    asset_server: Res<AssetServer>,
-    mut commands: Commands,
-) {
+fn spawn_debug_text(asset_server: Res<AssetServer>, mut commands: Commands) {
     let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
     commands.spawn((
         TextBundle::from_sections([
             TextSection::new(
-            "Current Biome:", 
-            TextStyle {
+                "Current Biome:",
+                TextStyle {
+                    font: font.clone(),
+                    font_size: 15.0,
+                    color: Color::rgb(0.9, 0.9, 0.9),
+                },
+            ),
+            TextSection::from_style(TextStyle {
                 font: font.clone(),
                 font_size: 15.0,
                 color: Color::rgb(0.9, 0.9, 0.9),
             }),
-            TextSection::from_style(
-                TextStyle {
-                font: font.clone(),
-                font_size: 15.0,
-                color: Color::rgb(0.9, 0.9, 0.9),
-            })
         ]),
-        BiomeText
+        BiomeText,
     ));
     commands.spawn((
         TextBundle::from_sections([
             TextSection::new(
-            "Current Position:", 
-            TextStyle {
-                font: font.clone(),
-                font_size: 15.0,
-                color: Color::rgb(0.9, 0.9, 0.9),
-            }),
-            TextSection::from_style(
+                "Current Position:",
                 TextStyle {
+                    font: font.clone(),
+                    font_size: 15.0,
+                    color: Color::rgb(0.9, 0.9, 0.9),
+                },
+            ),
+            TextSection::from_style(TextStyle {
                 font: font.clone(),
                 font_size: 15.0,
                 color: Color::rgb(0.9, 0.9, 0.9),
             }),
             TextSection::new(
-            "\nCurrent Rotation:", 
-            TextStyle {
-                font: font.clone(),
-                font_size: 15.0,
-                color: Color::rgb(0.9, 0.9, 0.9),
-            }),
-            TextSection::from_style(
+                "\nCurrent Rotation:",
                 TextStyle {
+                    font: font.clone(),
+                    font_size: 15.0,
+                    color: Color::rgb(0.9, 0.9, 0.9),
+                },
+            ),
+            TextSection::from_style(TextStyle {
                 font: font.clone(),
                 font_size: 15.0,
                 color: Color::rgb(0.9, 0.9, 0.9),
             }),
         ]),
-        PositionText
+        PositionText,
     ));
 }
 

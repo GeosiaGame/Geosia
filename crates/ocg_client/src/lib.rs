@@ -2,9 +2,9 @@
 #![deny(clippy::disallowed_types)]
 
 //! The clientside of OpenCubeGame
-pub mod voxel;
 mod debugcam;
 mod voronoi_renderer;
+pub mod voxel;
 
 use bevy::a11y::AccessibilityPlugin;
 use bevy::audio::AudioPlugin;
@@ -136,28 +136,31 @@ mod debug_window {
         let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4);
         generator.generate_world_biomes(&biome_reg);
         let world_size_blocks = generator.size_blocks_xz() as usize;
-        let img_handle = images.add(voronoi_renderer::draw_voronoi(&generator, &biome_reg, world_size_blocks, world_size_blocks));
+        let img_handle = images.add(voronoi_renderer::draw_voronoi(
+            &generator,
+            &biome_reg,
+            world_size_blocks,
+            world_size_blocks,
+        ));
 
         let start = Instant::now();
 
         let mut test_chunks = ClientChunkGroup::new();
-        for (cx, cy, cz) in iproduct!(-WORLD_SIZE_XZ..=WORLD_SIZE_XZ, -WORLD_SIZE_Y..=WORLD_SIZE_Y, -WORLD_SIZE_XZ..=WORLD_SIZE_XZ) {
+        for (cx, cy, cz) in iproduct!(
+            -WORLD_SIZE_XZ..=WORLD_SIZE_XZ,
+            -WORLD_SIZE_Y..=WORLD_SIZE_Y,
+            -WORLD_SIZE_XZ..=WORLD_SIZE_XZ
+        ) {
             let cpos = AbsChunkPos::new(cx, cy, cz);
             let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
             generator.generate_chunk(cpos, &mut chunk.blocks, &block_reg, &biome_reg);
             test_chunks.chunks.insert(cpos, chunk);
         }
         for (pos, _) in test_chunks.chunks.iter() {
-            let chunks = &test_chunks
-            .get_neighborhood_around(*pos)
-            .transpose_option();
+            let chunks = &test_chunks.get_neighborhood_around(*pos).transpose_option();
             if let Some(chunks) = chunks {
-                let chunk_mesh = mesh_from_chunk(
-                    &block_reg,
-                    chunks,
-                )
-                .unwrap();
-    
+                let chunk_mesh = mesh_from_chunk(&block_reg, chunks).unwrap();
+
                 commands.spawn(PbrBundle {
                     mesh: meshes.add(chunk_mesh),
                     material: white_material.clone(),
@@ -169,7 +172,7 @@ mod debug_window {
 
         let duration = start.elapsed();
         println!("chunk generation took {:?}", duration);
-        
+
         commands.spawn(DirectionalLightBundle {
             directional_light: DirectionalLight {
                 shadows_enabled: false,
@@ -204,7 +207,7 @@ mod debug_window {
                 ));
                 log::warn!("Child made");
             });
-        
+
         commands.spawn(ImageBundle {
             image: UiImage::new(img_handle),
             style: Style {

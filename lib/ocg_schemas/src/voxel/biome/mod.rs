@@ -5,12 +5,16 @@ use std::fmt::{Debug, Display};
 use bevy_math::DVec2;
 use noise::NoiseFn;
 use rgb::RGBA8;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use crate::{registry::{Registry, RegistryName, RegistryObject, RegistryId}, range::Range};
-
-use super::{generation::Context, voxeltypes::{BlockRegistry, BlockEntry}};
-
+use super::{
+    generation::Context,
+    voxeltypes::{BlockEntry, BlockRegistry},
+};
+use crate::{
+    range::Range,
+    registry::{Registry, RegistryId, RegistryName, RegistryObject},
+};
 
 pub mod biome_map;
 
@@ -27,10 +31,7 @@ pub struct BiomeEntry {
 impl BiomeEntry {
     /// Helper to construct a new biome entry.
     pub fn new(id: RegistryId) -> Self {
-        Self {
-            id,
-            weight: 0.0,
-        }
+        Self { id, weight: 0.0 }
     }
 
     /// Helper to look up the biome definition corresponding to this ID

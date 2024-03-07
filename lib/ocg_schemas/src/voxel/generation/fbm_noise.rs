@@ -1,7 +1,7 @@
 //! bBm noise function with configurable per-octave strength.
 
-use noise::{NoiseFn, Seedable};
 use bevy_math::{DVec2, DVec3, DVec4};
+use noise::{NoiseFn, Seedable};
 
 /// Noise function that outputs fBm (fractal Brownian motion) noise.
 ///
@@ -114,7 +114,7 @@ where
     pub fn set_frequency(self, frequency: f64) -> Self {
         Self { frequency, ..self }
     }
-    
+
     /// Sets the lacunarity and returns a new fBm noise generator.
     pub fn set_lacunarity(self, lacunarity: f64) -> Self {
         Self { lacunarity, ..self }
@@ -122,10 +122,7 @@ where
 
     /// Sets the persistence and returns a new fBm noise generator.
     pub fn set_persistence(self, persistence: f64) -> Self {
-        Self {
-            persistence,
-            ..self
-        }
+        Self { persistence, ..self }
     }
 
     /// Sets the seed for this noise.
@@ -133,7 +130,7 @@ where
         if self.seed == seed {
             return;
         }
-        
+
         self.seed = seed;
         self.sources = super::build_sources(seed, &self.octaves);
     }
@@ -227,7 +224,7 @@ where
             if o != 0.0 {
                 // Get the signal.
                 signal = self.sources[x].get(point.to_array());
-                
+
                 // Scale the result for this octave
                 signal *= o;
 
@@ -267,7 +264,7 @@ where
         for x in 0..self.octaves.len() {
             // Get the signal.
             let mut signal = self.sources[x].get(point.to_array());
-            
+
             // Scale the result for this octave
             signal *= self.octaves[x];
 
@@ -306,7 +303,7 @@ where
         for x in 0..self.octaves.len() {
             // Get the signal.
             let mut signal = self.sources[x].get(point.to_array());
-            
+
             // Scale the amplitude for this octave
             signal *= self.octaves[x];
 
@@ -327,4 +324,3 @@ where
         result * self.scale_factor
     }
 }
-

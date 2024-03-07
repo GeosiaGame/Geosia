@@ -1,13 +1,11 @@
 //! World biome map implementation
 
 use hashbrown::HashMap;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
+use super::{BiomeDefinition, BiomeEntry};
 use crate::registry::RegistryId;
-
-use super::{BiomeEntry, BiomeDefinition};
-
 
 /// Global scale modification, every other value is multiplied with this.
 pub const GLOBAL_SCALE_MOD: f64 = 1.0;
