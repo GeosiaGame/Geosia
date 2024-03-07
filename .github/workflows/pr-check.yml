@@ -12,6 +12,10 @@ on:
 
 name: Check PR
 
+concurrency:
+  cancel-in-progress: true
+  group: pr/${{ github.ref }}
+
 jobs:
   tests:
     name: ${{ matrix.rust }} (${{ matrix.os }})
