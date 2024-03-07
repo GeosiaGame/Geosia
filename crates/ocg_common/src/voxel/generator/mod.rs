@@ -141,7 +141,7 @@ impl StdGenerator {
 
             let g_pos = <IVec3>::from(b_pos) + (<IVec3>::from(c_pos) * CHUNK_DIM);
             let height = vparams[(pos_x + pos_z * CHUNK_DIM) as usize];
-            
+
             let mut biomes: SmallVec<[(&BiomeDefinition, f64); 3]> = SmallVec::new();
             for b in blended[(pos_x + pos_z * CHUNK_DIM) as usize].iter() {
                 let e = b.lookup(biome_registry).unwrap();
@@ -179,7 +179,7 @@ impl StdGenerator {
         heights / weights
     }
 
-    
+
 
     fn pick_biome_points(&mut self, count: u32, x_size: f64, y_size: f64) {
         let range_x = Uniform::new(-x_size/2.0, x_size/2.0);
@@ -253,14 +253,14 @@ impl StdGenerator {
             let mut edge = Edge::new();
             edge.midpoint = lerp(&voronoi_edge.0, &voronoi_edge.1, 0.5);
 
-            // Edges point to corners. Edges point to centers. 
+            // Edges point to corners. Edges point to centers.
             edge.v0 = Some(make_corner(voronoi_edge.0));
             edge.v1 = Some(make_corner(voronoi_edge.1));
             edge.d0 = center_lookup.get(&[delaunay_edge.0.x.round() as i32, delaunay_edge.0.y.round() as i32]).cloned();
             edge.d1 = center_lookup.get(&[delaunay_edge.1.x.round() as i32, delaunay_edge.1.y.round() as i32]).cloned();
 
             let rc = Rc::new(RefCell::new(edge));
-            
+
             // Centers point to edges. Corners point to edges.
             if let Some(d0) = &rc.borrow().d0 {
                 d0.borrow_mut().borders.push(rc.clone());
@@ -274,15 +274,15 @@ impl StdGenerator {
             if let Some(v1) = &rc.borrow().v1 {
                 v1.borrow_mut().protrudes.push(rc.clone());
             }
-            
+
             // Centers point to centers.
-            if let Some(d0) = &rc.borrow().d0 && let Some(d1) = &rc.borrow().d1 {
+            if let (Some(d0), Some(d1)) = (&rc.borrow().d0, &rc.borrow().d1) {
                 add_to_center_list(&mut d0.borrow_mut().neighbors, &Some(d1.clone()));
                 add_to_center_list(&mut d1.borrow_mut().neighbors, &Some(d0.clone()));
             }
 
             // Corners point to corners
-            if let Some(v0) = &rc.borrow().v0 && let Some(v1) = &rc.borrow().v1 {
+            if let (Some(v0), Some(v1)) = (&rc.borrow().v0, &rc.borrow().v1) {
                 add_to_corner_list(&mut v0.borrow_mut().adjacent, &Some(v1.clone()));
                 add_to_corner_list(&mut v1.borrow_mut().adjacent, &Some(v0.clone()));
             }
@@ -312,11 +312,11 @@ impl StdGenerator {
             self.edges.push(rc);
         }
     }
-    
+
     /// returns: \[(delaunay edges, voronoi edges)\]
     fn make_edges(voronoi: &Voronoi, points: &Vec<Point>) -> Vec<(PointEdge, PointEdge)> {
         let mut list_of_delaunay_edges: Vec<PointEdge> = vec![];
-    
+
         let triangles = &voronoi.triangulation().triangles;
         let triangles: Vec<[&Point; 3]> = (0..triangles.len() / 3).map(|t| [
             &points[triangles[3 * t + 0]],
@@ -440,7 +440,7 @@ impl StdGenerator {
         for e in &self.edges {
             let mut e_b = e.borrow_mut();
             e_b.noise = Self::make_noise(&self.noises, &e_b.midpoint);
-            
+
         }
     }
 
@@ -504,7 +504,7 @@ impl StdGenerator {
                 break;
             }
         }
-        
+
         // How big is each watershed?
         for q in &self.corners {
             let mut q_b = q.borrow_mut();
@@ -679,7 +679,7 @@ impl StdGenerator {
         let mut point_elevation = center_b.noise.elevation;
         let mut point_temperature = center_b.noise.temperature;
         let mut point_moisture = center_b.noise.moisture;
-        
+
         let weight = sqr_distance(&center_b.point, point).abs().sqrt() / 10.0;
         let mut to_blend: SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> = smallvec![BiomeEntry {id: center_b.biome.unwrap_or(default), weight: weight}];
 
@@ -753,7 +753,7 @@ impl StdGenerator {
         point_elevation /= total;
         point_temperature /= total;
         point_moisture /= total;
-        
+
         for entry in &mut to_blend {
             entry.weight /= total;
         }
@@ -763,12 +763,12 @@ impl StdGenerator {
         self.biome_map.noise_map.insert(p, (point_elevation, point_temperature, point_moisture));
         self.biome_map.biome_map[&p].clone()
     }
-    
+
     /// Get the biomes at the given point from the biome map.
     pub fn get_biomes_at_point(&self, point: &[i32; 2]) -> Option<&SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>> {
         self.biome_map.biome_map.get(point)
     }
-    
+
     /// Get the noise values at the given point from the biome map.
     pub fn get_noises_at_point(&self, point: &[i32; 2]) -> Option<&(f64, f64, f64)> {
         self.biome_map.noise_map.get(point)
@@ -857,7 +857,7 @@ impl Edge {
             v0: None,
             v1: None,
             midpoint: Point::default(),
-            
+
             noise: NoiseValues::default(),
             biome: None,
 
@@ -889,7 +889,7 @@ struct Corner {
 
 impl Corner {
     fn new(position: Point) -> Corner {
-        Self { 
+        Self {
             noise: NoiseValues::default(),
             point: position,
             border: false,
