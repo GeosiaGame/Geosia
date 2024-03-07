@@ -91,12 +91,12 @@ macro_rules! impl_simple_ivec3_newtype {
             /// (0, 0, 1)
             pub const Z: Self = Self(IVec3::Z);
 
-            /// Const-friendly from<IVec3>
+            /// Const-friendly `from<IVec3>`
             pub const fn from_ivec3(value: IVec3) -> Self {
                 Self(value)
             }
 
-            /// Const-friendly into<IVec3>
+            /// Const-friendly `into<IVec3>`
             pub const fn into_ivec3(self) -> IVec3 {
                 self.0
             }
@@ -215,7 +215,7 @@ impl InChunkPos {
     /// (31, 31, 31)
     pub const MAX: Self = Self(IVec3::splat(CHUNK_DIM - 1));
 
-    /// Const-friendly try_from<IVec3>
+    /// Const-friendly `try_from<IVec3>`
     pub const fn try_from_ivec3(v: IVec3) -> Result<Self, InChunkVecError> {
         let IVec3 { x, y, z } = v;
         if (x < 0) || (x >= CHUNK_DIM) || (y < 0) || (y >= CHUNK_DIM) || (z < 0) || (z >= CHUNK_DIM) {

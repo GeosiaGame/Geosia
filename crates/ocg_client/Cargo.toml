@@ -8,12 +8,18 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+default-run = "ocg_client"
+
 [dependencies]
 # Local
 ocg_schemas.workspace = true
 ocg_common.workspace = true
 # Remote
 anyhow.workspace = true
+hashbrown.workspace = true
+quinn.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
 voronoice.workspace = true
 image.workspace = true
 

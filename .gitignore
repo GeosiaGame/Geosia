@@ -12,6 +12,7 @@ crates/*/target
 Thumbs.db
 /wgpu_trace/
 .cargo/config
+.cargo/config.toml
 .vscode/*
 
 /output/

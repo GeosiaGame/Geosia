@@ -466,6 +466,8 @@ mod test {
     }
 }
 
+// tests generate these giant data tables, keep them at the end of the file
+#[allow(clippy::items_after_test_module)]
 /// Cross product table for a pair of directions, indexed by 6*a+b (a,b being signed axis indices)
 static DIRECTION_CROSS_TABLE: [Option<Direction>; 36] = {
     use Direction::*;
@@ -509,6 +511,8 @@ static DIRECTION_CROSS_TABLE: [Option<Direction>; 36] = {
     ]
 };
 
+// tests generate these giant data tables, keep them at the end of the file
+#[allow(clippy::items_after_test_module)]
 /// Lookup table for [`OctahedralOrientation::apply_to_dir`] and [`OctahedralOrientation::unapply_to_dir`]
 /// Computed by running `test::test_apply_unapply_lut`.
 static APPLY_UNAPPLY_LUT: [(Direction, Direction); 6 * 24] = {

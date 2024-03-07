@@ -1,4 +1,4 @@
-# Copy this file to .cargo/config to speed up linking and compilation
+# Copy this file to .cargo/config.toml to speed up linking and compilation
 
 
 [target.'cfg(target_arch = "x86_64")']

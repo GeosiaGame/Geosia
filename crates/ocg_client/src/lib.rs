@@ -24,6 +24,15 @@ use bevy::time::TimePlugin;
 use bevy::ui::UiPlugin;
 use bevy::window::{ExitCondition, PresentMode};
 use bevy::winit::WinitPlugin;
+use ocg_schemas::OcgExtraData;
+
+/// An [`OcgExtraData`] implementation containing the client-side data for the game engine.
+pub struct ClientData;
+
+impl OcgExtraData for ClientData {
+    type ChunkData = voxel::ClientChunkData;
+    type GroupData = ();
+}
 
 /// The entry point to the client executable
 pub fn client_main() {
@@ -53,7 +62,7 @@ pub fn client_main() {
         .add_plugins(AccessibilityPlugin)
         .add_plugins(AssetPlugin::default())
         .add_plugins(ScenePlugin)
-        .add_plugins(WinitPlugin)
+        .add_plugins(WinitPlugin::default())
         .add_plugins(RenderPlugin::default())
         .add_plugins(ImagePlugin::default())
         .add_plugins(PipelinedRenderingPlugin)

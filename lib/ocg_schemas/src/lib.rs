@@ -11,6 +11,15 @@ pub mod schemas;
 pub mod voxel;
 pub mod range;
 
+/// A trait implemented by the game server and client, specifying the concrete types to attach as extra metadata for every chunk, chunk group, entity, etc.
+/// Used to inject side-specific data into common data structures.
+pub trait OcgExtraData {
+    /// Per-chunk data
+    type ChunkData: Clone;
+    /// Per-chunk group data
+    type GroupData: Clone;
+}
+
 /// Re-exported dependencies used in API types
 pub mod dependencies {
     pub use anyhow;
