@@ -3,6 +3,7 @@
 use anyhow::Context;
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
+use bevy::render::render_asset::RenderAssetUsages;
 use ocg_schemas::coordinates::{AbsBlockPos, RelBlockPos, CHUNK_DIM};
 use ocg_schemas::dependencies::itertools::iproduct;
 use ocg_schemas::direction::ALL_DIRECTIONS;
@@ -11,7 +12,8 @@ use ocg_schemas::voxel::neighborhood::ChunkRefNeighborhood;
 use ocg_schemas::voxel::standard_shapes::{StandardShapeMetadata, VOXEL_NO_SHAPE};
 use ocg_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry};
 
-use crate::voxel::{ClientChunk, ClientChunkData};
+use crate::voxel::ClientChunk;
+use crate::ClientData;
 
 /// Returns is a chunk has any blocks that require rendering a chunk mesh.
 pub fn does_chunk_need_rendering(chunk: &ClientChunk, registry: &BlockRegistry) -> bool {
@@ -28,18 +30,15 @@ const AO_OCCLUSION_FACTOR: f32 = 0.88;
 /// Creates a bevy mesh from a chunk, using neighboring chunks to determine culling&ambient occlusion information.
 #[allow(clippy::cognitive_complexity)]
 #[inline(never)]
-pub fn mesh_from_chunk(
-    registry: &BlockRegistry,
-    chunks: &ChunkRefNeighborhood<ClientChunkData>,
-) -> anyhow::Result<Mesh> {
+pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<ClientData>) -> anyhow::Result<Mesh> {
     // position relative to the central chunk
     #[inline(always)]
-    fn get_block(chunks: &ChunkRefNeighborhood<ClientChunkData>, position: AbsBlockPos) -> BlockEntry {
+    fn get_block(chunks: &ChunkRefNeighborhood<ClientData>, position: AbsBlockPos) -> BlockEntry {
         let (chunk_pos, in_pos) = position.split_chunk_component();
         chunks.get(chunk_pos).unwrap().blocks.get_copy(in_pos)
     }
 
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD);
     let mut pos_buf: Vec<[f32; 3]> = Vec::with_capacity(6144);
     let mut normal_buf: Vec<[f32; 3]> = Vec::with_capacity(6144);
     let mut color_buf: Vec<[f32; 4]> = Vec::with_capacity(6144);
@@ -161,7 +160,7 @@ pub fn mesh_from_chunk(
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos_buf);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normal_buf);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color_buf);
-    mesh.set_indices(Some(Indices::U32(ibuf)));
+    mesh.insert_indices(Indices::U32(ibuf));
 
     Ok(mesh)
 }

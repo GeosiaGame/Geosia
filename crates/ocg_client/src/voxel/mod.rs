@@ -3,12 +3,14 @@
 use ocg_schemas::voxel::chunk::Chunk;
 use ocg_schemas::voxel::chunk_group::ChunkGroup;
 
+use crate::ClientData;
+
 pub mod meshgen;
 
 /// Client Chunk type
-pub type ClientChunk = Chunk<ClientChunkData>;
+pub type ClientChunk = Chunk<ClientData>;
 /// Client ChunkGroup type
-pub type ClientChunkGroup = ChunkGroup<ClientChunkData, ClientChunkGroupData>;
+pub type ClientChunkGroup = ChunkGroup<ClientData>;
 
 /// Client-only per-chunk data storage
 #[derive(Clone, Default)]

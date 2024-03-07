@@ -12,6 +12,10 @@ on:
 
 name: Check PR
 
+concurrency:
+  cancel-in-progress: true
+  group: pr/${{ github.ref }}
+
 jobs:
   tests:
     name: ${{ matrix.rust }} (${{ matrix.os }})
@@ -20,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest ]
-        rust: [ stable, nightly-2023-08-08 ]
+        rust: [ stable, nightly-2024-03-01 ]
         include:
           - os: ubuntu-latest
             sccache-path: /home/runner/.cache/sccache

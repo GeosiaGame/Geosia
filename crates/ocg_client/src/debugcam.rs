@@ -4,15 +4,10 @@
 //
 //THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-
-use bevy::ecs::event::{Events, ManualEventReader};
+use bevy::ecs::event::ManualEventReader;
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
-
-pub mod prelude {
-    pub use crate::*;
-}
 
 /// Keeps track of mouse motion events, pitch, and yaw
 #[derive(Resource, Default)]
@@ -51,10 +46,10 @@ pub struct KeyBindings {
 impl Default for KeyBindings {
     fn default() -> Self {
         Self {
-            move_forward: KeyCode::W,
-            move_backward: KeyCode::S,
-            move_left: KeyCode::A,
-            move_right: KeyCode::D,
+            move_forward: KeyCode::KeyW,
+            move_backward: KeyCode::KeyS,
+            move_left: KeyCode::KeyA,
+            move_right: KeyCode::KeyD,
             move_ascend: KeyCode::Space,
             move_descend: KeyCode::ShiftLeft,
             toggle_grab_cursor: KeyCode::Escape,
@@ -109,7 +104,7 @@ fn setup_player(mut commands: Commands) {
 
 /// Handles keyboard input and movement
 fn player_move(
-    keys: Res<Input<KeyCode>>,
+    keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     settings: Res<MovementSettings>,
@@ -188,7 +183,7 @@ fn player_look(
 ) {
     if let Ok(window) = primary_window.get_single() {
         for mut transform in camera_query.iter_mut() {
-            for ev in state.reader_motion.iter(&motion) {
+            for ev in state.reader_motion.read(&motion) {
                 let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
                 match window.cursor.grab_mode {
                     CursorGrabMode::None => (),
@@ -203,8 +198,7 @@ fn player_look(
                 pitch = pitch.clamp(-1.54, 1.54);
 
                 // Order is important to prevent unintended roll
-                transform.rotation =
-                    Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_axis_angle(Vec3::X, pitch);
+                transform.rotation = Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_axis_angle(Vec3::X, pitch);
             }
         }
     } else {
@@ -213,7 +207,7 @@ fn player_look(
 }
 
 fn cursor_grab(
-    keys: Res<Input<KeyCode>>,
+    keys: Res<ButtonInput<KeyCode>>,
     key_bindings: Res<KeyBindings>,
     mut primary_window: Query<&mut Window, With<PrimaryWindow>>,
 ) {
@@ -242,59 +236,56 @@ fn initial_grab_on_flycam_spawn(
     }
 }
 
-fn spawn_debug_text(
-    asset_server: Res<AssetServer>,
-    mut commands: Commands,
-) {
+fn spawn_debug_text(asset_server: Res<AssetServer>, mut commands: Commands) {
     let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
     commands.spawn((
         TextBundle::from_sections([
             TextSection::new(
-            "Current Biome:", 
-            TextStyle {
+                "Current Biome:",
+                TextStyle {
+                    font: font.clone(),
+                    font_size: 15.0,
+                    color: Color::rgb(0.9, 0.9, 0.9),
+                },
+            ),
+            TextSection::from_style(TextStyle {
                 font: font.clone(),
                 font_size: 15.0,
                 color: Color::rgb(0.9, 0.9, 0.9),
             }),
-            TextSection::from_style(
-                TextStyle {
-                font: font.clone(),
-                font_size: 15.0,
-                color: Color::rgb(0.9, 0.9, 0.9),
-            })
         ]),
-        BiomeText
+        BiomeText,
     ));
     commands.spawn((
         TextBundle::from_sections([
             TextSection::new(
-            "Current Position:", 
-            TextStyle {
-                font: font.clone(),
-                font_size: 15.0,
-                color: Color::rgb(0.9, 0.9, 0.9),
-            }),
-            TextSection::from_style(
+                "Current Position:",
                 TextStyle {
+                    font: font.clone(),
+                    font_size: 15.0,
+                    color: Color::rgb(0.9, 0.9, 0.9),
+                },
+            ),
+            TextSection::from_style(TextStyle {
                 font: font.clone(),
                 font_size: 15.0,
                 color: Color::rgb(0.9, 0.9, 0.9),
             }),
             TextSection::new(
-            "\nCurrent Rotation:", 
-            TextStyle {
-                font: font.clone(),
-                font_size: 15.0,
-                color: Color::rgb(0.9, 0.9, 0.9),
-            }),
-            TextSection::from_style(
+                "\nCurrent Rotation:",
                 TextStyle {
+                    font: font.clone(),
+                    font_size: 15.0,
+                    color: Color::rgb(0.9, 0.9, 0.9),
+                },
+            ),
+            TextSection::from_style(TextStyle {
                 font: font.clone(),
                 font_size: 15.0,
                 color: Color::rgb(0.9, 0.9, 0.9),
             }),
         ]),
-        PositionText
+        PositionText,
     ));
 }
 

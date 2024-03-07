@@ -5,12 +5,11 @@ use std::f64::consts::TAU;
 use noise::{NoiseFn, Seedable};
 
 use self::positional_random::PositionalRandomFactory;
+use super::{chunk_storage::PaletteStorage, voxeltypes::BlockEntry};
 
-use super::{voxeltypes::BlockEntry, chunk_storage::PaletteStorage};
-
+pub mod blur;
 pub mod fbm_noise;
 pub mod positional_random;
-pub mod blur;
 
 /// Context data for world generation.
 pub struct Context<'a> {
@@ -26,14 +25,14 @@ pub struct Context<'a> {
     pub sea_level: i32,
 }
 
-fn build_sources<Source>(seed: u32, octaves: &Vec<f64>) -> Vec<Source>
+fn build_sources<Source>(seed: u32, octaves: &[f64]) -> Vec<Source>
 where
     Source: Default + Seedable,
 {
     let mut sources = Vec::with_capacity(octaves.len());
-    for x in 0..octaves.len() {
+    for &x in octaves {
         let source = Source::default();
-        sources.push(source.set_seed(seed ^ (octaves[x] * 4037543.0) as u32));
+        sources.push(source.set_seed(seed ^ (x * 4037543.0) as u32));
     }
     sources
 }
@@ -46,19 +45,26 @@ pub trait Noise4DTo2D<const T: usize> {
     fn get_2d(&self, point: [f64; 2]) -> f64;
 }
 
-impl<T> Noise4DTo2D<4> for T where T: NoiseFn<f64, 4> + ?Sized {
+impl<T> Noise4DTo2D<4> for T
+where
+    T: NoiseFn<f64, 4> + ?Sized,
+{
     fn get_2d(&self, point: [f64; 2]) -> f64 {
         let angle_x = TAU * point[0];
         let angle_y = TAU * point[1];
-        self.get([angle_x.cos() / TAU * CONVERT_NOISE_SCALE, 
-                        angle_x.sin() / TAU * CONVERT_NOISE_SCALE, 
-                        angle_y.cos() / TAU * CONVERT_NOISE_SCALE, 
-                        angle_y.sin() / TAU * CONVERT_NOISE_SCALE]
-            ) * 1.5
+        self.get([
+            angle_x.cos() / TAU * CONVERT_NOISE_SCALE,
+            angle_x.sin() / TAU * CONVERT_NOISE_SCALE,
+            angle_y.cos() / TAU * CONVERT_NOISE_SCALE,
+            angle_y.sin() / TAU * CONVERT_NOISE_SCALE,
+        ]) * 1.5
     }
 }
 
-impl<T> Noise4DTo2D<3> for T where T: NoiseFn<f64, 3> + ?Sized {
+impl<T> Noise4DTo2D<3> for T
+where
+    T: NoiseFn<f64, 3> + ?Sized,
+{
     fn get_2d(&self, point: [f64; 2]) -> f64 {
         let angle_x = TAU * point[0];
         let y = point[1];
@@ -66,7 +72,10 @@ impl<T> Noise4DTo2D<3> for T where T: NoiseFn<f64, 3> + ?Sized {
     }
 }
 
-impl<T> Noise4DTo2D<2> for T where T: NoiseFn<f64, 2> + ?Sized {
+impl<T> Noise4DTo2D<2> for T
+where
+    T: NoiseFn<f64, 2> + ?Sized,
+{
     fn get_2d(&self, point: [f64; 2]) -> f64 {
         self.get(point)
     }

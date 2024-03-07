@@ -10,6 +10,8 @@ fn main() {
             .import_path("capnp/")
             .output_path("capnp-generated/")
             .file("capnp/game_types.capnp")
+            .file("capnp/network.capnp")
+            .file("capnp/voxel_mesh.capnp")
             .run()
             .expect("compiling capnp schema");
     }

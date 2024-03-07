@@ -1,5 +1,6 @@
 //! Descriptors for in-game voxel/block types.
 use std::fmt::{Debug, Formatter};
+use std::hash::{Hash, Hasher};
 
 use rgb::RGBA8;
 use serde::{Deserialize, Serialize};
@@ -53,7 +54,7 @@ pub enum BlockShapeSet {
 }
 
 /// A definition of a block type, specifying properties such as registry name, shape, textures.
-#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockDefinition {
     /// The unique registry name
     pub name: RegistryName,
@@ -87,7 +88,13 @@ impl RegistryObject for BlockDefinition {
 
 impl PartialEq for BlockDefinition {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
+        self.name.eq(&other.name)
+    }
+}
+
+impl Hash for BlockDefinition {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state)
     }
 }
 

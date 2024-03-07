@@ -18,7 +18,10 @@ pub enum Range<Idx> {
     Full,
 }
 
-impl<Idx> Range<Idx> where Idx: PartialOrd {
+impl<Idx> Range<Idx>
+where
+    Idx: PartialOrd,
+{
     /// Does this range contain the given value?
     pub fn contains(&self, x: Idx) -> bool {
         match self {
@@ -51,14 +54,19 @@ where
 /// A wrapper for `std::ops::range`s
 pub trait GenRange<R, Idx> {
     /// Converts the std range to this crate's range.
-    fn range(r: R) -> Range<Idx> where Self: Sized;
+    fn range(r: R) -> Range<Idx>
+    where
+        Self: Sized;
 }
 impl<Idx> GenRange<std::ops::Range<Idx>, Idx> for std::ops::Range<Idx> {
     fn range(r: std::ops::Range<Idx>) -> Range<Idx> {
         Range::Closed(r.start, r.end)
     }
 }
-impl<Idx> GenRange<std::ops::RangeInclusive<Idx>, Idx> for std::ops::RangeInclusive<Idx> where Idx: Clone {
+impl<Idx> GenRange<std::ops::RangeInclusive<Idx>, Idx> for std::ops::RangeInclusive<Idx>
+where
+    Idx: Clone,
+{
     fn range(r: std::ops::RangeInclusive<Idx>) -> Range<Idx> {
         Range::ClosedInclusive(r.start().clone(), r.end().clone())
     }
@@ -83,7 +91,6 @@ impl<Idx> GenRange<std::ops::RangeFull, Idx> for std::ops::RangeFull {
         Range::Full
     }
 }
-
 
 /// Now I can build ranges with this function:
 pub fn range<Idx, R: GenRange<R, Idx>>(r: R) -> Range<Idx> {
