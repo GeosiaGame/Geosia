@@ -1,7 +1,7 @@
-
+use bevy::render::render_asset::RenderAssetUsages;
 use ocg_common::voxel::generator::StdGenerator;
 use ocg_schemas::{dependencies::itertools::{iproduct, Itertools}, voxel::biome::BiomeRegistry};
-use image::{self, GenericImage, Rgba};
+use image::{GenericImage, Rgba};
 use bevy::render::texture::Image;
 
 fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {
@@ -70,5 +70,5 @@ pub fn draw_voronoi(generator: &StdGenerator, biome_registry: &BiomeRegistry, wi
 
     biome_img.save("./output/biome_map.png").expect("failed to save biome map image");
     // return a RGBA8 bevy image.
-    Image::from_dynamic(biome_img, false)
+    Image::from_dynamic(biome_img, false, RenderAssetUsages::all())
 }
