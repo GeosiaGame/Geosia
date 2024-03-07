@@ -15,9 +15,12 @@ pub const OCEAN_BIOME_NAME: RegistryName = RegistryName::ocg_const("ocean");
 pub const HILLS_BIOME_NAME: RegistryName = RegistryName::ocg_const("hills");
 /// Registry name for mountains.
 pub const MOUNTAINS_BIOME_NAME: RegistryName = RegistryName::ocg_const("mountains");
+/// Registry name for beach.
 pub const BEACH_BIOME_NAME: RegistryName = RegistryName::ocg_const("beach");
+/// Registry name for river.
 pub const RIVER_BIOME_NAME: RegistryName = RegistryName::ocg_const("river");
 
+/// Installs the base set of biomes into the given block registry.
 pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
     biome_registry
         .push_object(BiomeDefinition {

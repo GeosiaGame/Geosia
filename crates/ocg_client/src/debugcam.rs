@@ -9,8 +9,6 @@ use bevy::ecs::event::{Events, ManualEventReader};
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
-use ocg_schemas::voxel::biome::BiomeRegistry;
-use ocg_schemas::voxel::biome::biome_map::BiomeMap;
 
 pub mod prelude {
     pub use crate::*;
@@ -116,8 +114,6 @@ fn player_move(
     primary_window: Query<&Window, With<PrimaryWindow>>,
     settings: Res<MovementSettings>,
     key_bindings: Res<KeyBindings>,
-    biome_map: Res<BiomeMap>,
-    biome_registry: Res<BiomeRegistry>,
     mut camera_query: Query<(&FlyCam, &mut Transform)>, //    mut query: Query<&mut Transform, With<FlyCam>>,
     mut set: ParamSet<(Query<&mut Text, With<BiomeText>>, Query<&mut Text, With<PositionText>>)>,
 ) {
@@ -158,6 +154,7 @@ fn player_move(
             camera_pos = transform.translation;
             camera_angle = transform.rotation;
         }
+        /*
         for mut text in &mut set.p0() {
             let i_camera_pos = camera_pos.as_ivec3();
             let biomes = biome_map.biome_map.get(&[i_camera_pos.x, i_camera_pos.z]);
@@ -169,6 +166,7 @@ fn player_move(
                 text.sections[1].value = t;
             }
         }
+        */
         for mut text in &mut set.p1() {
             text.sections[1].value = camera_pos.to_string();
             let euler = camera_angle.to_euler(EulerRot::XYZ);

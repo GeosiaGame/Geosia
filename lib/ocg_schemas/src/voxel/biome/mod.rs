@@ -1,6 +1,6 @@
 //! All Biome-related types
 
-use std::{fmt::{Debug, Display}, ops::{Add, AddAssign}};
+use std::fmt::{Debug, Display};
 
 use bevy_math::DVec2;
 use noise::NoiseFn;
@@ -22,25 +22,6 @@ pub struct BiomeEntry {
     pub id: RegistryId,
     /// Weight map
     pub weight: f64,
-}
-
-impl Add for BiomeEntry {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        if self.id == rhs.id {
-            return BiomeEntry {id: self.id, weight: self.weight + rhs.weight};
-        }
-        self
-    }
-}
-
-impl AddAssign for BiomeEntry {
-    fn add_assign(&mut self, rhs: Self) {
-        if self.id == rhs.id {
-            self.weight += rhs.weight;
-        }
-    }
 }
 
 impl BiomeEntry {

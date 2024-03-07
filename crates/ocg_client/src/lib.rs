@@ -86,7 +86,6 @@ mod debug_window {
     use ocg_schemas::coordinates::AbsChunkPos;
     use ocg_schemas::dependencies::itertools::iproduct;
     use ocg_schemas::voxel::biome::BiomeRegistry;
-    use ocg_schemas::voxel::biome::biome_map::BiomeMap;
     use ocg_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME};
 
     use crate::voronoi_renderer;
@@ -97,18 +96,14 @@ mod debug_window {
 
     impl Plugin for DebugWindow {
         fn build(&self, app: &mut App) {
-            app.insert_resource(BiomeMap::default())
-                .insert_resource(BiomeRegistry::default())
-                .add_systems(Startup, debug_window_setup);
+            app.add_systems(Startup, debug_window_setup);
         }
     }
 
     fn debug_window_setup(
         mut commands: Commands,
         asset_server: Res<AssetServer>,
-        biome_map: ResMut<BiomeMap>,
         mut images: ResMut<Assets<Image>>,
-        mut biome_reg: ResMut<BiomeRegistry>,
         mut meshes: ResMut<Assets<Mesh>>,
         mut materials: ResMut<Assets<StandardMaterial>>,
     ) {
@@ -125,9 +120,11 @@ mod debug_window {
         let block_reg = block_reg;
         let (empty, _) = block_reg.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
 
+        let mut biome_reg = BiomeRegistry::default();
         setup_basic_biomes(&mut biome_reg);
+        let biome_reg = biome_reg;
 
-        let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4, biome_map);
+        let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4);
         generator.generate_world_biomes(&biome_reg);
         let world_size_blocks = generator.size_blocks_xz() as usize;
         let img_handle = images.add(voronoi_renderer::draw_voronoi(&generator, &biome_reg, world_size_blocks, world_size_blocks));

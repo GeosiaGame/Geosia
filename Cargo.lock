@@ -3211,8 +3211,10 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "bevy",
+ "image",
  "ocg_common",
  "ocg_schemas",
+ "voronoice",
 ]
 
 [[package]]
@@ -3222,6 +3224,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "bevy_math",
+ "image",
  "lazy_static",
  "lru",
  "noise",
@@ -3238,7 +3241,6 @@ name = "ocg_schemas"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "bevy",
  "bevy_math",
  "bitflags 2.3.3",
  "bitvec",
@@ -3248,10 +3250,8 @@ dependencies = [
  "criterion",
  "either",
  "hashbrown 0.14.0",
- "image",
  "itertools 0.11.0",
  "kstring",
- "lazy_static",
  "noise",
  "once_cell",
  "quickcheck",
@@ -3263,7 +3263,6 @@ dependencies = [
  "serde",
  "smallvec",
  "thiserror",
- "voronoice",
 ]
 
 [[package]]

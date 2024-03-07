@@ -21,5 +21,6 @@ rand_xoshiro.workspace = true
 thread_local.workspace = true
 lru.workspace = true
 lazy_static.workspace = true
-serde.workspace = true
 voronoice.workspace = true
+image.workspace = true
+serde.workspace = true

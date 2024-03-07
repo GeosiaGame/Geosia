@@ -25,13 +25,6 @@ pub const CHUNK_DIM3Z: usize = (CHUNK_DIM * CHUNK_DIM * CHUNK_DIM) as usize;
 /// Chunk dimensions in blocks as a [IVec3] for convenience
 pub const CHUNK_DIM3V: IVec3 = IVec3::splat(CHUNK_DIM);
 
-/// Length of a side of a region in blocks
-pub const REGION_SIZE: i32 = 4 * CHUNK_DIM;
-/// Number of blocks on the face of a region
-pub const REGION_SIZE2: i32 = REGION_SIZE * REGION_SIZE;
-/// Number of blocks on the face of a region
-pub const REGION_SIZE2Z: usize = (REGION_SIZE * REGION_SIZE) as usize;
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Error)]
 #[error("Given coordinates were outside of chunk boundaries: {0}")]
 /// Error when the given coordinates are outside of the chunk boundary.
@@ -419,12 +412,6 @@ impl From<AbsBlockPos> for AbsChunkPos {
 // === RelChunkPos
 impl_simple_ivec3_newtype!(RelChunkPos);
 impl_rel_abs_pair!(RelChunkPos, AbsChunkPos);
-
-impl From<AbsChunkPos> for RelChunkPos {
-    fn from(value: AbsChunkPos) -> Self {
-        Self(value.0)
-    }
-}
 
 // === AbsBlockPos
 impl_simple_ivec3_newtype!(AbsBlockPos);

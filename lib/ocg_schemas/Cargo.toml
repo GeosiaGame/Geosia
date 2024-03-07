@@ -23,7 +23,6 @@ bytemuck.workspace = true
 bitflags.workspace = true
 bitvec.workspace = true
 bevy_math.workspace = true
-bevy.workspace = true
 capnp.workspace = true
 either.workspace = true
 hashbrown.workspace = true
@@ -37,9 +36,6 @@ thiserror.workspace = true
 rand.workspace = true
 rand_xoshiro.workspace = true
 noise.workspace = true
-lazy_static.workspace = true
-voronoice.workspace = true
-image.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

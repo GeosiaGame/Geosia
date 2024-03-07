@@ -14,6 +14,8 @@ ocg_schemas.workspace = true
 ocg_common.workspace = true
 # Remote
 anyhow.workspace = true
+voronoice.workspace = true
+image.workspace = true
 
 [dependencies.bevy]
 workspace = true

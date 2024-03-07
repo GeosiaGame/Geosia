@@ -1,6 +1,8 @@
+//! Standard world generator.
+
 use std::{cell::RefCell, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::Instant};
 
-use bevy::{ecs::system::ResMut, utils::hashbrown::HashMap};
+use bevy::utils::hashbrown::HashMap;
 use bevy_math::{DVec2, IVec2, IVec3};
 use noise::OpenSimplex;
 use ocg_schemas::{coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIMZ}, dependencies::{itertools::{iproduct, Itertools}, smallvec::{smallvec, SmallVec}}, registry::RegistryId, voxel::{biome::{biome_map::{BiomeMap, EXPECTED_BIOME_COUNT, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD}, BiomeDefinition, BiomeEntry, BiomeRegistry, Noises, VOID_BIOME_NAME}, chunk_storage::{ChunkStorage, PaletteStorage}, generation::{fbm_noise::Fbm, positional_random::PositionalRandomFactory, Context, Noise4DTo2D}, voxeltypes::{BlockEntry, BlockRegistry}}};
@@ -11,7 +13,9 @@ use voronoice::*;
 
 use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME, RIVER_BIOME_NAME};
 
+/// World size of the +X & +Z axis, in chunks.
 pub const WORLD_SIZE_XZ: i32 = 8;
+/// World size of the +Y axis, in chunks.
 pub const WORLD_SIZE_Y: i32 = 4;
 
 
@@ -25,13 +29,14 @@ fn lerp(start: &Point, end: &Point, value: f64) -> Point {
     add(&mul(start, 1.0 - value),& mul(end, value))
 }
 
-pub struct StdGenerator<'a> {
+/// Standard world generator implementation.
+pub struct StdGenerator {
     seed: u64,
     size_chunks_xz: i32,
     biome_point_count: u32,
 
     random: Xoshiro128StarStar,
-    biome_map: ResMut<'a, BiomeMap>,
+    biome_map: BiomeMap,
     noises: Noises,
 
     voronoi: Option<Voronoi>,
@@ -41,8 +46,9 @@ pub struct StdGenerator<'a> {
     edges: Vec<Rc<RefCell<Edge>>>,
 }
 
-impl<'a> StdGenerator<'a> {
-    pub fn new(seed: u64, size_chunks_xz: i32, biome_point_count: u32, biome_map: ResMut<'a, BiomeMap>) -> Self {
+impl StdGenerator {
+    /// create a new StdGenerator.
+    pub fn new(seed: u64, size_chunks_xz: i32, biome_point_count: u32) -> Self {
         let seed_int = seed as u32;
         Self {
             seed,
@@ -50,7 +56,7 @@ impl<'a> StdGenerator<'a> {
             biome_point_count,
 
             random: Xoshiro128StarStar::seed_from_u64(seed),
-            biome_map,
+            biome_map: BiomeMap::default(),
             noises: Noises {
                 base_terrain_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int).set_octaves(vec![-4.0, 1.0, 1.0, 0.0])),
                 elevation_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(1347)).set_octaves(vec![1.0, 2.0, 2.0, 1.0])),
@@ -66,6 +72,7 @@ impl<'a> StdGenerator<'a> {
         }
     }
 
+    /// Generate the biome map for the world.
     pub fn generate_world_biomes(&mut self, biome_registry: &BiomeRegistry) {
         // initialize generatable biomes
         let mut biomes: Vec<(RegistryId, BiomeDefinition)> = Vec::new();
@@ -110,6 +117,7 @@ impl<'a> StdGenerator<'a> {
     }
 
 
+    /// Generate a single chunk's blocks for the world.
     pub fn generate_chunk(&mut self, c_pos: AbsChunkPos, chunk: &mut PaletteStorage<BlockEntry>, block_registry: &BlockRegistry, biome_registry: &BiomeRegistry) {
         let mut blended = vec![smallvec![]; CHUNK_DIM2Z];
 
@@ -634,7 +642,7 @@ impl<'a> StdGenerator<'a> {
         }
     }
 
-    pub fn lookup_edge_from_corner(q: &Rc<RefCell<Corner>>, s: &Rc<RefCell<Corner>>) -> Option<Rc<RefCell<Edge>>> {
+    fn lookup_edge_from_corner(q: &Rc<RefCell<Corner>>, s: &Rc<RefCell<Corner>>) -> Option<Rc<RefCell<Edge>>> {
         for edge in &q.borrow().protrudes {
             if edge.borrow().v0.is_some() && Rc::ptr_eq(edge.borrow().v0.as_ref().unwrap(), s) {
                 return Some(edge.clone());
@@ -646,7 +654,7 @@ impl<'a> StdGenerator<'a> {
         None
     }
 
-    pub fn find_biomes_at_point(&mut self, point: &Point, default: RegistryId) -> SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> {
+    fn find_biomes_at_point(&mut self, point: &Point, default: RegistryId) -> SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> {
         let sqr_distance = |a: &Point, b: &Point| {
             let x = b.x - a.x;
             let y = b.y - a.y;
@@ -756,10 +764,12 @@ impl<'a> StdGenerator<'a> {
         self.biome_map.biome_map[&p].clone()
     }
     
+    /// Get the biomes at the given point from the biome map.
     pub fn get_biomes_at_point(&self, point: &[i32; 2]) -> Option<&SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>> {
         self.biome_map.biome_map.get(point)
     }
     
+    /// Get the noise values at the given point from the biome map.
     pub fn get_noises_at_point(&self, point: &[i32; 2]) -> Option<&(f64, f64, f64)> {
         self.biome_map.noise_map.get(point)
     }
@@ -768,14 +778,17 @@ impl<'a> StdGenerator<'a> {
         to_range.0 + (s - from_range.0) * (to_range.1 - to_range.0) / (from_range.1 - from_range.0)
     }
 
+    /// Get the Voronoi diagram for this generator.
     pub fn voronoi(&self) -> &Voronoi {
         self.voronoi.as_ref().expect("voronoi map should exist, but it somehow failed to generate.")
     }
 
+    /// Get the +XZ size of the world, in blocks.
     pub fn size_blocks_xz(&self) -> i32 {
         self.size_chunks_xz * CHUNK_DIM
     }
 
+    /// Get the biome map of this generator.
     pub fn biome_map(&self) -> &BiomeMap {
         &self.biome_map
     }
@@ -789,7 +802,7 @@ struct NoiseValues {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct Center {
+struct Center {
     point: Point,
     noise: NoiseValues,
     biome: Option<RegistryId>,
@@ -804,7 +817,7 @@ pub struct Center {
 }
 
 impl Center {
-    pub fn new(point: Point) -> Center {
+    fn new(point: Point) -> Center {
         Self {
             point,
             noise: NoiseValues::default(),
@@ -825,7 +838,7 @@ impl Center {
 struct PointEdge(Point, Point);
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct Edge {
+struct Edge {
     d0: Option<Rc<RefCell<Center>>>, d1: Option<Rc<RefCell<Center>>>,   // Delaunay edge
     v0: Option<Rc<RefCell<Corner>>>, v1: Option<Rc<RefCell<Corner>>>,   // Voronoi edge
     midpoint: Point,            // halfway between v0,v1
@@ -837,7 +850,7 @@ pub struct Edge {
 }
 
 impl Edge {
-    pub fn new() -> Edge {
+    fn new() -> Edge {
         Self {
             d0: None,
             d1: None,
@@ -854,7 +867,7 @@ impl Edge {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct Corner {
+struct Corner {
     point: Point,
     noise: NoiseValues,
     border: bool,
@@ -875,7 +888,7 @@ pub struct Corner {
 }
 
 impl Corner {
-    pub fn new(position: Point) -> Corner {
+    fn new(position: Point) -> Corner {
         Self { 
             noise: NoiseValues::default(),
             point: position,

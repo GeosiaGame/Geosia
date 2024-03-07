@@ -12,8 +12,11 @@ pub const STONE_BLOCK_NAME: RegistryName = RegistryName::ocg_const("stone");
 pub const DIRT_BLOCK_NAME: RegistryName = RegistryName::ocg_const("dirt");
 /// Registry name for grass.
 pub const GRASS_BLOCK_NAME: RegistryName = RegistryName::ocg_const("grass");
+/// Registry name for snowy grass.
 pub const SNOWY_GRASS_BLOCK_NAME: RegistryName = RegistryName::ocg_const("snowy_grass");
+/// Registry name for water.
 pub const WATER_BLOCK_NAME: RegistryName = RegistryName::ocg_const("water");
+/// Registry name for sand.
 pub const SAND_BLOCK_NAME: RegistryName = RegistryName::ocg_const("sand");
 
 /// Installs the base set of blocks into the given block registry.
