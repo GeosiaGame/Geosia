@@ -26,6 +26,18 @@ use crate::network::transport::create_local_rpc_server;
 use crate::network::PeerAddress;
 use crate::prelude::*;
 
+// TODO: Populate these from build/git info
+/// The major SemVer field of the current build's version
+pub static GAME_VERSION_MAJOR: u32 = 0;
+/// The minor SemVer field of the current build's version
+pub static GAME_VERSION_MINOR: u32 = 0;
+/// The patch SemVer field of the current build's version
+pub static GAME_VERSION_PATCH: u32 = 1;
+/// The build SemVer field of the current build's version
+pub static GAME_VERSION_BUILD: &str = "todo";
+/// The prerelease SemVer field of the current build's version
+pub static GAME_VERSION_PRERELEASE: &str = "";
+
 /// Target (maximum) number of game simulation ticks in a second.
 pub const TICKS_PER_SECOND: i32 = 32;
 /// Target (maximum) number of game simulation ticks in a second, as a `f32`.

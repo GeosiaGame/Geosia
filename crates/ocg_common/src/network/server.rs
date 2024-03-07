@@ -12,7 +12,9 @@ use ocg_schemas::schemas::network_capnp::authenticated_server_connection::{
 };
 
 use crate::network::PeerAddress;
-use crate::GameServer;
+use crate::{
+    GameServer, GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE,
+};
 
 /// An unauthenticated RPC client<->server connection handler on the server side.
 pub struct Server2ClientEndpoint {
@@ -55,11 +57,11 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
         let subtitle = "Subtitles to be implemented!";
         let mut meta = results.get().init_metadata();
         let mut ver = meta.reborrow().init_server_version();
-        ver.set_major(0);
-        ver.set_minor(0);
-        ver.set_patch(1);
-        ver.set_build("todo");
-        ver.set_prerelease("");
+        ver.set_major(GAME_VERSION_MAJOR);
+        ver.set_minor(GAME_VERSION_MINOR);
+        ver.set_patch(GAME_VERSION_PATCH);
+        ver.set_build(GAME_VERSION_BUILD);
+        ver.set_prerelease(GAME_VERSION_PRERELEASE);
 
         meta.set_title(title);
         meta.set_subtitle(subtitle);
