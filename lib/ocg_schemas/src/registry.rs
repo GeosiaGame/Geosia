@@ -1,5 +1,6 @@
 //! A data structure for keeping track of a stable mapping between: namespaced strings, numerical IDs and objects.
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
 use std::num::{NonZeroU32, TryFromIntError};
 
 use bytemuck::{PodInOption, TransparentWrapper, ZeroableInOption};
@@ -140,7 +141,7 @@ impl<'a> Display for RegistryNameRef<'a> {
 }
 
 /// Needs to be implemented on any object that can be a part of a Registry
-pub trait RegistryObject: PartialEq {
+pub trait RegistryObject: PartialEq + Hash {
     /// Should be trivial
     fn registry_name(&self) -> RegistryNameRef;
 }
@@ -266,7 +267,7 @@ impl<Object: RegistryObject> Registry<Object> {
     /// Gets a `Vec` of all the ID -> Object mappings in this registry.
     pub fn get_objects_ids(&self) -> Vec<(&RegistryId, &Object)> {
         let mut result = Vec::new();
-        for id in self.name_to_id.values().into_iter() {
+        for id in self.name_to_id.values() {
             let obj = self.lookup_id_to_object(*id);
             if let Some(o) = obj {
                 result.push((id, o));
@@ -280,7 +281,7 @@ impl<Object: RegistryObject> Registry<Object> {
 mod test {
     use super::*;
 
-    #[derive(Clone, Eq, PartialEq, Debug, Default)]
+    #[derive(Clone, Eq, PartialEq, Debug, Default, Hash)]
     struct DummyObject(RegistryName);
 
     impl RegistryObject for DummyObject {

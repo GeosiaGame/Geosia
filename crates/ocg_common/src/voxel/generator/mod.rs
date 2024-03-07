@@ -151,12 +151,12 @@ impl StdGenerator {
         let mut blended = vec![smallvec![]; CHUNK_DIM2Z];
 
         let vparams: [i32; CHUNK_DIM2Z] = {
-            let mut vparams: [MaybeUninit<i32>; CHUNK_DIM2Z] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+            let mut vparams: [MaybeUninit<i32>; CHUNK_DIM2Z] = unsafe { MaybeUninit::uninit().assume_init() };
             for (i, v) in vparams[..].iter_mut().enumerate() {
                 let ix = (i % CHUNK_DIMZ) as i32;
                 let iz = ((i / CHUNK_DIMZ) % CHUNK_DIMZ) as i32;
                 blended[(ix + iz * CHUNK_DIM) as usize] = self
-                    .get_biomes_at_point(&[(ix + c_pos.x * CHUNK_DIM), (iz + c_pos.z * CHUNK_DIM)])
+                    .get_biomes_at_point(&[ix + c_pos.x * CHUNK_DIM, iz + c_pos.z * CHUNK_DIM])
                     .unwrap_or(&SmallVec::<[BiomeEntry; EXPECTED_BIOME_COUNT]>::new())
                     .to_owned();
                 let p = Self::elevation_noise(
@@ -203,9 +203,9 @@ impl StdGenerator {
                     ground_y: height,
                     sea_level: 0, /* hardcoded for now... */
                 };
-                let result = (biome.rule_source)(&g_pos, &ctx, &block_registry);
-                if result.is_some() {
-                    chunk.put(b_pos, result.unwrap());
+                let result = (biome.rule_source)(&g_pos, &ctx, block_registry);
+                if let Some(result) = result {
+                    chunk.put(b_pos, result);
                 }
             }
         }
@@ -215,7 +215,7 @@ impl StdGenerator {
         in_chunk_pos: IVec2,
         chunk_pos: IVec2,
         biome_registry: &BiomeRegistry,
-        blended: &Vec<SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>>,
+        blended: &[SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>],
         noises: &mut Noises,
     ) -> f64 {
         let mut nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)(p, &mut noises.base_terrain_noise) + 1.0) / 2.0;
@@ -375,14 +375,14 @@ impl StdGenerator {
     }
 
     /// returns: \[(delaunay edges, voronoi edges)\]
-    fn make_edges(voronoi: &Voronoi, points: &Vec<Point>) -> Vec<(PointEdge, PointEdge)> {
+    fn make_edges(voronoi: &Voronoi, points: &[Point]) -> Vec<(PointEdge, PointEdge)> {
         let mut list_of_delaunay_edges: Vec<PointEdge> = vec![];
 
         let triangles = &voronoi.triangulation().triangles;
         let triangles: Vec<[&Point; 3]> = (0..triangles.len() / 3)
             .map(|t| {
                 [
-                    &points[triangles[3 * t + 0]],
+                    &points[triangles[3 * t]],
                     &points[triangles[3 * t + 1]],
                     &points[triangles[3 * t + 2]],
                 ]
@@ -458,7 +458,7 @@ impl StdGenerator {
             }
             p_b.water = p_b.ocean || num_water as f64 >= p_b.corners.len() as f64 * LAKE_TRESHOLD;
         }
-        while queue.len() > 0 {
+        while !queue.is_empty() {
             let p = queue.pop_back();
             if p.is_none() {
                 break;
@@ -543,7 +543,7 @@ impl StdGenerator {
         for q in &self.corners {
             let mut q_b = q.borrow_mut();
             q_b.watershed = Some(q.clone());
-            if q_b.biome != Some(ocean_id) && &q_b.biome != &Some(beach_id) {
+            if q_b.biome != Some(ocean_id) && q_b.biome != Some(beach_id) {
                 q_b.watershed = q_b.downslope.clone();
             }
         }
@@ -558,19 +558,17 @@ impl StdGenerator {
             for q in &self.corners {
                 let mut q_b = q.borrow_mut();
                 // why does this stack overflow???
-                if Rc::ptr_eq(q_b.watershed.as_ref().unwrap(), &q) {
+                if Rc::ptr_eq(q_b.watershed.as_ref().unwrap(), q) {
                     continue;
                 }
-                if !q_b.ocean && !q_b.coast && !q_b.watershed.as_ref().unwrap().borrow().coast {
-                    if {
-                        let downslope = q_b.downslope.as_ref().unwrap().borrow();
-                        let r = downslope.watershed.as_ref().unwrap().borrow();
-                        !r.ocean
-                    } {
-                        let downslope_watershed = q_b.downslope.as_ref().unwrap().borrow().watershed.clone().unwrap();
-                        q_b.watershed = Some(downslope_watershed);
-                        changed = true;
-                    }
+                if !q_b.ocean && !q_b.coast && !q_b.watershed.as_ref().unwrap().borrow().coast && {
+                    let downslope = q_b.downslope.as_ref().unwrap().borrow();
+                    let r = downslope.watershed.as_ref().unwrap().borrow();
+                    !r.ocean
+                } {
+                    let downslope_watershed = q_b.downslope.as_ref().unwrap().borrow().watershed.clone().unwrap();
+                    q_b.watershed = Some(downslope_watershed);
+                    changed = true;
                 }
             }
             if !changed {
@@ -602,7 +600,7 @@ impl StdGenerator {
                 if Rc::ptr_eq(&q, q.borrow().downslope.as_ref().unwrap()) {
                     break;
                 }
-                let edge = Self::lookup_edge_from_corner(&q, &q.borrow().downslope.as_ref().unwrap()).unwrap();
+                let edge = Self::lookup_edge_from_corner(&q, q.borrow().downslope.as_ref().unwrap()).unwrap();
                 let mut edge = edge.borrow_mut();
                 edge.river += 1;
                 q.borrow_mut().river += 1;
@@ -813,7 +811,7 @@ impl StdGenerator {
         let weight = sqr_distance(&center_b.point, point).abs().sqrt() / 10.0;
         let mut to_blend: SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> = smallvec![BiomeEntry {
             id: center_b.biome.unwrap_or(default),
-            weight: weight
+            weight
         }];
 
         let mut total = 0.0;

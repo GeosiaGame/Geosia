@@ -72,7 +72,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 } else if context.ground_y > pos.y {
                     return Some(BlockEntry::new(i_stone, 0));
                 }
-                return None;
+                None
             },
             surface_noise: |point, noise| {
                 let new_point = point * 1.5;
@@ -81,7 +81,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 value += noise.get_2d((new_point * 2.0).to_array()) * 0.25;
                 value *= 5.0;
                 value += 10.0;
-                return value;
+                value
             },
             blend_influence: 0.5,
             block_influence: 1.0,
@@ -115,7 +115,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 } else if context.ground_y > pos.y {
                     return Some(BlockEntry::new(i_stone, 0));
                 }
-                return None;
+                None
             },
             surface_noise: |point, noise| {
                 let new_point = point / 3.0;
@@ -126,7 +126,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 value += noise.get_2d((new_point * 3.0).to_array()) * 0.15;
                 value *= 8.0;
                 value += 15.0;
-                return value;
+                value
             },
             blend_influence: 1.0,
             block_influence: 1.0,
@@ -160,7 +160,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 } else if context.ground_y > pos.y {
                     return Some(BlockEntry::new(i_stone, 0));
                 }
-                return None;
+                None
             },
             surface_noise: |point, noise| {
                 let new_point = point / 4.0;
@@ -195,13 +195,13 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 let (i_water, _) = block_registry.lookup_name_to_object(WATER_BLOCK_NAME.as_ref()).unwrap();
 
                 if context.sea_level > pos.y {
-                    if context.ground_y > pos.y {
-                        return Some(BlockEntry::new(i_stone, 0));
+                    return if context.ground_y > pos.y {
+                        Some(BlockEntry::new(i_stone, 0))
                     } else {
-                        return Some(BlockEntry::new(i_water, 0));
-                    }
+                        Some(BlockEntry::new(i_water, 0))
+                    };
                 }
-                return None;
+                None
             },
             surface_noise: |point, noise| noise.get_2d(point.to_array()) * -7.5 + 1.0,
             blend_influence: 10.0,

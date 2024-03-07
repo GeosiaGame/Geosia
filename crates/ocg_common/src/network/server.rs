@@ -22,9 +22,9 @@ pub struct Server2ClientEndpoint {
 
 /// An authenticated RPC client<->server connection handler on the server side.
 pub struct AuthenticatedServer2ClientEndpoint {
-    server: Arc<GameServer>,
-    peer: PeerAddress,
-    username: KString,
+    _server: Arc<GameServer>,
+    _peer: PeerAddress,
+    _username: KString,
     connection: rpc::authenticated_client_connection::Client,
 }
 
@@ -90,9 +90,9 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
         // TODO: validate username
 
         let client = AuthenticatedServer2ClientEndpoint {
-            server: self.server.clone(),
-            peer: self.peer,
-            username,
+            _server: self.server.clone(),
+            _peer: self.peer,
+            _username: username,
             connection,
         };
 

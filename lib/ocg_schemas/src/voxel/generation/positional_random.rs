@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use bevy_math::IVec3;
 use rand::{RngCore, SeedableRng};
 
-///
+/// Helper combination trait
 pub trait Random: RngCore + SeedableRng {}
 impl<T> Random for T where T: RngCore + SeedableRng {}
 
@@ -32,7 +32,7 @@ where
 
     /// Get a new random from this position.
     pub fn get_at_pos_i(x: i32, y: i32, z: i32) -> Rand {
-        let seed: u64 = x as u64 ^ 10645345 | y as u64 * 136540234 & z as u64 ^ 0xABCDEF01257;
+        let seed: u64 = (x as u64 ^ 10645345) | (y as u64 * 136540234) & (z as u64 ^ 0xABCDEF01257);
         Rand::seed_from_u64(seed)
     }
 }

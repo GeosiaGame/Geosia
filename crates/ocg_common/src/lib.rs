@@ -1,5 +1,6 @@
 #![warn(missing_docs)]
 #![deny(clippy::disallowed_types)]
+#![allow(clippy::type_complexity)]
 
 //! The common client&server code for OpenCubeGame
 
@@ -90,7 +91,7 @@ pub struct GameServerHandle {
     pub server: Arc<GameServer>,
     /// The channel for sending [`GameServerControlCommand`] such as "Shutdown".
     pub control_channel: StdUnboundedSender<GameServerControlCommand>,
-    network_channel: AsyncUnboundedSender<NetworkThreadCommand>,
+    _network_channel: AsyncUnboundedSender<NetworkThreadCommand>,
 }
 
 /// A handle to a [`GameServer`] accessible from within bevy systems.
@@ -141,7 +142,7 @@ impl GameServer {
         Ok(GameServerHandle {
             server,
             control_channel: ctrl_tx,
-            network_channel: net_tx,
+            _network_channel: net_tx,
         })
     }
 

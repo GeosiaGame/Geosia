@@ -47,19 +47,19 @@ pub trait ChunkPersistenceLayer<ExtraData: OcgExtraData> {
 /// Composed of the [`ChunkGroup`] it manages, and the [`ChunkPersistenceLayer`] instance used for load/save operations.
 pub struct ChunkLoader<ExtraData: OcgExtraData> {
     /// The managed group of chunks, kept private to ensure the loader state can be kept internally consistent.
-    managed_group: ChunkGroup<ExtraData>,
+    _managed_group: ChunkGroup<ExtraData>,
     /// Reference to the persistence layer used for loading/saving chunks in the managed group.
     persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>,
-    live_loads: HashSet<AbsChunkPos>,
+    _live_loads: HashSet<AbsChunkPos>,
 }
 
 impl<ExtraData: OcgExtraData> ChunkLoader<ExtraData> {
     /// Constructs a new loader with no chunks loaded.
     pub fn new(persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>, group_data: ExtraData::GroupData) -> Self {
         Self {
-            managed_group: ChunkGroup::with_data(group_data),
+            _managed_group: ChunkGroup::with_data(group_data),
             persistence_layer,
-            live_loads: HashSet::with_capacity(8 * 8 * 8),
+            _live_loads: HashSet::with_capacity(8 * 8 * 8),
         }
     }
 

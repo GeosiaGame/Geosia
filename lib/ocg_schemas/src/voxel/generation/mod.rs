@@ -25,14 +25,14 @@ pub struct Context<'a> {
     pub sea_level: i32,
 }
 
-fn build_sources<Source>(seed: u32, octaves: &Vec<f64>) -> Vec<Source>
+fn build_sources<Source>(seed: u32, octaves: &[f64]) -> Vec<Source>
 where
     Source: Default + Seedable,
 {
     let mut sources = Vec::with_capacity(octaves.len());
-    for x in 0..octaves.len() {
+    for &x in octaves {
         let source = Source::default();
-        sources.push(source.set_seed(seed ^ (octaves[x] * 4037543.0) as u32));
+        sources.push(source.set_seed(seed ^ (x * 4037543.0) as u32));
     }
     sources
 }

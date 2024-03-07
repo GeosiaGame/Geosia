@@ -1,6 +1,7 @@
 //! All Biome-related types
 
 use std::fmt::{Debug, Display};
+use std::hash::{Hash, Hasher};
 
 use bevy_math::DVec2;
 use noise::NoiseFn;
@@ -84,6 +85,12 @@ impl Display for BiomeDefinition {
 impl PartialEq for BiomeDefinition {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
+    }
+}
+
+impl Hash for BiomeDefinition {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state)
     }
 }
 

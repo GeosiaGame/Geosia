@@ -54,7 +54,7 @@ pub struct Fbm<T> {
     scale_factor: f64,
 }
 
-fn calc_scale_factor(octaves: &Vec<f64>) -> f64 {
+fn calc_scale_factor(octaves: &[f64]) -> f64 {
     let mut lowest_freq_value_factor = 2f64.powf(octaves.len() as f64 - 1.0) / (2f64.powf(octaves.len() as f64) - 1.0);
     let mut value = 0.0;
     for o in octaves.iter() {
@@ -91,7 +91,7 @@ where
             persistence: Self::DEFAULT_PERSISTENCE,
             sources: super::build_sources(seed, &octaves),
             scale_factor: calc_scale_factor(&octaves),
-            octaves: octaves,
+            octaves,
         }
     }
 

@@ -199,7 +199,7 @@ pub fn blur_biomes(
                 .chain(&r13)
                 .chain(&r14)
                 .chain(&r15)
-                .flat_map(|v| v)
+                .flatten()
                 .fold(
                     smallvec![],
                     |mut acc: SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>, f| {
