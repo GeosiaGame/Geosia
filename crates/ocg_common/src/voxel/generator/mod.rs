@@ -29,6 +29,8 @@ use voronoice::*;
 
 use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME, RIVER_BIOME_NAME};
 
+pub mod decorator;
+
 /// World size of the +X & +Z axis, in chunks.
 pub const WORLD_SIZE_XZ: i32 = 8;
 /// World size of the +Y axis, in chunks.
@@ -51,6 +53,7 @@ fn lerp(start: &Point, end: &Point, value: f64) -> Point {
 pub struct StdGenerator {
     seed: u64,
     size_chunks_xz: i32,
+    size_chunks_y: i32,
     biome_point_count: u32,
 
     random: Xoshiro128StarStar,
@@ -66,11 +69,12 @@ pub struct StdGenerator {
 
 impl StdGenerator {
     /// create a new StdGenerator.
-    pub fn new(seed: u64, size_chunks_xz: i32, biome_point_count: u32) -> Self {
+    pub fn new(seed: u64, size_chunks_xz: i32, size_chunks_y: i32, biome_point_count: u32) -> Self {
         let seed_int = seed as u32;
         Self {
             seed,
             size_chunks_xz,
+            size_chunks_y,
             biome_point_count,
 
             random: Xoshiro128StarStar::seed_from_u64(seed),
@@ -201,7 +205,9 @@ impl StdGenerator {
                     chunk,
                     random: PositionalRandomFactory::default(),
                     ground_y: height,
-                    sea_level: 0, /* hardcoded for now... */
+                    sea_level: 0, //hardcoded for now...
+                    height: self.size_blocks_y() / 2,
+                    depth: self.size_blocks_y() / 2,
                 };
                 let result = (biome.rule_source)(&g_pos, &ctx, block_registry);
                 if let Some(result) = result {
@@ -930,6 +936,11 @@ impl StdGenerator {
     /// Get the +XZ size of the world, in blocks.
     pub fn size_blocks_xz(&self) -> i32 {
         self.size_chunks_xz * CHUNK_DIM
+    }
+
+    /// Get the +XZ size of the world, in blocks.
+    pub fn size_blocks_y(&self) -> i32 {
+        self.size_chunks_y * CHUNK_DIM
     }
 
     /// Get the biome map of this generator.

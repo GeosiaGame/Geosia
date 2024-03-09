@@ -23,6 +23,10 @@ pub struct Context<'a> {
     pub ground_y: i32,
     /// The sea level for this planet.
     pub sea_level: i32,
+    /// height of the world above y=0
+    pub height: i32,
+    /// depth of the world below y=0
+    pub depth: i32,
 }
 
 fn build_sources<Source>(seed: u32, octaves: &[f64]) -> Vec<Source>

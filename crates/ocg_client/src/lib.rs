@@ -134,7 +134,7 @@ mod debug_window {
         setup_basic_biomes(&mut biome_reg);
         let biome_reg = biome_reg;
 
-        let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4);
+        let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_Y * 2, WORLD_SIZE_XZ as u32 * 4);
         generator.generate_world_biomes(&biome_reg);
         let world_size_blocks = generator.size_blocks_xz() as usize;
         let img_handle = images.add(voronoi_renderer::draw_voronoi(

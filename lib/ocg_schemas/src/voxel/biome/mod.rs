@@ -18,6 +18,7 @@ use crate::{
 };
 
 pub mod biome_map;
+pub mod decorator;
 
 /// A biome entry stored in the per-planet biome map.
 #[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Serialize, Deserialize)]

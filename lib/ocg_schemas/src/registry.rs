@@ -4,7 +4,8 @@ use std::hash::Hash;
 use std::num::{NonZeroU32, TryFromIntError};
 
 use bytemuck::{PodInOption, TransparentWrapper, ZeroableInOption};
-use hashbrown::{Equivalent, HashMap};
+use hashbrown::{Equivalent, HashMap, HashSet};
+use itertools::Itertools;
 use kstring::{KString, KStringRef};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -25,7 +26,7 @@ pub struct RegistryName {
     pub key: KString,
 }
 
-/// Reference to a simple namespaced registry object name, see RegistryNamed for the owned variant
+/// Reference to a simple namespaced registry object name, see RegistryName for the owned variant
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Default, Hash)]
 pub struct RegistryNameRef<'n> {
     /// The namespace
@@ -141,7 +142,7 @@ impl<'a> Display for RegistryNameRef<'a> {
 }
 
 /// Needs to be implemented on any object that can be a part of a Registry
-pub trait RegistryObject: PartialEq + Hash {
+pub trait RegistryObject: PartialEq + Hash + Clone {
     /// Should be trivial
     fn registry_name(&self) -> RegistryNameRef;
 }
@@ -184,6 +185,12 @@ pub enum RegistryError {
     /// No more unallocated space in the registry. The allocator is a simple bump allocator, so if objects were removed, it might be possible to optimize the registry down to have free space again.
     #[error("No free space in the registry")]
     NoFreeSpace,
+    /// A registry data set isn't loaded yet.
+    #[error("Registry data set is not loaded (yet?).")]
+    DataSetNotFilled {
+        /// The name of the set that isn't loaded.
+        name: RegistryName,
+    },
 }
 
 /// A registry of up to 2^32-2 named objects.
@@ -274,6 +281,59 @@ impl<Object: RegistryObject> Registry<Object> {
             }
         }
         result
+    }
+}
+
+/// A registry data set, like tags in *Minecraft*.
+pub struct RegistryDataSet<'a, Object: RegistryObject> {
+    key: RegistryName,
+    registry: &'a Registry<Object>,
+
+    names: HashSet<RegistryName>,
+    values: Vec<(RegistryId, &'a Object)>,
+}
+
+impl<'a, Object: RegistryObject> Clone for RegistryDataSet<'a, Object> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+            registry: self.registry,
+            names: self.names.clone(),
+            values: self.values.clone(),
+        }
+    }
+}
+
+impl<'a, Object: RegistryObject> RegistryDataSet<'a, Object> {
+    /// Utility to create a new RegistyDataSet.
+    pub fn new(key: RegistryName, registry: &'a Registry<Object>, names: HashSet<RegistryName>) -> Self {
+        Self {
+            key,
+            registry,
+            names,
+            values: vec![],
+        }
+    }
+
+    /// load this registry data set from it's registry.
+    pub fn load(&mut self) {
+        self.values = self
+            .names
+            .iter()
+            .map(|name| {
+                self.registry
+                    .lookup_name_to_object(name.as_ref())
+                    .expect("registry key not found in registry.")
+            })
+            .collect_vec();
+    }
+
+    /// Get the values of this RegistryDataSet, or an error if it isn't loaded yet.
+    pub fn values(&self) -> Result<&[(RegistryId, &'a Object)], RegistryError> {
+        if self.values.is_empty() {
+            return Err(RegistryError::DataSetNotFilled { name: self.key.clone() });
+        }
+        Ok(&self.values)
     }
 }
 
