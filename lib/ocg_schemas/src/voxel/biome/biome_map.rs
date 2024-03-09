@@ -18,10 +18,12 @@ pub const EXPECTED_BIOME_COUNT: usize = 4;
 /// The per-planet biome map.
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct BiomeMap {
-    /// Map of Chunk position to biome definition.
+    /// Map of block position to biome definition.
     pub biome_map: HashMap<[i32; 2], SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>>,
-    /// Map of Chunk position to biome definition.
+    /// Map of block position to biome definition.
     pub noise_map: HashMap<[i32; 2], (f64, f64, f64)>,
+    /// Map of block position to elevation.
+    pub height_map: HashMap<[i32; 2], i32>,
     /// Generatable Biomes, with set seeds
     #[serde(skip)] // TODO fix serialization of `BiomeDefinition`
     pub generatable_biomes: Vec<(RegistryId, BiomeDefinition)>,

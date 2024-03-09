@@ -159,8 +159,10 @@ impl StdGenerator {
             for (i, v) in vparams[..].iter_mut().enumerate() {
                 let ix = (i % CHUNK_DIMZ) as i32;
                 let iz = ((i / CHUNK_DIMZ) % CHUNK_DIMZ) as i32;
+                let pos = [ix + c_pos.x * CHUNK_DIM, iz + c_pos.z * CHUNK_DIM];
+
                 blended[(ix + iz * CHUNK_DIM) as usize] = self
-                    .get_biomes_at_point(&[ix + c_pos.x * CHUNK_DIM, iz + c_pos.z * CHUNK_DIM])
+                    .get_biomes_at_point(&pos)
                     .unwrap_or(&SmallVec::<[BiomeEntry; EXPECTED_BIOME_COUNT]>::new())
                     .to_owned();
                 let p = Self::elevation_noise(
@@ -171,6 +173,7 @@ impl StdGenerator {
                     &mut self.noises,
                 )
                 .round() as i32;
+                self.biome_map.height_map.insert(pos, p);
                 unsafe {
                     std::ptr::write(v.as_mut_ptr(), p);
                 }
@@ -203,6 +206,7 @@ impl StdGenerator {
                 let ctx = Context {
                     seed: self.seed,
                     chunk,
+                    biome,
                     random: PositionalRandomFactory::default(),
                     ground_y: height,
                     sea_level: 0, //hardcoded for now...
