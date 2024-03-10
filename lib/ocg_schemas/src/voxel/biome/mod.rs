@@ -47,7 +47,7 @@ pub type BiomeRegistry = Registry<BiomeDefinition>;
 
 /// A definition of a biome type, specifying properties such as registry name, shape, textures.
 // TODO fix serialization of `BiomeDefinition`
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BiomeDefinition {
     /// The unique registry name
     pub name: RegistryName,
@@ -62,8 +62,10 @@ pub struct BiomeDefinition {
     /// Moisture of this biome.
     pub moisture: Range<f64>,
     /// The block placement rule source for this biome.
+    #[serde(skip)]
     pub rule_source: fn(pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>,
     /// The noise function for this biome.
+    #[serde(skip)]
     pub surface_noise: fn(pos: DVec2, noise: &mut Box<dyn NoiseFn<f64, 4>>) -> f64,
     /// The strength of this biome in the blending step.
     pub blend_influence: f64,

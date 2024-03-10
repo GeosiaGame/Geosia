@@ -285,55 +285,65 @@ impl<Object: RegistryObject> Registry<Object> {
 }
 
 /// A registry data set, like tags in *Minecraft*.
-pub struct RegistryDataSet<'a, Object: RegistryObject> {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RegistryDataSet<Object: RegistryObject> {
     key: RegistryName,
-    registry: &'a Registry<Object>,
 
     names: HashSet<RegistryName>,
-    values: Vec<(RegistryId, &'a Object)>,
+    values: Vec<(RegistryId, Object)>,
 }
 
-impl<'a, Object: RegistryObject> Clone for RegistryDataSet<'a, Object> {
+impl<Object: RegistryObject> Clone for RegistryDataSet<Object> {
     fn clone(&self) -> Self {
         Self {
             key: self.key.clone(),
-            registry: self.registry,
             names: self.names.clone(),
             values: self.values.clone(),
         }
     }
 }
 
-impl<'a, Object: RegistryObject> RegistryDataSet<'a, Object> {
+impl<Object: RegistryObject> RegistryDataSet<Object> {
     /// Utility to create a new RegistyDataSet.
-    pub fn new(key: RegistryName, registry: &'a Registry<Object>, names: HashSet<RegistryName>) -> Self {
-        Self {
+    pub fn new(key: RegistryName, registry: &Registry<Object>, names: HashSet<RegistryName>) -> Self {
+        let mut s = Self {
             key,
-            registry,
             names,
             values: vec![],
-        }
+        };
+        s.load(registry);
+        s
     }
 
     /// load this registry data set from it's registry.
-    pub fn load(&mut self) {
+    pub fn load(&mut self, registry: &Registry<Object>) {
         self.values = self
             .names
             .iter()
             .map(|name| {
-                self.registry
+                registry
                     .lookup_name_to_object(name.as_ref())
-                    .expect("registry key not found in registry.")
+                    .map(|(k, v)| (k, v.to_owned()))
+                    .unwrap_or_else(|| panic!("registry key {name} not found in registry."))
             })
             .collect_vec();
     }
 
     /// Get the values of this RegistryDataSet, or an error if it isn't loaded yet.
-    pub fn values(&self) -> Result<&[(RegistryId, &'a Object)], RegistryError> {
+    pub fn values(&self) -> Result<&[(RegistryId, Object)], RegistryError> {
         if self.values.is_empty() {
             return Err(RegistryError::DataSetNotFilled { name: self.key.clone() });
         }
         Ok(&self.values)
+    }
+
+    /// Does this RegistryDataSet contain the given value?
+    /// NOTE: only returns true if the set is filled.
+    pub fn contains(&self, obj: &Object) -> bool {
+        if let Ok(values) = self.values() {
+            return values.iter().any(|(_, value)| value == obj);
+        }
+        false
     }
 }
 

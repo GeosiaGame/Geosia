@@ -3,6 +3,7 @@
 use std::{f64::consts::TAU, fmt::Debug};
 
 use noise::{NoiseFn, Seedable};
+use serde::{Deserialize, Serialize};
 
 use self::positional_random::PositionalRandomFactory;
 use super::{biome::BiomeDefinition, chunk_storage::PaletteStorage, voxeltypes::BlockEntry};
@@ -32,7 +33,7 @@ pub struct Context<'a> {
 }
 
 /// Number provider.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum NumberProvider<Idx> {
     /// Constant value.
     Constant(Idx),

@@ -23,7 +23,7 @@ use ocg_schemas::{
     },
 };
 use rand::{distributions::Uniform, Rng, SeedableRng};
-use rand_xoshiro::Xoshiro128StarStar;
+use rand_xoshiro::Xoshiro512StarStar;
 use serde::{Deserialize, Serialize};
 use voronoice::*;
 
@@ -56,7 +56,7 @@ pub struct StdGenerator {
     size_chunks_y: i32,
     biome_point_count: u32,
 
-    random: Xoshiro128StarStar,
+    random: Xoshiro512StarStar,
     biome_map: BiomeMap,
     noises: Noises,
 
@@ -77,7 +77,7 @@ impl StdGenerator {
             size_chunks_y,
             biome_point_count,
 
-            random: Xoshiro128StarStar::seed_from_u64(seed),
+            random: Xoshiro512StarStar::seed_from_u64(seed),
             biome_map: BiomeMap::default(),
             noises: Noises {
                 base_terrain_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int).set_octaves(vec![-4.0, 1.0, 1.0, 0.0])),
