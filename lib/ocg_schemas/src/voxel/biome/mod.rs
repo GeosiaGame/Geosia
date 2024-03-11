@@ -63,10 +63,10 @@ pub struct BiomeDefinition {
     pub moisture: Range<f64>,
     /// The block placement rule source for this biome.
     #[serde(skip)]
-    pub rule_source: fn(pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>,
+    pub rule_source: Option<fn(pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>>,
     /// The noise function for this biome.
     #[serde(skip)]
-    pub surface_noise: fn(pos: DVec2, noise: &mut Box<dyn NoiseFn<f64, 4>>) -> f64,
+    pub surface_noise: Option<fn(pos: DVec2, noise: &mut Box<dyn NoiseFn<f64, 4>>) -> f64>,
     /// The strength of this biome in the blending step.
     pub blend_influence: f64,
     /// The strength of this biome in the block placement step.

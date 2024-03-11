@@ -203,19 +203,21 @@ impl StdGenerator {
             });
 
             for (biome, _) in biomes.iter() {
-                let ctx = Context {
-                    seed: self.seed,
-                    chunk,
-                    biome,
-                    random: PositionalRandomFactory::default(),
-                    ground_y: height,
-                    sea_level: 0, //hardcoded for now...
-                    height: self.size_blocks_y() / 2,
-                    depth: self.size_blocks_y() / 2,
-                };
-                let result = (biome.rule_source)(&g_pos, &ctx, block_registry);
-                if let Some(result) = result {
-                    chunk.put(b_pos, result);
+                if let Some(rule_source) = biome.rule_source {
+                    let ctx = Context {
+                        seed: self.seed,
+                        chunk,
+                        biome,
+                        random: PositionalRandomFactory::default(),
+                        ground_y: height,
+                        sea_level: 0, //hardcoded for now...
+                        height: self.size_blocks_y() / 2,
+                        depth: self.size_blocks_y() / 2,
+                    };
+                    let result = (rule_source)(&g_pos, &ctx, block_registry);
+                    if let Some(result) = result {
+                        chunk.put(b_pos, result);
+                    }
                 }
             }
         }
@@ -228,7 +230,12 @@ impl StdGenerator {
         blended: &[SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>],
         noises: &mut Noises,
     ) -> f64 {
-        let mut nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)(p, &mut noises.base_terrain_noise) + 1.0) / 2.0;
+        let mut nf = |p: DVec2, b: &BiomeDefinition| {
+            if let Some(surface_noise) = b.surface_noise {
+                return ((surface_noise)(p, &mut noises.base_terrain_noise) + 1.0) / 2.0;
+            }
+            0.0
+        };
         let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
         let blend = &blended[(in_chunk_pos.x + in_chunk_pos.y * CHUNK_DIM) as usize];
         let global_pos = DVec2::new(

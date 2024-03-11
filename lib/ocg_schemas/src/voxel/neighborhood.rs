@@ -36,6 +36,22 @@ impl<Object, CoordType: From<IVec3> + Into<IVec3> + Copy> Neighborhood<Object, C
             objects: out.into_inner().ok().unwrap(),
         }
     }
+    /// Constructs a neighborhood from the location of the center and a mapping function of coordinates to values.
+    pub fn from_center_mut<CoordMapping: FnMut(CoordType) -> Object>(
+        center_position: CoordType,
+        mut coord_fn: CoordMapping,
+    ) -> Self {
+        let mut out: SmallVec<[Object; 27]> = SmallVec::new();
+        let center_raw: IVec3 = center_position.into();
+        for (y, z, x) in iproduct!(0..3, 0..3, 0..3) {
+            let pos_raw = center_raw + IVec3::new(x, y, z);
+            out.push(coord_fn(pos_raw.into()));
+        }
+        Self {
+            center: center_position,
+            objects: out.into_inner().ok().unwrap(),
+        }
+    }
 
     /// An XZY-strided array of the objects in this neighborhood.
     pub fn objects_xzy(&self) -> &[Object; 27] {

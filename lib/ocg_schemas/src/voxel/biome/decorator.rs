@@ -4,27 +4,29 @@ use core::hash::Hash;
 use std::{hash::Hasher, num::NonZeroU32};
 
 use bevy_math::IVec3;
+use itertools::Itertools;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use super::BiomeDefinition;
 use crate::{
-    registry::{RegistryDataSet, RegistryName, RegistryObject},
+    coordinates::{AbsChunkPos, CHUNK_DIM},
+    registry::{Registry, RegistryDataSet, RegistryName, RegistryObject},
     voxel::{
         chunk_group::ChunkGroup,
+        chunk_storage::PaletteStorage,
         generation::{positional_random::PositionalRandomFactory, Context, NumberProvider},
+        voxeltypes::BlockEntry,
     },
     OcgExtraData,
 };
 
-
-
 /// A named registry of block definitions.
-pub type BlockRegistry = Registry<BiomeDecoratorDefinition<>>;
+pub type BiomeDecoratorRegistry = Registry<BiomeDecoratorDefinition>;
 
 /// A definition of a decorator type, specifying properties such as registry name, shape, placement.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BiomeDecoratorDefinition<ExtraData: OcgExtraData + Clone> {
+pub struct BiomeDecoratorDefinition {
     /// The unique registry name
     pub name: RegistryName,
     /// Placement of this biome decorator.
@@ -32,32 +34,33 @@ pub struct BiomeDecoratorDefinition<ExtraData: OcgExtraData + Clone> {
     /// The biomes this decorator can be placed in.
     pub biomes: RegistryDataSet<BiomeDefinition>,
 
-    placer: fn(&Self, &ChunkGroup<ExtraData>, &mut rand_xoshiro::Xoshiro512StarStar, IVec3) -> bool,
+    #[serde(skip)]
+    placer: Option<fn(&Self, &mut [&mut PaletteStorage<BlockEntry>], &mut rand_xoshiro::Xoshiro512StarStar, IVec3) -> bool>,
 }
 
-impl<ExtraData: OcgExtraData + Clone> PartialEq for BiomeDecoratorDefinition<ExtraData> {
+impl PartialEq for BiomeDecoratorDefinition {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
     }
 }
 
-impl<ExtraData: OcgExtraData + Clone> Hash for BiomeDecoratorDefinition<ExtraData> {
+impl Hash for BiomeDecoratorDefinition {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state)
     }
 }
 
-impl<ExtraData: OcgExtraData + Clone> RegistryObject for BiomeDecoratorDefinition<ExtraData> {
+impl RegistryObject for BiomeDecoratorDefinition {
     fn registry_name(&self) -> crate::registry::RegistryNameRef {
         self.name.as_ref()
     }
 }
 
-impl<ExtraData: OcgExtraData + Clone> BiomeDecoratorDefinition<ExtraData> {
+impl BiomeDecoratorDefinition {
     /// Place this decorator as defined by `placement` and `placer`.
-    pub fn do_place<T>(
+    pub fn do_place<ED: OcgExtraData>(
         &self,
-        chunk_group: &ChunkGroup<ExtraData>,
+        chunk_group: &mut ChunkGroup<ED>,
         pos: &IVec3,
         rand: &mut rand_xoshiro::Xoshiro512StarStar,
         context: &Context<'_>,
@@ -73,10 +76,22 @@ impl<ExtraData: OcgExtraData + Clone> BiomeDecoratorDefinition<ExtraData> {
             iter = Box::new(val) as Box<dyn Iterator<Item = IVec3>>;
         }
 
+        let chunks = &mut chunk_group
+            .get_neighborhood_around_mut(AbsChunkPos(*pos / CHUNK_DIM))
+            .transpose_option()
+            .unwrap();
+        let chunks = &mut chunks
+            .objects_xzy_mut()
+            .iter_mut()
+            .map(|c| &mut c.blocks)
+            .collect_vec()[..];
+
         let mut result = false;
-        for entry in iter {
-            if (self.placer)(self, chunk_group, rand, entry) {
-                result = true;
+        if let Some(placer) = self.placer {
+            for entry in iter {
+                if (placer)(self, chunks, rand, entry) {
+                    result = true;
+                }
             }
         }
         result
@@ -102,12 +117,12 @@ pub enum PlacementModifier {
 
 impl PlacementModifier {
     /// Pick blocks to place at based on the placer & placement type.
-    pub fn pick_positions<ExtraData: OcgExtraData + Clone>(
+    pub fn pick_positions(
         &self,
         pos: IVec3,
         rand: &mut rand_xoshiro::Xoshiro512StarStar,
         context: &Context<'_>,
-        definition: &BiomeDecoratorDefinition<ExtraData>,
+        definition: &BiomeDecoratorDefinition,
     ) -> Vec<IVec3> {
         let mut positions = Vec::new();
         match self {

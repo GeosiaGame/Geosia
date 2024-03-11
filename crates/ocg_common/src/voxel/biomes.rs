@@ -38,8 +38,8 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(-1.0..-1.0),
             temperature: range(-1.0..-1.0),
             moisture: range(-1.0..-1.0),
-            rule_source: |_pos: &bevy_math::IVec3, _ctx: &Context, _reg: &BlockRegistry| None,
-            surface_noise: |_point, _noise| 0.0,
+            rule_source: Some(|_pos: &bevy_math::IVec3, _ctx: &Context, _reg: &BlockRegistry| None),
+            surface_noise: Some(|_point, _noise| 0.0),
             blend_influence: 0.0,
             block_influence: 0.0,
             can_generate: false,
@@ -53,28 +53,30 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(0.5..1.0),
             temperature: range(..),
             moisture: range(..2.5),
-            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
-                let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
-                let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
-                let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
-                let (i_snow_grass, _) = block_registry
-                    .lookup_name_to_object(SNOWY_GRASS_BLOCK_NAME.as_ref())
-                    .unwrap();
+            rule_source: Some(
+                |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+                    let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_snow_grass, _) = block_registry
+                        .lookup_name_to_object(SNOWY_GRASS_BLOCK_NAME.as_ref())
+                        .unwrap();
 
-                if context.ground_y == pos.y {
-                    if pos.y >= 80 {
-                        return Some(BlockEntry::new(i_snow_grass, 0));
-                    } else {
-                        return Some(BlockEntry::new(i_grass, 0));
+                    if context.ground_y == pos.y {
+                        if pos.y >= 80 {
+                            return Some(BlockEntry::new(i_snow_grass, 0));
+                        } else {
+                            return Some(BlockEntry::new(i_grass, 0));
+                        }
+                    } else if pos.y <= context.ground_y && pos.y > context.ground_y - 5 {
+                        return Some(BlockEntry::new(i_dirt, 0));
+                    } else if context.ground_y > pos.y {
+                        return Some(BlockEntry::new(i_stone, 0));
                     }
-                } else if pos.y <= context.ground_y && pos.y > context.ground_y - 5 {
-                    return Some(BlockEntry::new(i_dirt, 0));
-                } else if context.ground_y > pos.y {
-                    return Some(BlockEntry::new(i_stone, 0));
-                }
-                None
-            },
-            surface_noise: |point, noise| {
+                    None
+                },
+            ),
+            surface_noise: Some(|point, noise| {
                 let new_point = point * 1.5;
 
                 let mut value = noise.get_2d(new_point.to_array()) * 0.75;
@@ -82,7 +84,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 value *= 5.0;
                 value += 10.0;
                 value
-            },
+            }),
             blend_influence: 0.5,
             block_influence: 1.0,
             can_generate: true,
@@ -96,28 +98,30 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(1.0..2.0),
             temperature: range(..),
             moisture: range(..2.5),
-            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
-                let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
-                let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
-                let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
-                let (i_snow_grass, _) = block_registry
-                    .lookup_name_to_object(SNOWY_GRASS_BLOCK_NAME.as_ref())
-                    .unwrap();
+            rule_source: Some(
+                |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+                    let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_snow_grass, _) = block_registry
+                        .lookup_name_to_object(SNOWY_GRASS_BLOCK_NAME.as_ref())
+                        .unwrap();
 
-                if context.ground_y == pos.y {
-                    if pos.y >= 80 {
-                        return Some(BlockEntry::new(i_snow_grass, 0));
-                    } else {
-                        return Some(BlockEntry::new(i_grass, 0));
+                    if context.ground_y == pos.y {
+                        if pos.y >= 80 {
+                            return Some(BlockEntry::new(i_snow_grass, 0));
+                        } else {
+                            return Some(BlockEntry::new(i_grass, 0));
+                        }
+                    } else if pos.y <= context.ground_y && pos.y > context.ground_y - 5 {
+                        return Some(BlockEntry::new(i_dirt, 0));
+                    } else if context.ground_y > pos.y {
+                        return Some(BlockEntry::new(i_stone, 0));
                     }
-                } else if pos.y <= context.ground_y && pos.y > context.ground_y - 5 {
-                    return Some(BlockEntry::new(i_dirt, 0));
-                } else if context.ground_y > pos.y {
-                    return Some(BlockEntry::new(i_stone, 0));
-                }
-                None
-            },
-            surface_noise: |point, noise| {
+                    None
+                },
+            ),
+            surface_noise: Some(|point, noise| {
                 let new_point = point / 3.0;
                 let new_point_arr = new_point.to_array();
 
@@ -127,7 +131,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 value *= 8.0;
                 value += 15.0;
                 value
-            },
+            }),
             blend_influence: 1.0,
             block_influence: 1.0,
             can_generate: true,
@@ -141,28 +145,30 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(3.0..),
             temperature: range(..),
             moisture: range(..2.5),
-            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
-                let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
-                let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
-                let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
-                let (i_snow_grass, _) = block_registry
-                    .lookup_name_to_object(SNOWY_GRASS_BLOCK_NAME.as_ref())
-                    .unwrap();
+            rule_source: Some(
+                |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+                    let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_snow_grass, _) = block_registry
+                        .lookup_name_to_object(SNOWY_GRASS_BLOCK_NAME.as_ref())
+                        .unwrap();
 
-                if context.ground_y == pos.y {
-                    if pos.y >= 80 {
-                        return Some(BlockEntry::new(i_snow_grass, 0));
-                    } else {
-                        return Some(BlockEntry::new(i_grass, 0));
+                    if context.ground_y == pos.y {
+                        if pos.y >= 80 {
+                            return Some(BlockEntry::new(i_snow_grass, 0));
+                        } else {
+                            return Some(BlockEntry::new(i_grass, 0));
+                        }
+                    } else if context.ground_y >= pos.y && pos.y > context.ground_y - 5 {
+                        return Some(BlockEntry::new(i_dirt, 0));
+                    } else if context.ground_y > pos.y {
+                        return Some(BlockEntry::new(i_stone, 0));
                     }
-                } else if context.ground_y >= pos.y && pos.y > context.ground_y - 5 {
-                    return Some(BlockEntry::new(i_dirt, 0));
-                } else if context.ground_y > pos.y {
-                    return Some(BlockEntry::new(i_stone, 0));
-                }
-                None
-            },
-            surface_noise: |point, noise| {
+                    None
+                },
+            ),
+            surface_noise: Some(|point, noise| {
                 let new_point = point / 4.0;
                 let new_point_arr = new_point.to_array();
                 let h_n = |p| (noise.get_2d(p) + 1.0) / 2.0;
@@ -176,7 +182,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 .abs()
                     * 100.0
                     + 40.0
-            },
+            }),
             blend_influence: 1.0,
             block_influence: 1.0,
             can_generate: true,
@@ -190,20 +196,22 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(..1.0),
             temperature: range(..),
             moisture: range(2.5..),
-            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
-                let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
-                let (i_water, _) = block_registry.lookup_name_to_object(WATER_BLOCK_NAME.as_ref()).unwrap();
+            rule_source: Some(
+                |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+                    let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_water, _) = block_registry.lookup_name_to_object(WATER_BLOCK_NAME.as_ref()).unwrap();
 
-                if context.sea_level > pos.y {
-                    return if context.ground_y > pos.y {
-                        Some(BlockEntry::new(i_stone, 0))
-                    } else {
-                        Some(BlockEntry::new(i_water, 0))
-                    };
-                }
-                None
-            },
-            surface_noise: |point, noise| noise.get_2d(point.to_array()) * -7.5 + 1.0,
+                    if context.sea_level > pos.y {
+                        return if context.ground_y > pos.y {
+                            Some(BlockEntry::new(i_stone, 0))
+                        } else {
+                            Some(BlockEntry::new(i_water, 0))
+                        };
+                    }
+                    None
+                },
+            ),
+            surface_noise: Some(|point, noise| noise.get_2d(point.to_array()) * -7.5 + 1.0),
             blend_influence: 10.0,
             block_influence: 1.0,
             can_generate: true,
@@ -217,18 +225,20 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(..),
             temperature: range(..),
             moisture: range(2.5..),
-            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
-                let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
-                let (i_sand, _) = block_registry.lookup_name_to_object(SAND_BLOCK_NAME.as_ref()).unwrap();
+            rule_source: Some(
+                |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+                    let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_sand, _) = block_registry.lookup_name_to_object(SAND_BLOCK_NAME.as_ref()).unwrap();
 
-                if context.ground_y > pos.y - 1 {
-                    return Some(BlockEntry::new(i_stone, 0));
-                } else if context.ground_y == pos.y {
-                    return Some(BlockEntry::new(i_sand, 0));
-                }
-                None
-            },
-            surface_noise: |point, noise| noise.get_2d(point.to_array()) * 1.0 + 1.0,
+                    if context.ground_y > pos.y - 1 {
+                        return Some(BlockEntry::new(i_stone, 0));
+                    } else if context.ground_y == pos.y {
+                        return Some(BlockEntry::new(i_sand, 0));
+                    }
+                    None
+                },
+            ),
+            surface_noise: Some(|point, noise| noise.get_2d(point.to_array()) * 1.0 + 1.0),
             blend_influence: 1.0,
             block_influence: 1.0,
             can_generate: false,
@@ -242,21 +252,23 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(..),
             temperature: range(..),
             moisture: range(..),
-            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
-                let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
-                let (i_sand, _) = block_registry.lookup_name_to_object(SAND_BLOCK_NAME.as_ref()).unwrap();
-                let (i_water, _) = block_registry.lookup_name_to_object(WATER_BLOCK_NAME.as_ref()).unwrap();
+            rule_source: Some(
+                |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+                    let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_sand, _) = block_registry.lookup_name_to_object(SAND_BLOCK_NAME.as_ref()).unwrap();
+                    let (i_water, _) = block_registry.lookup_name_to_object(WATER_BLOCK_NAME.as_ref()).unwrap();
 
-                if context.ground_y == pos.y {
-                    return Some(BlockEntry::new(i_sand, 0));
-                } else if pos.y <= context.ground_y && context.ground_y > pos.y - 3 {
-                    return Some(BlockEntry::new(i_water, 0));
-                } else if context.ground_y > pos.y {
-                    return Some(BlockEntry::new(i_stone, 0));
-                }
-                None
-            },
-            surface_noise: |point, noise| noise.get_2d(point.to_array()) * -1.5 + 1.0,
+                    if context.ground_y == pos.y {
+                        return Some(BlockEntry::new(i_sand, 0));
+                    } else if pos.y <= context.ground_y && context.ground_y > pos.y - 3 {
+                        return Some(BlockEntry::new(i_water, 0));
+                    } else if context.ground_y > pos.y {
+                        return Some(BlockEntry::new(i_stone, 0));
+                    }
+                    None
+                },
+            ),
+            surface_noise: Some(|point, noise| noise.get_2d(point.to_array()) * -1.5 + 1.0),
             blend_influence: 1.0,
             block_influence: 1.0,
             can_generate: false,
