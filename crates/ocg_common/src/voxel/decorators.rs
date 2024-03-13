@@ -36,8 +36,7 @@ pub fn setup_basic_decorators(registry: &mut BiomeDecoratorRegistry, biome_regis
         .push_object(BiomeDecoratorDefinition {
             name: TREE_DECORATOR_NAME,
             placement: vec![
-                PlacementModifier::Count(4),
-                PlacementModifier::RarityFilter(NonZeroU32::new(10).unwrap()),
+                PlacementModifier::RarityFilter(NonZeroU32::new(4).unwrap()),
                 PlacementModifier::RandomOffset(
                     NumberProvider::UniformRange(0, 8),
                     NumberProvider::Constant(0),
@@ -57,12 +56,15 @@ pub fn setup_basic_decorators(registry: &mut BiomeDecoratorRegistry, biome_regis
                     .unwrap();
                 let (empty_id, _) = block_registry.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
 
+                let mut did_place_all = true;
+
                 let tree_height = Uniform::new(4, 6);
                 let tree_height = rand.sample(tree_height);
 
                 for y in 0..tree_height {
-                    let new_pos = pos - IVec3::from(chunk_pos) * CHUNK_DIM + IVec3::new(0, y, 0);
+                    let new_pos = pos - *chunk_pos * CHUNK_DIM + IVec3::new(0, y, 0);
                     if new_pos.y < 0 || new_pos.y >= CHUNK_DIM {
+                        did_place_all = false;
                         continue;
                     }
                     chunk.put(
@@ -70,12 +72,12 @@ pub fn setup_basic_decorators(registry: &mut BiomeDecoratorRegistry, biome_regis
                         BlockEntry::new(log_id, 0),
                     );
                 }
-                for (x, y, z) in iproduct!(-3..=3, -1..=3, -3..=3) {
+                for (x, y, z) in iproduct!(-3..=3, 0..=3, -3..=3) {
                     // check if it's outside a sphere
                     if x * x + y * y + z * z > 3 * 3 {
                         continue;
                     }
-                    let new_pos = pos - IVec3::from(chunk_pos) * CHUNK_DIM + IVec3::new(x, y + tree_height - 2, z);
+                    let new_pos = pos - *chunk_pos * CHUNK_DIM + IVec3::new(x, y + tree_height - 2, z);
                     if new_pos.x < 0
                         || new_pos.x >= CHUNK_DIM
                         || new_pos.y < 0
@@ -83,6 +85,7 @@ pub fn setup_basic_decorators(registry: &mut BiomeDecoratorRegistry, biome_regis
                         || new_pos.z < 0
                         || new_pos.z >= CHUNK_DIM
                     {
+                        did_place_all = false;
                         continue;
                     }
                     let new_pos = InChunkPos::try_from_ivec3(new_pos).expect("modulo failed???");
@@ -91,7 +94,7 @@ pub fn setup_basic_decorators(registry: &mut BiomeDecoratorRegistry, biome_regis
                     }
                     chunk.put(new_pos, BlockEntry::new(leaves_id, 0));
                 }
-                false
+                did_place_all
             }),
         })
         .unwrap();

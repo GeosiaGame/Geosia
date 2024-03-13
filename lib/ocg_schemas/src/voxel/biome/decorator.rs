@@ -44,7 +44,7 @@ impl BiomeDecoratorEntry {
 pub type BiomeDecoratorRegistry = Registry<BiomeDecoratorDefinition>;
 
 /// A placer function.
-
+/// Return false if you did NOT place all blocks.
 pub type PlacerFunction = fn(
     &BiomeDecoratorDefinition,
     &mut PaletteStorage<BlockEntry>,

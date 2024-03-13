@@ -111,7 +111,7 @@ impl StdGenerator {
         let mut biomes: Vec<(RegistryId, BiomeDefinition)> = Vec::new();
         for def in biome_registry.get_objects_ids().iter() {
             if def.1.can_generate {
-                biomes.push((*def.0, def.1.to_owned()));
+                biomes.push((def.0, def.1.to_owned()));
             }
         }
         self.biome_map.generatable_biomes = biomes;
@@ -311,7 +311,7 @@ impl StdGenerator {
             let mut result = false;
             if let Some(placer) = decorator.placer {
                 for pos in iter {
-                    if placer(
+                    if !placer(
                         decorator,
                         chunk,
                         &mut PositionalRandomFactory::get_at_pos(pos),
@@ -319,6 +319,22 @@ impl StdGenerator {
                         chunk_pos,
                         block_registry,
                     ) {
+                        // Get the actual chunk we're working in.
+                        let mut chunk_pos = AbsChunkPos::from_ivec3(pos / CHUNK_DIM);
+                        let mut in_chunk_pos = pos % CHUNK_DIM;
+                        while in_chunk_pos.x < 0 {
+                            in_chunk_pos.x += CHUNK_DIM;
+                            chunk_pos.x -= 1;
+                        }
+                        while in_chunk_pos.y < 0 {
+                            in_chunk_pos.y += CHUNK_DIM;
+                            chunk_pos.y -= 1;
+                        }
+                        while in_chunk_pos.z < 0 {
+                            in_chunk_pos.z += CHUNK_DIM;
+                            chunk_pos.z -= 1;
+                        }
+
                         if !self.decorator_placement.contains_key(&chunk_pos) {
                             self.decorator_placement.insert(chunk_pos, vec![]);
                         }
@@ -326,8 +342,9 @@ impl StdGenerator {
                             .get_mut(&chunk_pos)
                             .expect("failed to insert entry to decorator placement map")
                             .push(BiomeDecoratorEntry::new(
-                                *id,
-                                InChunkPos::try_from_ivec3(pos - *chunk_pos * CHUNK_DIM).unwrap(),
+                                id,
+                                InChunkPos::try_from_ivec3(in_chunk_pos)
+                                    .expect(format!("failed to get InChunkPos from {pos}").as_str()),
                             ));
                         result = true;
                     }
@@ -338,21 +355,28 @@ impl StdGenerator {
             }
         }
 
+        // search for features in chunks next to this one, and place any that are found.
         for (cx, cy, cz) in iproduct!(-1..=1, -1..=1, -1..=1) {
+            if cx == 0 || cy == 0 || cx == 0 {
+                continue;
+            }
             let chunk_pos = AbsChunkPos::from_ivec3(*chunk_pos + IVec3::new(cx, cy, cz));
             if let Some(decorators) = self.decorator_placement.get(&chunk_pos) {
                 for entry in decorators {
                     let pos = *entry.pos + *chunk_pos * CHUNK_DIM;
                     let decorator = entry.lookup(registry).unwrap();
                     if let Some(placer) = decorator.placer {
-                        let _result = placer(
+                        if !placer(
                             decorator,
                             chunk,
                             &mut PositionalRandomFactory::get_at_pos(pos),
                             pos,
                             chunk_pos,
                             block_registry,
-                        );
+                        ) {
+                            
+                        }
+                        
                     }
                 }
             }

@@ -272,12 +272,12 @@ impl<Object: RegistryObject> Registry<Object> {
     }
 
     /// Gets a `Vec` of all the ID -> Object mappings in this registry.
-    pub fn get_objects_ids(&self) -> Vec<(&RegistryId, &Object)> {
+    pub fn get_objects_ids(&self) -> Vec<(RegistryId, &Object)> {
         let mut result = Vec::new();
         for id in self.name_to_id.values() {
             let obj = self.lookup_id_to_object(*id);
             if let Some(o) = obj {
-                result.push((id, o));
+                result.push((*id, o));
             }
         }
         result

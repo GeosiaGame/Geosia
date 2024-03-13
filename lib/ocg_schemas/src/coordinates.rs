@@ -129,6 +129,11 @@ macro_rules! impl_simple_ivec3_newtype {
                 &self.0
             }
         }
+        impl std::ops::DerefMut for $T {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.0
+            }
+        }
     };
 }
 
