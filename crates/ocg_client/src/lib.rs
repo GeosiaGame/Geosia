@@ -90,11 +90,13 @@ mod debug_window {
     use bevy::prelude::*;
     use ocg_common::voxel::biomes::setup_basic_biomes;
     use ocg_common::voxel::blocks::setup_basic_blocks;
+    use ocg_common::voxel::decorators::setup_basic_decorators;
     use ocg_common::voxel::generator::StdGenerator;
     use ocg_common::voxel::generator::WORLD_SIZE_XZ;
     use ocg_common::voxel::generator::WORLD_SIZE_Y;
     use ocg_schemas::coordinates::AbsChunkPos;
     use ocg_schemas::dependencies::itertools::iproduct;
+    use ocg_schemas::voxel::biome::decorator::BiomeDecoratorRegistry;
     use ocg_schemas::voxel::biome::BiomeRegistry;
     use ocg_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME};
 
@@ -134,6 +136,10 @@ mod debug_window {
         setup_basic_biomes(&mut biome_reg);
         let biome_reg = biome_reg;
 
+        let mut biome_decorator_reg = BiomeDecoratorRegistry::default();
+        setup_basic_decorators(&mut biome_decorator_reg, &biome_reg);
+        let biome_decorator_reg = biome_decorator_reg;
+
         let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_Y * 2, WORLD_SIZE_XZ as u32 * 4);
         generator.generate_world_biomes(&biome_reg);
         let world_size_blocks = generator.size_blocks_xz() as usize;
@@ -152,10 +158,10 @@ mod debug_window {
             -WORLD_SIZE_Y..=WORLD_SIZE_Y,
             -WORLD_SIZE_XZ..=WORLD_SIZE_XZ
         ) {
-            let cpos = AbsChunkPos::new(cx, cy, cz);
+            let c_pos = AbsChunkPos::new(cx, cy, cz);
             let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
-            generator.generate_chunk(cpos, &mut chunk.blocks, &block_reg, &biome_reg);
-            test_chunks.chunks.insert(cpos, chunk);
+            generator.generate_chunk(c_pos, &mut chunk.blocks, &block_reg, &biome_reg, &biome_decorator_reg);
+            test_chunks.chunks.insert(c_pos, chunk);
         }
         for (pos, _) in test_chunks.chunks.iter() {
             let chunks = &test_chunks.get_neighborhood_around(*pos).transpose_option();

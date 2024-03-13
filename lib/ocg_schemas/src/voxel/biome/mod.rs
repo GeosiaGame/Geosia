@@ -45,8 +45,12 @@ impl BiomeEntry {
 /// A named registry of block definitions.
 pub type BiomeRegistry = Registry<BiomeDefinition>;
 
+/// A rule source function.
+pub type RuleSource = fn(pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>;
+/// A surface noise function.
+pub type SurfaceNoise = fn(pos: DVec2, noise: &mut Box<dyn NoiseFn<f64, 4>>) -> f64;
+
 /// A definition of a biome type, specifying properties such as registry name, shape, textures.
-// TODO fix serialization of `BiomeDefinition`
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BiomeDefinition {
     /// The unique registry name
@@ -63,10 +67,10 @@ pub struct BiomeDefinition {
     pub moisture: Range<f64>,
     /// The block placement rule source for this biome.
     #[serde(skip)]
-    pub rule_source: Option<fn(pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>>,
+    pub rule_source: Option<RuleSource>,
     /// The noise function for this biome.
     #[serde(skip)]
-    pub surface_noise: Option<fn(pos: DVec2, noise: &mut Box<dyn NoiseFn<f64, 4>>) -> f64>,
+    pub surface_noise: Option<SurfaceNoise>,
     /// The strength of this biome in the blending step.
     pub blend_influence: f64,
     /// The strength of this biome in the block placement step.

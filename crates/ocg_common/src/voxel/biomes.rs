@@ -30,8 +30,8 @@ pub const BEACH_BIOME_NAME: RegistryName = RegistryName::ocg_const("beach");
 pub const RIVER_BIOME_NAME: RegistryName = RegistryName::ocg_const("river");
 
 /// Installs the base set of biomes into the given block registry.
-pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
-    biome_registry
+pub fn setup_basic_biomes(registry: &mut BiomeRegistry) {
+    registry
         .push_object(BiomeDefinition {
             name: VOID_BIOME_NAME,
             representative_color: RGBA8::new(0, 0, 0, 0),
@@ -46,7 +46,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         })
         .unwrap();
 
-    biome_registry
+    registry
         .push_object(BiomeDefinition {
             name: PLAINS_BIOME_NAME,
             representative_color: RGBA8::new(20, 180, 10, 255),
@@ -91,7 +91,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         })
         .unwrap();
 
-    biome_registry
+    registry
         .push_object(BiomeDefinition {
             name: HILLS_BIOME_NAME,
             representative_color: RGBA8::new(15, 110, 10, 255),
@@ -138,7 +138,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         })
         .unwrap();
 
-    biome_registry
+    registry
         .push_object(BiomeDefinition {
             name: MOUNTAINS_BIOME_NAME,
             representative_color: RGBA8::new(220, 220, 220, 255),
@@ -189,7 +189,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         })
         .unwrap();
 
-    biome_registry
+    registry
         .push_object(BiomeDefinition {
             name: OCEAN_BIOME_NAME,
             representative_color: RGBA8::new(10, 120, 180, 255),
@@ -218,7 +218,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         })
         .unwrap();
 
-    biome_registry
+    registry
         .push_object(BiomeDefinition {
             name: BEACH_BIOME_NAME,
             representative_color: RGBA8::new(224, 200, 130, 255),
@@ -245,7 +245,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         })
         .unwrap();
 
-    biome_registry
+    registry
         .push_object(BiomeDefinition {
             name: RIVER_BIOME_NAME,
             representative_color: RGBA8::new(10, 100, 200, 255),

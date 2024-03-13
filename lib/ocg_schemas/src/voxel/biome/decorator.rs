@@ -4,25 +4,55 @@ use core::hash::Hash;
 use std::{hash::Hasher, num::NonZeroU32};
 
 use bevy_math::IVec3;
-use itertools::Itertools;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use super::BiomeDefinition;
 use crate::{
-    coordinates::{AbsChunkPos, CHUNK_DIM},
-    registry::{Registry, RegistryDataSet, RegistryName, RegistryObject},
+    coordinates::{AbsChunkPos, InChunkPos},
+    registry::{Registry, RegistryDataSet, RegistryId, RegistryName, RegistryObject},
     voxel::{
-        chunk_group::ChunkGroup,
         chunk_storage::PaletteStorage,
-        generation::{positional_random::PositionalRandomFactory, Context, NumberProvider},
-        voxeltypes::BlockEntry,
+        generation::{Context, NumberProvider},
+        voxeltypes::{BlockEntry, BlockRegistry},
     },
-    OcgExtraData,
 };
+
+/// A Biome Decorator type reference (id)
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[repr(C)]
+pub struct BiomeDecoratorEntry {
+    /// The decorator ID in the registry
+    pub id: RegistryId,
+    /// The position of this decorator within this chunk.
+    pub pos: InChunkPos,
+}
+
+impl BiomeDecoratorEntry {
+    /// Helper to construct a new decorator entry
+    pub fn new(id: RegistryId, pos: InChunkPos) -> Self {
+        Self { id, pos }
+    }
+
+    /// Helper to look up the decorator definition corresponding to this ID
+    pub fn lookup(self, registry: &BiomeDecoratorRegistry) -> Option<&BiomeDecoratorDefinition> {
+        registry.lookup_id_to_object(self.id)
+    }
+}
 
 /// A named registry of block definitions.
 pub type BiomeDecoratorRegistry = Registry<BiomeDecoratorDefinition>;
+
+/// A placer function.
+
+pub type PlacerFunction = fn(
+    &BiomeDecoratorDefinition,
+    &mut PaletteStorage<BlockEntry>,
+    &mut rand_xoshiro::Xoshiro512StarStar,
+    IVec3,
+    AbsChunkPos,
+    &BlockRegistry,
+) -> bool;
 
 /// A definition of a decorator type, specifying properties such as registry name, shape, placement.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -33,9 +63,10 @@ pub struct BiomeDecoratorDefinition {
     pub placement: Vec<PlacementModifier>,
     /// The biomes this decorator can be placed in.
     pub biomes: RegistryDataSet<BiomeDefinition>,
-
+    /// The placer for this definition.
+    /// MAKE SURE YOU DO **NOT** GO OVER CHUNK BOUNDARIES.
     #[serde(skip)]
-    placer: Option<fn(&Self, &mut [&mut PaletteStorage<BlockEntry>], &mut rand_xoshiro::Xoshiro512StarStar, IVec3) -> bool>,
+    pub placer: Option<PlacerFunction>,
 }
 
 impl PartialEq for BiomeDecoratorDefinition {
@@ -53,48 +84,6 @@ impl Hash for BiomeDecoratorDefinition {
 impl RegistryObject for BiomeDecoratorDefinition {
     fn registry_name(&self) -> crate::registry::RegistryNameRef {
         self.name.as_ref()
-    }
-}
-
-impl BiomeDecoratorDefinition {
-    /// Place this decorator as defined by `placement` and `placer`.
-    pub fn do_place<ED: OcgExtraData>(
-        &self,
-        chunk_group: &mut ChunkGroup<ED>,
-        pos: &IVec3,
-        rand: &mut rand_xoshiro::Xoshiro512StarStar,
-        context: &Context<'_>,
-    ) -> bool {
-        let iter = [*pos];
-        let mut iter = Box::new(iter.into_iter()) as Box<dyn Iterator<Item = IVec3>>;
-
-        for modifier in &self.placement {
-            // TODO somehow get rid of the PositionalRandomFactory usage, it bothers me.
-            let val = iter.flat_map(|pos| {
-                modifier.pick_positions(pos, &mut PositionalRandomFactory::get_at_pos(pos), context, self)
-            });
-            iter = Box::new(val) as Box<dyn Iterator<Item = IVec3>>;
-        }
-
-        let chunks = &mut chunk_group
-            .get_neighborhood_around_mut(AbsChunkPos(*pos / CHUNK_DIM))
-            .transpose_option()
-            .unwrap();
-        let chunks = &mut chunks
-            .objects_xzy_mut()
-            .iter_mut()
-            .map(|c| &mut c.blocks)
-            .collect_vec()[..];
-
-        let mut result = false;
-        if let Some(placer) = self.placer {
-            for entry in iter {
-                if (placer)(self, chunks, rand, entry) {
-                    result = true;
-                }
-            }
-        }
-        result
     }
 }
 
@@ -152,7 +141,11 @@ impl PlacementModifier {
                 ));
             }
             PlacementModifier::BiomeFilter => {
-                if definition.biomes.contains(context.biome) {
+                if context
+                    .biomes
+                    .iter()
+                    .any(|(biome, _)| definition.biomes.contains_value(biome))
+                {
                     positions.push(pos);
                 }
             }

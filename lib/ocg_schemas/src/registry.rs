@@ -337,9 +337,21 @@ impl<Object: RegistryObject> RegistryDataSet<Object> {
         Ok(&self.values)
     }
 
+    /// Does this RegistryDataSet contain the given key?
+    /// NOTE: only returns true if the set is filled.
+    pub fn contains_key(&self, obj: &RegistryName) -> bool {
+        self.names.iter().any(|name| name == obj)
+    }
+
+    /// Does this RegistryDataSet contain the given key?
+    /// NOTE: only returns true if the set is filled.
+    pub fn contains_key_ref(&self, obj: RegistryNameRef<'_>) -> bool {
+        self.names.iter().any(|name| *name == obj.to_owned())
+    }
+
     /// Does this RegistryDataSet contain the given value?
     /// NOTE: only returns true if the set is filled.
-    pub fn contains(&self, obj: &Object) -> bool {
+    pub fn contains_value(&self, obj: &Object) -> bool {
         if let Ok(values) = self.values() {
             return values.iter().any(|(_, value)| value == obj);
         }

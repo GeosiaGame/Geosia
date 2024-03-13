@@ -4,24 +4,21 @@ use std::{f64::consts::TAU, fmt::Debug};
 
 use noise::{NoiseFn, Seedable};
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 
-use self::positional_random::PositionalRandomFactory;
-use super::{biome::BiomeDefinition, chunk_storage::PaletteStorage, voxeltypes::BlockEntry};
+use super::biome::{biome_map::EXPECTED_BIOME_COUNT, BiomeDefinition};
 
 pub mod blur;
 pub mod fbm_noise;
 pub mod positional_random;
 
 /// Context data for world generation.
+#[derive(Clone)]
 pub struct Context<'a> {
     /// The world seed.
     pub seed: u64,
-    /// The chunk. Unmodifiable through here.
-    pub chunk: &'a PaletteStorage<BlockEntry>,
     /// the current biome at this position.
-    pub biome: &'a BiomeDefinition,
-    /// A positional random factory.
-    pub random: PositionalRandomFactory<rand_xoshiro::Xoshiro512StarStar>,
+    pub biomes: SmallVec<[(&'a BiomeDefinition, f64); EXPECTED_BIOME_COUNT]>,
     /// The ground Y level in this block position.
     pub ground_y: i32,
     /// The sea level for this planet.

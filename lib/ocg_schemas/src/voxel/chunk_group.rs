@@ -7,8 +7,6 @@ use crate::voxel::chunk::Chunk;
 use crate::voxel::neighborhood::OptionalChunkRefNeighborhood;
 use crate::OcgExtraData;
 
-use super::neighborhood::OptionalChunkRefMutNeighborhood;
-
 /// A group of loaded chunks in memory, for example a planet, or a movable contraption.
 #[derive(Clone)]
 pub struct ChunkGroup<ExtraData: OcgExtraData> {
@@ -47,10 +45,5 @@ impl<ED: OcgExtraData> ChunkGroup<ED> {
     /// Provides a convenient accessor for a chunk and all its neighbors.
     pub fn get_neighborhood_around(&self, center: AbsChunkPos) -> OptionalChunkRefNeighborhood<ED> {
         OptionalChunkRefNeighborhood::from_center(center, |coord| self.chunks.get(&coord))
-    }
-
-    /// Provides a convenient accessor for a chunk and all its neighbors.
-    pub fn get_neighborhood_around_mut(&mut self, center: AbsChunkPos) -> OptionalChunkRefMutNeighborhood<ED> {
-        OptionalChunkRefMutNeighborhood::from_center_mut(center, |coord| self.chunks.get_mut(&coord))
     }
 }
