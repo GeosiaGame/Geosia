@@ -14,7 +14,6 @@ use ocg_schemas::{
             BiomeRegistry,
         },
         chunk_storage::ChunkStorage,
-        generation::NumberProvider,
         voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME},
     },
 };
@@ -36,12 +35,12 @@ pub fn setup_basic_decorators(registry: &mut BiomeDecoratorRegistry, biome_regis
         .push_object(BiomeDecoratorDefinition {
             name: TREE_DECORATOR_NAME,
             placement: vec![
-                PlacementModifier::RarityFilter(NonZeroU32::new(4).unwrap()),
-                PlacementModifier::RandomOffset(
-                    NumberProvider::UniformRange(0, 8),
-                    NumberProvider::Constant(0),
-                    NumberProvider::UniformRange(0, 8),
-                ),
+                PlacementModifier::RarityFilter(NonZeroU32::new(16).unwrap()),
+                //                PlacementModifier::RandomOffset(
+                //                    NumberProvider::UniformRange(0, 8),
+                //                    NumberProvider::Constant(0),
+                //                    NumberProvider::UniformRange(0, 8),
+                //                ),
                 PlacementModifier::OnSurface(),
             ],
             biomes: RegistryDataSet::new(
@@ -56,15 +55,16 @@ pub fn setup_basic_decorators(registry: &mut BiomeDecoratorRegistry, biome_regis
                     .unwrap();
                 let (empty_id, _) = block_registry.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
 
-                let tree_height: i32 = if let Some(data) = data {
-                    match data.as_any().downcast_ref::<i32>() {
+                let tree_height: i32;
+                if let Some(data) = data {
+                    tree_height = match data.as_any().downcast_ref::<i32>() {
                         Some(x) => *x,
                         None => panic!("bad value in extra data for decorator."),
-                    }
+                    };
                 } else {
                     let distribution = Uniform::new(4, 6);
-                    rand.sample(distribution)
-                };
+                    tree_height = rand.sample(distribution);
+                }
 
                 let mut did_place_all = true;
                 let mut did_place_some = false;
