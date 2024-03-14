@@ -36,6 +36,7 @@ thiserror.workspace = true
 rand.workspace = true
 rand_xoshiro.workspace = true
 noise.workspace = true
+tuple_list.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

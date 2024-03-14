@@ -1,11 +1,12 @@
 //! Biome decorator-related types.
 
 use core::hash::Hash;
-use std::{hash::Hasher, num::NonZeroU32};
+use std::{any::Any, hash::Hasher, num::NonZeroU32};
 
 use bevy_math::IVec3;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use tuple_list::TupleList;
 
 use super::BiomeDefinition;
 use crate::{
@@ -19,23 +20,25 @@ use crate::{
 };
 
 /// A Biome Decorator type reference (id)
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone)]
 #[repr(C)]
 pub struct BiomeDecoratorEntry {
     /// The decorator ID in the registry
     pub id: RegistryId,
     /// The position of this decorator within this chunk.
     pub pos: InChunkPos,
+    /// Extra data this feature uses to determine placement.
+    pub extra_data: Option<Box<dyn DecoratorData>>,
 }
 
 impl BiomeDecoratorEntry {
     /// Helper to construct a new decorator entry
-    pub fn new(id: RegistryId, pos: InChunkPos) -> Self {
-        Self { id, pos }
+    pub fn new(id: RegistryId, pos: InChunkPos, extra_data: Option<Box<dyn DecoratorData>>) -> Self {
+        Self { id, pos, extra_data }
     }
 
     /// Helper to look up the decorator definition corresponding to this ID
-    pub fn lookup(self, registry: &BiomeDecoratorRegistry) -> Option<&BiomeDecoratorDefinition> {
+    pub fn lookup<'a>(&'a self, registry: &'a BiomeDecoratorRegistry) -> Option<&'a BiomeDecoratorDefinition> {
         registry.lookup_id_to_object(self.id)
     }
 }
@@ -44,15 +47,93 @@ impl BiomeDecoratorEntry {
 pub type BiomeDecoratorRegistry = Registry<BiomeDecoratorDefinition>;
 
 /// A placer function.
-/// Return false if you did NOT place all blocks.
+/// Return (true, false) if you did NOT place all blocks, but DID place some.
+/// Return (false, false) if you placed NO blocks.
+/// return (true, true) if you placed all blocks.
 pub type PlacerFunction = fn(
     &BiomeDecoratorDefinition,
+    &Option<Box<dyn DecoratorData>>,
     &mut PaletteStorage<BlockEntry>,
     &mut rand_xoshiro::Xoshiro512StarStar,
     IVec3,
     AbsChunkPos,
     &BlockRegistry,
-) -> bool;
+) -> (bool, bool, Box<dyn DecoratorData>);
+
+/// Generic data for the decorator.
+pub trait DecoratorData {
+    /// Get this object as `any`.
+    fn as_any(&self) -> &dyn Any;
+    /// Clone this object wrapped in a box.
+    fn clone_box(&self) -> Box<dyn DecoratorData>;
+}
+impl Clone for Box<dyn DecoratorData> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
+}
+impl<T> DecoratorData for Box<T>
+where
+    T: DecoratorData + Clone + 'static,
+{
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn DecoratorData> {
+        self.clone()
+    }
+}
+
+impl DecoratorData for i32 {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn DecoratorData> {
+        Box::new(*self)
+    }
+}
+impl DecoratorData for f64 {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn DecoratorData> {
+        Box::new(*self)
+    }
+}
+impl DecoratorData for IVec3 {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn DecoratorData> {
+        Box::new(*self)
+    }
+}
+impl DecoratorData for () {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn DecoratorData> {
+        Box::new(())
+    }
+}
+impl<Head, Tail> DecoratorData for (Head, Tail)
+where
+    Head: DecoratorData + Copy + 'static,
+    Tail: DecoratorData + TupleList + Copy + 'static,
+{
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn DecoratorData> {
+        Box::new(*self)
+    }
+}
 
 /// A definition of a decorator type, specifying properties such as registry name, shape, placement.
 #[derive(Clone, Debug, Serialize, Deserialize)]

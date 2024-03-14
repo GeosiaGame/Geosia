@@ -49,17 +49,25 @@ pub fn setup_basic_decorators(registry: &mut BiomeDecoratorRegistry, biome_regis
                 biome_registry,
                 [PLAINS_BIOME_NAME].iter().cloned().collect(),
             ),
-            placer: Some(|_def, chunk, rand, pos, chunk_pos, block_registry| {
+            placer: Some(|_def, data, chunk, rand, pos, chunk_pos, block_registry| {
                 let (log_id, _) = block_registry.lookup_name_to_object(LOG_BLOCK_NAME.as_ref()).unwrap();
                 let (leaves_id, _) = block_registry
                     .lookup_name_to_object(LEAVES_BLOCK_NAME.as_ref())
                     .unwrap();
                 let (empty_id, _) = block_registry.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
 
-                let mut did_place_all = true;
+                let tree_height: i32 = if let Some(data) = data {
+                    match data.as_any().downcast_ref::<i32>() {
+                        Some(x) => *x,
+                        None => panic!("bad value in extra data for decorator."),
+                    }
+                } else {
+                    let distribution = Uniform::new(4, 6);
+                    rand.sample(distribution)
+                };
 
-                let tree_height = Uniform::new(4, 6);
-                let tree_height = rand.sample(tree_height);
+                let mut did_place_all = true;
+                let mut did_place_some = false;
 
                 for y in 0..tree_height {
                     let new_pos = pos - *chunk_pos * CHUNK_DIM + IVec3::new(0, y, 0);
@@ -71,6 +79,7 @@ pub fn setup_basic_decorators(registry: &mut BiomeDecoratorRegistry, biome_regis
                         InChunkPos::try_from_ivec3(new_pos).expect("modulo failed???"),
                         BlockEntry::new(log_id, 0),
                     );
+                    did_place_some = true;
                 }
                 for (x, y, z) in iproduct!(-3..=3, 0..=3, -3..=3) {
                     // check if it's outside a sphere
@@ -93,8 +102,9 @@ pub fn setup_basic_decorators(registry: &mut BiomeDecoratorRegistry, biome_regis
                         continue;
                     }
                     chunk.put(new_pos, BlockEntry::new(leaves_id, 0));
+                    did_place_some = true;
                 }
-                did_place_all
+                (did_place_some, did_place_all, Box::new(tree_height))
             }),
         })
         .unwrap();

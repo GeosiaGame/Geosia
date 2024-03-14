@@ -285,12 +285,13 @@ impl<Object: RegistryObject> Registry<Object> {
 }
 
 /// A registry data set, like tags in *Minecraft*.
+// TODO fix deserialization
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RegistryDataSet<Object: RegistryObject> {
     key: RegistryName,
 
     names: HashSet<RegistryName>,
-    values: Vec<(RegistryId, Object)>,
+    values: Option<Vec<(RegistryId, Object)>>,
 }
 
 impl<Object: RegistryObject> Clone for RegistryDataSet<Object> {
@@ -309,7 +310,7 @@ impl<Object: RegistryObject> RegistryDataSet<Object> {
         let mut s = Self {
             key,
             names,
-            values: vec![],
+            values: None,
         };
         s.load(registry);
         s
@@ -317,24 +318,25 @@ impl<Object: RegistryObject> RegistryDataSet<Object> {
 
     /// load this registry data set from it's registry.
     pub fn load(&mut self, registry: &Registry<Object>) {
-        self.values = self
-            .names
-            .iter()
-            .map(|name| {
-                registry
-                    .lookup_name_to_object(name.as_ref())
-                    .map(|(k, v)| (k, v.to_owned()))
-                    .unwrap_or_else(|| panic!("registry key {name} not found in registry."))
-            })
-            .collect_vec();
+        self.values = Some(
+            self.names
+                .iter()
+                .map(|name| {
+                    registry
+                        .lookup_name_to_object(name.as_ref())
+                        .map(|(key, value)| (key, value.to_owned()))
+                        .unwrap_or_else(|| panic!("registry key {name} not found in registry."))
+                })
+                .collect_vec(),
+        );
     }
 
     /// Get the values of this RegistryDataSet, or an error if it isn't loaded yet.
     pub fn values(&self) -> Result<&[(RegistryId, Object)], RegistryError> {
-        if self.values.is_empty() {
-            return Err(RegistryError::DataSetNotFilled { name: self.key.clone() });
+        match &self.values {
+            Some(v) => Ok(v),
+            None => Err(RegistryError::DataSetNotFilled { name: self.key.clone() }),
         }
-        Ok(&self.values)
     }
 
     /// Does this RegistryDataSet contain the given key?

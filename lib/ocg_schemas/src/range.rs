@@ -20,6 +20,12 @@ pub enum Range<Idx> {
     Full,
 }
 
+impl<Idx: Default> Default for Range<Idx> {
+    fn default() -> Self {
+        Self::Closed(Idx::default(), Idx::default())
+    }
+}
+
 impl<Idx> Range<Idx>
 where
     Idx: PartialOrd,
