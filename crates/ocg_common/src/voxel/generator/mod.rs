@@ -291,7 +291,7 @@ impl StdGenerator {
         biome_registry: &'a BiomeRegistry,
         block_registry: &BlockRegistry,
     ) {
-        for (ox, oz) in iproduct!(-16..=48, -16..=48) {
+        for (ox, oz) in iproduct!(-CHUNK_DIM..=CHUNK_DIM*2, -CHUNK_DIM..=CHUNK_DIM*2) {
             let o_pos = IVec2::new(ox, oz);
             let pos = o_pos + (*chunk_pos).xz() * CHUNK_DIM;
 
@@ -301,7 +301,7 @@ impl StdGenerator {
                     let decorator = registry.lookup_id_to_object(id).unwrap();
 
                     // Place this decorator as defined by `placement` and `placer`.
-                    let iter = [IVec3::new(chunk_pos.x * CHUNK_DIM, 0, chunk_pos.z * CHUNK_DIM)];
+                    let iter = [IVec3::new(pos.x, chunk_pos.y * CHUNK_DIM, pos.y)];
                     let mut iter = Box::new(iter.into_iter()) as Box<dyn Iterator<Item = IVec3>>;
 
                     for modifier in &decorator.placement {
@@ -336,7 +336,7 @@ impl StdGenerator {
 
                     for pos_3 in iter {
                         if let Some(placer) = decorator.placer {
-                            let (some, all, extra_data) = placer(
+                            let (some, _, extra_data) = placer(
                                 decorator,
                                 &placement.extra_data,
                                 chunk,
@@ -345,7 +345,7 @@ impl StdGenerator {
                                 chunk_pos,
                                 block_registry,
                             );
-                            if !all && some && placement.extra_data.is_none() {
+                            if some && placement.extra_data.is_none() {
                                 placement.extra_data = Some(extra_data);
                             }
                         }
