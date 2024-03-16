@@ -4,13 +4,13 @@ use core::hash::Hash;
 use std::{any::Any, hash::Hasher, num::NonZeroU32};
 
 use bevy_math::IVec3;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use tuple_list::TupleList;
 
 use super::BiomeDefinition;
 use crate::{
-    coordinates::{AbsChunkPos, InChunkPos},
+    coordinates::{AbsBlockPos, AbsChunkPos},
     registry::{Registry, RegistryDataSet, RegistryId, RegistryName, RegistryObject},
     voxel::{
         chunk_storage::PaletteStorage,
@@ -26,14 +26,14 @@ pub struct BiomeDecoratorEntry {
     /// The decorator ID in the registry
     pub id: RegistryId,
     /// The position of this decorator within this chunk.
-    pub pos: InChunkPos,
+    pub pos: AbsBlockPos,
     /// Extra data this feature uses to determine placement.
     pub extra_data: Option<Box<dyn DecoratorData>>,
 }
 
 impl BiomeDecoratorEntry {
     /// Helper to construct a new decorator entry
-    pub fn new(id: RegistryId, pos: InChunkPos, extra_data: Option<Box<dyn DecoratorData>>) -> Self {
+    pub fn new(id: RegistryId, pos: AbsBlockPos, extra_data: Option<Box<dyn DecoratorData>>) -> Self {
         Self { id, pos, extra_data }
     }
 
@@ -59,6 +59,9 @@ pub type PlacerFunction = fn(
     AbsChunkPos,
     &BlockRegistry,
 ) -> (bool, bool, Box<dyn DecoratorData>);
+/// A count function.
+/// returns the amount of this decorator in the area based on the input parameters.
+pub type CountFunction = fn(&BiomeDecoratorDefinition, &Context<'_>, f64, f64, f64) -> usize;
 
 /// Generic data for the decorator.
 pub trait DecoratorData {
@@ -144,10 +147,16 @@ pub struct BiomeDecoratorDefinition {
     pub placement: Vec<PlacementModifier>,
     /// The biomes this decorator can be placed in.
     pub biomes: RegistryDataSet<BiomeDefinition>,
+    /// An offset added to the random placement function.
+    pub salt: i32,
+    /// The function that dictates how many objects to place at a given noise map position.
+    /// params are (self, elevation, temperature, moisture).
+    #[serde(skip)]
+    pub count_fn: Option<CountFunction>,
     /// The placer for this definition.
     /// MAKE SURE YOU DO **NOT** GO OVER CHUNK BOUNDARIES.
     #[serde(skip)]
-    pub placer: Option<PlacerFunction>,
+    pub placer_fn: Option<PlacerFunction>,
 }
 
 impl PartialEq for BiomeDecoratorDefinition {
@@ -190,16 +199,16 @@ impl PlacementModifier {
     pub fn pick_positions(
         &self,
         pos: IVec3,
-        rand: &mut rand_xoshiro::Xoshiro512StarStar,
         context: &Context<'_>,
         definition: &BiomeDecoratorDefinition,
     ) -> Vec<IVec3> {
+        let mut rand = rand_xoshiro::Xoshiro512StarStar::seed_from_u64(context.seed);
         let mut positions = Vec::new();
         match self {
             PlacementModifier::YProvider(p, provider) => {
                 positions.push(IVec3::new(
                     pos.x,
-                    p.get_point(&IVec3::new(pos.x, provider.sample(rand), pos.z), context),
+                    p.get_point(&IVec3::new(pos.x, provider.sample(&mut rand), pos.z), context),
                     pos.z,
                 ));
             }
@@ -216,9 +225,9 @@ impl PlacementModifier {
             }
             PlacementModifier::RandomOffset(x, y, z) => {
                 positions.push(IVec3::new(
-                    pos.x + x.sample(rand),
-                    pos.y + y.sample(rand),
-                    pos.z + z.sample(rand),
+                    pos.x + x.sample(&mut rand),
+                    pos.y + y.sample(&mut rand),
+                    pos.z + z.sample(&mut rand),
                 ));
             }
             PlacementModifier::BiomeFilter => {

@@ -48,7 +48,17 @@ pub fn setup_basic_decorators(registry: &mut BiomeDecoratorRegistry, biome_regis
                 biome_registry,
                 [PLAINS_BIOME_NAME].iter().cloned().collect(),
             ),
-            placer: Some(|_def, data, chunk, rand, pos, chunk_pos, block_registry| {
+            salt: 124567,
+            count_fn: Some(|_def, _context, elevation, _temperature, moisture| {
+                if elevation <= 4.0 && moisture > 1.0 {
+                    return 10;
+                }
+                if elevation <= 3.0 && moisture > 2.0 {
+                    return 15;
+                }
+                0
+            }),
+            placer_fn: Some(|_def, data, chunk, rand, pos, chunk_pos, block_registry| {
                 let (log_id, _) = block_registry.lookup_name_to_object(LOG_BLOCK_NAME.as_ref()).unwrap();
                 let (leaves_id, _) = block_registry
                     .lookup_name_to_object(LEAVES_BLOCK_NAME.as_ref())
@@ -71,7 +81,13 @@ pub fn setup_basic_decorators(registry: &mut BiomeDecoratorRegistry, biome_regis
 
                 for y in 0..tree_height {
                     let new_pos = pos - *chunk_pos * CHUNK_DIM + IVec3::new(0, y, 0);
-                    if new_pos.y < 0 || new_pos.y >= CHUNK_DIM {
+                    if new_pos.x < 0
+                        || new_pos.x >= CHUNK_DIM
+                        || new_pos.y < 0
+                        || new_pos.y >= CHUNK_DIM
+                        || new_pos.z < 0
+                        || new_pos.z >= CHUNK_DIM
+                    {
                         did_place_all = false;
                         continue;
                     }

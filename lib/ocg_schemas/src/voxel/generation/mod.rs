@@ -6,7 +6,10 @@ use noise::{NoiseFn, Seedable};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
-use super::biome::{biome_map::EXPECTED_BIOME_COUNT, BiomeDefinition};
+use super::biome::{
+    biome_map::{BiomeMap, EXPECTED_BIOME_COUNT},
+    BiomeDefinition,
+};
 
 pub mod blur;
 pub mod fbm_noise;
@@ -27,6 +30,8 @@ pub struct Context<'a> {
     pub height: i32,
     /// depth of the world below y=0
     pub depth: i32,
+    /// The noise data.
+    pub biome_map: &'a BiomeMap,
 }
 
 /// Number provider.

@@ -4,7 +4,7 @@ use std::{cell::RefCell, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::
 
 use bevy::utils::hashbrown::HashMap;
 use bevy_math::{DVec2, IVec2, IVec3, Vec3Swizzles};
-use noise::{NoiseFn, OpenSimplex, SuperSimplex};
+use noise::OpenSimplex;
 use ocg_schemas::{
     coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIMZ},
     dependencies::{
@@ -15,7 +15,7 @@ use ocg_schemas::{
     voxel::{
         biome::{
             biome_map::{BiomeMap, EXPECTED_BIOME_COUNT, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD},
-            decorator::{BiomeDecoratorRegistry, DecoratorData},
+            decorator::{BiomeDecoratorEntry, BiomeDecoratorRegistry},
             BiomeDefinition, BiomeEntry, BiomeRegistry, Noises, VOID_BIOME_NAME,
         },
         chunk_storage::{ChunkStorage, PaletteStorage},
@@ -59,9 +59,8 @@ pub struct StdGenerator {
 
     random: Xoshiro512StarStar,
     biome_map: BiomeMap,
-    decorator_placements: HashMap<IVec2, Vec<DecoratorEntry>>,
     noises: Noises,
-    decorator_noise: Box<dyn NoiseFn<f64, 2>>,
+    decorator_cache: HashMap<IVec2, SmallVec<[BiomeDecoratorEntry; 8]>>,
 
     voronoi: Option<Voronoi>,
     points: Vec<Point>,
@@ -82,7 +81,6 @@ impl StdGenerator {
 
             random: Xoshiro512StarStar::seed_from_u64(seed),
             biome_map: BiomeMap::default(),
-            decorator_placements: HashMap::new(),
             noises: Noises {
                 base_terrain_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int).set_octaves(vec![-4.0, 1.0, 1.0, 0.0])),
                 elevation_noise: Box::new(
@@ -95,7 +93,7 @@ impl StdGenerator {
                     Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(3243)).set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
                 ),
             },
-            decorator_noise: Box::new(Fbm::<SuperSimplex>::new(seed_int.wrapping_add(55)).set_octaves(vec![1.0, 2.0])),
+            decorator_cache: HashMap::new(),
 
             voronoi: None,
             points: vec![],
@@ -149,29 +147,6 @@ impl StdGenerator {
         println!("biome generation took {:?} total", duration);
     }
 
-    /// Generate all the places where decorators can place, and what they are.
-    pub fn generate_world_decorator_placements(&mut self, biome_decorator_registry: &BiomeDecoratorRegistry) {
-        let size = self.size_chunks_xz * CHUNK_DIM;
-
-        for (x, z) in iproduct!(-size..=size, -size..=size) {
-            for (id, _) in biome_decorator_registry.get_objects_ids() {
-                // try to place a decorator.
-                // 0.5 is a "feel good" value.
-                if self.decorator_noise.get([x as f64, z as f64]) > 0.5 {
-                    let pos = IVec2::new(x, z);
-                    if !self.decorator_placements.contains_key(&pos) {
-                        self.decorator_placements.insert(pos, vec![]);
-                    }
-                    self.decorator_placements
-                        .get_mut(&pos)
-                        .unwrap()
-                        .push(DecoratorEntry { id, extra_data: None });
-                    break;
-                }
-            }
-        }
-    }
-
     /// Generate a single chunk's blocks for the world.
     pub fn generate_chunk(
         &mut self,
@@ -214,10 +189,11 @@ impl StdGenerator {
             let b_pos = InChunkPos::try_new(pos_x, pos_y, pos_z).unwrap();
 
             let g_pos = *b_pos + (*c_pos * CHUNK_DIM);
-            let height = vparams[(pos_x + pos_z * CHUNK_DIM) as usize];
+            let index = (pos_x + pos_z * CHUNK_DIM) as usize;
+            let height = vparams[index];
 
             let mut biomes: SmallVec<[(&BiomeDefinition, f64); EXPECTED_BIOME_COUNT]> = SmallVec::new();
-            for b in blended[(pos_x + pos_z * CHUNK_DIM) as usize].iter() {
+            for b in blended[index].iter() {
                 let e = b.lookup(biome_registry).unwrap();
                 let w = b.weight * e.block_influence;
                 biomes.push((e, w));
@@ -231,16 +207,17 @@ impl StdGenerator {
                 })
             });
 
+            let ctx = Context {
+                seed: self.seed,
+                biomes: biomes.clone(),
+                ground_y: height,
+                sea_level: 0, //hardcoded for now...
+                height: self.size_blocks_y() / 2,
+                depth: self.size_blocks_y() / 2,
+                biome_map: &self.biome_map,
+            };
             for (biome, _) in biomes.iter() {
                 if let Some(rule_source) = biome.rule_source {
-                    let ctx = Context {
-                        seed: self.seed,
-                        biomes: biomes.clone(),
-                        ground_y: height,
-                        sea_level: 0, //hardcoded for now...
-                        height: self.size_blocks_y() / 2,
-                        depth: self.size_blocks_y() / 2,
-                    };
                     let result = rule_source(&g_pos, &ctx, block_registry);
                     if let Some(result) = result {
                         chunk.put(b_pos, result);
@@ -249,105 +226,105 @@ impl StdGenerator {
             }
         }
 
-        let biomes = {
+        println!("generated base layer for chunk {:?}, starting decorators.", c_pos);
+        for (x, z) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM) {
+            let index = (x + z * CHUNK_DIM) as usize;
+            let height = vparams[index];
             let mut biomes: SmallVec<[(&BiomeDefinition, f64); EXPECTED_BIOME_COUNT]> = SmallVec::new();
-            for b in blended[0].iter() {
+            for b in blended[index].iter() {
                 let e = b.lookup(biome_registry).unwrap();
                 let w = b.weight * e.block_influence;
                 biomes.push((e, w));
             }
-            biomes
-        };
-        let height = vparams[0];
-        let context = Context {
-            seed: self.seed,
-            biomes: biomes.clone(),
-            ground_y: height,
-            sea_level: 0, //hardcoded for now...
-            height: self.size_blocks_y() / 2,
-            depth: self.size_blocks_y() / 2,
-        };
-        self.place_decorators(
-            chunk,
-            &context,
-            &vparams,
-            &blended,
-            c_pos,
-            biome_decorator_registry,
-            biome_registry,
-            block_registry,
-        );
+            let context = Context {
+                seed: self.seed,
+                biomes,
+                ground_y: height,
+                sea_level: 0, //hardcoded for now...
+                height: self.size_blocks_y() / 2,
+                depth: self.size_blocks_y() / 2,
+                biome_map: &self.biome_map,
+            };
+            Self::place_decorators(
+                &mut self.decorator_cache,
+                chunk,
+                &context,
+                &vparams,
+                &blended,
+                c_pos,
+                InChunkPos::try_new(x, (height - c_pos.y * CHUNK_DIM).min(CHUNK_DIM - 1).max(0), z).unwrap(),
+                biome_decorator_registry,
+                biome_registry,
+                block_registry,
+            );
+        }
     }
 
     fn place_decorators<'a>(
-        &mut self,
+        cache: &mut HashMap<IVec2, SmallVec<[BiomeDecoratorEntry; 8]>>,
+
         chunk: &mut PaletteStorage<BlockEntry>,
         context: &Context<'a>,
-        vparams: &[i32; 1024],
+        vparams: &[i32; CHUNK_DIM2Z],
         blended: &'a [SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>],
+
         chunk_pos: AbsChunkPos,
+        in_chunk_pos: InChunkPos,
 
         registry: &BiomeDecoratorRegistry,
         biome_registry: &'a BiomeRegistry,
         block_registry: &BlockRegistry,
     ) {
-        for (ox, oz) in iproduct!(-CHUNK_DIM..=CHUNK_DIM*2, -CHUNK_DIM..=CHUNK_DIM*2) {
-            let o_pos = IVec2::new(ox, oz);
-            let pos = o_pos + (*chunk_pos).xz() * CHUNK_DIM;
+        let g_pos = *in_chunk_pos + *chunk_pos * CHUNK_DIM;
+        for (id, decorator) in registry.get_objects_ids() {
+            let positions = decorator::decorator_positions_around(id, decorator, context, g_pos.xz(), cache);
 
-            if let Some(placements) = self.decorator_placements.get_mut(&pos) {
-                for placement in placements {
-                    let id = placement.id;
-                    let decorator = registry.lookup_id_to_object(id).unwrap();
+            for entry in positions {
+                let pos = entry.pos;
+                let decorator = entry.lookup(registry).unwrap();
 
-                    // Place this decorator as defined by `placement` and `placer`.
-                    let iter = [IVec3::new(pos.x, chunk_pos.y * CHUNK_DIM, pos.y)];
-                    let mut iter = Box::new(iter.into_iter()) as Box<dyn Iterator<Item = IVec3>>;
+                let iter = [*pos];
+                let mut iter = Box::new(iter.into_iter()) as Box<dyn Iterator<Item = IVec3>>;
 
-                    for modifier in &decorator.placement {
-                        let val = iter.flat_map(|pos| {
-                            let in_chunk_pos = pos - *chunk_pos * CHUNK_DIM;
-                            let context = {
-                                let mut context = context.clone();
-                                let index = (in_chunk_pos.x + in_chunk_pos.z * CHUNK_DIM) as usize;
-                                context.ground_y = vparams[index];
-                                context.biomes = {
-                                    let mut biomes: SmallVec<[(&BiomeDefinition, f64); EXPECTED_BIOME_COUNT]> =
-                                        SmallVec::new();
-                                    for b in blended[index].iter() {
-                                        let e = b.lookup(biome_registry).unwrap();
-                                        let w = b.weight * e.block_influence;
-                                        biomes.push((e, w));
-                                    }
-                                    biomes
-                                };
-                                context
+                for modifier in &decorator.placement {
+                    let val = iter.flat_map(|pos| {
+                        let in_chunk_pos = pos - *chunk_pos * CHUNK_DIM;
+                        let context = {
+                            let mut context = context.clone();
+                            let index = (in_chunk_pos.x + in_chunk_pos.z * CHUNK_DIM) as usize;
+                            context.ground_y = vparams[index];
+                            context.biomes = {
+                                let mut biomes: SmallVec<[(&BiomeDefinition, f64); EXPECTED_BIOME_COUNT]> =
+                                    SmallVec::new();
+                                for b in blended[index].iter() {
+                                    let e = b.lookup(biome_registry).unwrap();
+                                    let w = b.weight * e.block_influence;
+                                    biomes.push((e, w));
+                                }
+                                biomes
                             };
-                            // TODO somehow get rid of the PositionalRandomFactory usage, it bothers me.
-                            modifier.pick_positions(
-                                pos,
-                                &mut PositionalRandomFactory::get_at_pos(pos),
-                                &context,
-                                decorator,
-                            )
-                        });
-                        iter = Box::new(val) as Box<dyn Iterator<Item = IVec3>>;
-                    }
+                            context
+                        };
+                        // TODO somehow get rid of the PositionalRandomFactory usage, it bothers me.
+                        modifier.pick_positions(pos,  &context, decorator)
+                    });
+                    iter = Box::new(val) as Box<dyn Iterator<Item = IVec3>>;
+                }
 
-                    for pos_3 in iter {
-                        if let Some(placer) = decorator.placer {
-                            let (some, _, extra_data) = placer(
-                                decorator,
-                                &placement.extra_data,
-                                chunk,
-                                &mut PositionalRandomFactory::get_at_pos(pos_3),
-                                pos_3,
-                                chunk_pos,
-                                block_registry,
-                            );
-                            if some && placement.extra_data.is_none() {
-                                placement.extra_data = Some(extra_data);
-                            }
+                if let Some(placer_fn) = decorator.placer_fn {
+                    for pos in iter {
+                        let (some, _, _) = placer_fn(
+                            decorator,
+                            &entry.extra_data,
+                            chunk,
+                            &mut PositionalRandomFactory::get_at_pos(pos),
+                            pos,
+                            chunk_pos,
+                            block_registry,
+                        );
+                        if some {
+                            println!("placed decorator {} at {pos}", decorator.name);
+                            break;
                         }
                     }
                 }
@@ -1209,10 +1186,4 @@ impl Corner {
             adjacent: vec![],
         }
     }
-}
-
-#[derive(Clone)]
-struct DecoratorEntry {
-    id: RegistryId,
-    extra_data: Option<Box<dyn DecoratorData>>,
 }

@@ -35,3 +35,4 @@ tokio-util.workspace = true
 tokio.workspace = true
 voronoice.workspace = true
 tuple_list.workspace = true
+bluenoise.workspace = true
