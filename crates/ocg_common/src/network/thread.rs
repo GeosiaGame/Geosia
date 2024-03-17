@@ -4,6 +4,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::thread::JoinHandle;
 
+use futures::FutureExt;
 use ocg_schemas::GameSide;
 use thiserror::Error;
 use tokio::task::LocalSet;
@@ -18,9 +19,15 @@ pub struct NetworkThread<State> {
     channel: AsyncUnboundedSender<NetworkThreadCommand<State>>,
 }
 
+/// Trait that needs to be implemented for the state object of the network thread.
+pub trait NetworkThreadState: Send + 'static {
+    /// Performs a clean shutdown of the network subsystem.
+    fn shutdown(&mut self) -> impl std::future::Future<Output = ()> + Send;
+}
+
 type NetworkThreadFunction<State> = dyn FnOnce(&mut State) + Send + 'static;
 
-type NetworkThreadAsyncFuture<'state> = Pin<Box<dyn Future<Output = ()> + 'state>>;
+type NetworkThreadAsyncFuture<'state, Output = ()> = Pin<Box<dyn Future<Output = Output> + 'state>>;
 type NetworkThreadAsyncFunction<State> =
     dyn for<'state> FnOnce(&'state mut State) -> NetworkThreadAsyncFuture<'state> + Send + 'static;
 
@@ -38,7 +45,7 @@ pub enum NetworkThreadCommandError {
     NetworkThreadTerminated(GameSide),
 }
 
-impl<State: Send + 'static> NetworkThread<State> {
+impl<State: NetworkThreadState> NetworkThread<State> {
     /// Creates a new network thread and tokio runtime for the given game side.
     pub fn new(side: GameSide, state: State) -> Self {
         let (net_tx, net_rx) = async_unbounded_channel();
@@ -84,7 +91,7 @@ impl<State: Send + 'static> NetworkThread<State> {
         self.exec_boxed(Box::new(function))
     }
 
-    /// Awaits the given future in the context of the network thread.
+    /// Awaits the given future in the network thread.
     pub fn exec_async<
         F: (for<'state> FnOnce(&'state mut State) -> NetworkThreadAsyncFuture<'state>) + Send + 'static,
     >(
@@ -92,6 +99,24 @@ impl<State: Send + 'static> NetworkThread<State> {
         function: F,
     ) -> Result<(), NetworkThreadCommandError> {
         self.exec_async_boxed(Box::new(move |state| function(state)))
+    }
+
+    /// Awaits the given future in the network thread, then awaits and returns the result of execution on the current thread.
+    pub fn exec_async_await<
+        Output: Send + 'static,
+        F: (for<'state> FnOnce(&'state mut State) -> NetworkThreadAsyncFuture<'state, Output>) + Send + 'static,
+    >(
+        &self,
+        function: F,
+    ) -> Result<Output, NetworkThreadCommandError> {
+        let (tx, rx) = async_oneshot_channel();
+        self.exec_async_boxed(Box::new(move |state| {
+            Box::pin(function(state).then(move |out| async move {
+                let _ = tx.send(out);
+            }))
+        }))?;
+        rx.blocking_recv()
+            .or(Err(NetworkThreadCommandError::NetworkThreadTerminated(self.side)))
     }
 
     /// Non-generic implementation of exec()
@@ -127,6 +152,7 @@ impl<State: Send + 'static> NetworkThread<State> {
             match msg {
                 NetworkThreadCommand::Shutdown(feedback) => {
                     ctrl_rx.close();
+                    state.shutdown().await;
                     let _ = feedback.send(());
                     return;
                 }

@@ -14,18 +14,18 @@ use std::time::Duration;
 
 use bevy::app::AppExit;
 use bevy::diagnostic::DiagnosticsPlugin;
+use bevy::log;
 use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::time::TimePlugin;
 use bevy::utils::synccell::SyncCell;
 use ocg_schemas::voxel::voxeltypes::BlockRegistry;
 use ocg_schemas::{GameSide, OcgExtraData};
-use tokio::io::{duplex, DuplexStream};
+use tokio::io::DuplexStream;
 
 use crate::config::{GameConfig, GameConfigHandle};
 use crate::network::server::NetworkThreadServerState;
 use crate::network::thread::NetworkThread;
-use crate::network::transport::create_local_rpc_server;
 use crate::network::PeerAddress;
 use crate::prelude::*;
 
@@ -237,21 +237,15 @@ impl GameServer {
                 }
                 GameServerControlCommand::CreateLocalConnection(rstx) => {
                     let inner_engine = Arc::clone(engine);
-                    engine
+                    let (addr, cpipe) = engine
                         .network_thread
-                        .exec(move |_state| {
-                            let addr = PeerAddress::Local(0);
-                            let (spipe, cpipe) = duplex(INPROCESS_SOCKET_BUFFER_SIZE);
-                            let rpc_server = create_local_rpc_server(Arc::clone(&inner_engine), spipe, addr);
-                            let _s_disconnector = rpc_server.get_disconnector();
-                            tokio::task::spawn_local(async move {
-                                rstx.send((addr, cpipe)).ok().context(
-                                    "Could not send GameServerControlCommand::CreateLocalConnection response",
-                                )?;
-                                rpc_server.await.context("Local RPC server failure")
-                            });
+                        .exec_async_await(move |state| {
+                            Box::pin(async move { state.accept_local_connection(inner_engine).await })
                         })
                         .unwrap();
+                    if rstx.send((addr, cpipe)).is_err() {
+                        log::error!("Could not forward local connection {addr:?}");
+                    }
                 }
             }
         }

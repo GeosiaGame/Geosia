@@ -15,3 +15,13 @@ pub enum PeerAddress {
     /// A remote, over-the-network connection to a given peer at the specified IP address and port.
     Remote(SocketAddr),
 }
+
+impl PeerAddress {
+    /// Obtains the underlying socket address for a remote address, or None for other types.
+    pub fn remote_addr(self) -> Option<SocketAddr> {
+        match self {
+            PeerAddress::Remote(r) => Some(r),
+            _ => None,
+        }
+    }
+}

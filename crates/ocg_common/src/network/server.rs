@@ -1,8 +1,10 @@
 //! The network server protocol implementation, hosting a game for zero or more clients.
 
-use std::sync::Arc;
+use std::net::SocketAddr;
 
-use capnp_rpc::pry;
+use bevy::log;
+use capnp_rpc::rpc_twoparty_capnp::Side;
+use capnp_rpc::{pry, RpcSystem};
 use ocg_schemas::dependencies::capnp::capability::Promise;
 use ocg_schemas::dependencies::capnp::Error;
 use ocg_schemas::dependencies::kstring::KString;
@@ -10,19 +12,39 @@ use ocg_schemas::schemas::network_capnp as rpc;
 use ocg_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
 };
+use tokio::io::{duplex, DuplexStream};
+use tokio::task::JoinHandle;
 
+use crate::network::thread::NetworkThreadState;
+use crate::network::transport::create_local_rpc_server;
 use crate::network::PeerAddress;
+use crate::prelude::*;
 use crate::{
-    GameServer, GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE,
+    GameServer, GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH,
+    GAME_VERSION_PRERELEASE, INPROCESS_SOCKET_BUFFER_SIZE,
 };
 
 /// The network thread game server state, accessible from network functions.
-pub struct NetworkThreadServerState {}
+#[derive(Default)]
+pub struct NetworkThreadServerState {
+    listeners: HashMap<PeerAddress, NetListener>,
+    free_local_id: i32,
+}
+
+struct NetListener {
+    task: JoinHandle<Result<()>>,
+}
+
+impl NetworkThreadState for NetworkThreadServerState {
+    async fn shutdown(&mut self) {
+        //
+    }
+}
 
 impl NetworkThreadServerState {
     /// Constructs the server state without starting any listeners.
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
 
     /// Begins listening on the configured endpoints, and starts looking for configuration changes.
@@ -30,6 +52,58 @@ impl NetworkThreadServerState {
     pub async fn bootstrap(&mut self, engine: Arc<GameServer>) {
         let mut config_listener = engine.config().clone();
         let config = config_listener.borrow_and_update().server.clone();
+
+        self.update_listeners(&engine, &config.listen_addresses).await;
+    }
+
+    /// Creates a new local server->client connection and returns the client address and stream to pass into the client object.
+    pub async fn accept_local_connection(&mut self, engine: Arc<GameServer>) -> (PeerAddress, DuplexStream) {
+        let id = self.free_local_id;
+        self.free_local_id += 1;
+        let peer = PeerAddress::Local(id);
+
+        let (spipe, cpipe) = duplex(INPROCESS_SOCKET_BUFFER_SIZE);
+        let rpc_server = create_local_rpc_server(Arc::clone(&engine), spipe, peer);
+        let listener = Self::local_listener_task(peer, engine, rpc_server);
+
+        let task = tokio::task::spawn_local(listener);
+        self.listeners.insert(peer, NetListener { task });
+
+        (peer, cpipe)
+    }
+
+    async fn update_listeners(&mut self, _engine: &Arc<GameServer>, new_listeners: &[SocketAddr]) {
+        let new_set: HashSet<SocketAddr> = HashSet::from_iter(new_listeners.iter().copied());
+        let old_set: HashSet<SocketAddr> =
+            HashSet::from_iter(self.listeners.keys().copied().filter_map(PeerAddress::remote_addr));
+        for &shutdown_addr in old_set.difference(&new_set) {
+            let listener = self.listeners.remove(&PeerAddress::Remote(shutdown_addr));
+            let Some(listener) = listener else { continue };
+            listener.task.abort();
+            if let Ok(Err(e)) = listener.task.await {
+                log::warn!("Listener for address {shutdown_addr} finished with an error {e}");
+            }
+        }
+        for &_setup_addr in new_set.difference(&old_set) {
+            /*
+            let listener = Self::listener_task(PeerAddress::Remote(setup_addr), engine.clone());
+            let task = tokio::task::spawn_local(listener);
+            self.listeners.insert(PeerAddress::Remote(setup_addr), NetListener {
+                task,
+            });
+             */
+        }
+    }
+
+    async fn local_listener_task(
+        addr: PeerAddress,
+        _engine: Arc<GameServer>,
+        rpc_server: RpcSystem<Side>,
+    ) -> Result<()> {
+        let _s_disconnector = rpc_server.get_disconnector();
+        log::debug!("Starting the local listener for {addr:?}");
+        rpc_server.await?;
+        Ok(())
     }
 }
 
