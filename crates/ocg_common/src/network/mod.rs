@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 
 pub mod client;
 pub mod server;
+pub mod thread;
 pub mod transport;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]

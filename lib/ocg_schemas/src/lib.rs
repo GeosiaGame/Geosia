@@ -20,6 +20,15 @@ pub trait OcgExtraData {
     type GroupData: Clone;
 }
 
+/// The side of a network connection a game instance resides on (server or client).
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub enum GameSide {
+    /// The host for zero or more clients.
+    Server,
+    /// The client connecting to exactly one server.
+    Client,
+}
+
 /// Re-exported dependencies used in API types
 pub mod dependencies {
     pub use anyhow;
