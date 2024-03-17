@@ -67,6 +67,8 @@ pub struct ServerData {
     pub block_registry: Arc<BlockRegistry>,
 }
 
+struct NetworkThreadServerState {}
+
 impl OcgExtraData for ServerData {
     type ChunkData = ();
     type GroupData = ();
@@ -84,7 +86,7 @@ pub enum GameServerControlCommand {
 /// It has its own bevy App with a very limited set of plugins enabled to be able to run without a graphical user interface.
 pub struct GameServer {
     engine_thread: JoinHandle<()>,
-    network_thread: NetworkThread,
+    network_thread: NetworkThread<NetworkThreadServerState>,
     pause: AtomicBool,
 }
 
@@ -110,7 +112,8 @@ impl GameServer {
         let (tx, rx) = std_bounded_channel(1);
         let (ctrl_tx, ctrl_rx) = std_unbounded_channel();
 
-        let network_thread = NetworkThread::new(GameSide::Server);
+        let network_state = NetworkThreadServerState {};
+        let network_thread = NetworkThread::new(GameSide::Server, network_state);
 
         let engine_thread = std::thread::Builder::new()
             .name("OCG Server Engine Thread".to_owned())
@@ -204,7 +207,7 @@ impl GameServer {
                     let inner_engine = Arc::clone(engine);
                     engine
                         .network_thread
-                        .exec(move || {
+                        .exec(move |_state| {
                             let addr = PeerAddress::Local(0);
                             let (spipe, cpipe) = duplex(INPROCESS_SOCKET_BUFFER_SIZE);
                             let rpc_server = create_local_rpc_server(Arc::clone(&inner_engine), spipe, addr);

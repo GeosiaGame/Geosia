@@ -9,17 +9,18 @@ use tokio::task::LocalSet;
 use crate::prelude::*;
 
 /// A wrapper for a tokio runtime, allowing for easy scheduling of tasks to run within the context of the network thread.
-pub struct NetworkThread {
+/// [`State`] will be accessible from the network thread commands.
+pub struct NetworkThread<State> {
     side: GameSide,
     tokio_thread: JoinHandle<()>,
-    channel: AsyncUnboundedSender<NetworkThreadCommand>,
+    channel: AsyncUnboundedSender<NetworkThreadCommand<State>>,
 }
 
-type NetworkThreadFunction = dyn FnOnce() + Send + 'static;
+type NetworkThreadFunction<State> = dyn FnOnce(&mut State) + Send + 'static;
 
-enum NetworkThreadCommand {
+enum NetworkThreadCommand<State> {
     Shutdown(AsyncOneshotSender<()>),
-    RunInLocalSet(Box<NetworkThreadFunction>),
+    RunInLocalSet(Box<NetworkThreadFunction<State>>),
 }
 
 /// Potential errors returned when scheduling a function to run on the network thread
@@ -30,9 +31,9 @@ pub enum NetworkThreadCommandError {
     NetworkThreadTerminated(GameSide),
 }
 
-impl NetworkThread {
+impl<State: Send + 'static> NetworkThread<State> {
     /// Creates a new network thread and tokio runtime for the given game side.
-    pub fn new(side: GameSide) -> Self {
+    pub fn new(side: GameSide, state: State) -> Self {
         let (net_tx, net_rx) = async_unbounded_channel();
         let network_rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -42,7 +43,7 @@ impl NetworkThread {
         let tokio_thread = std::thread::Builder::new()
             .name(format!("OCG {side:?} Network Thread"))
             .stack_size(8 * 1024 * 1024)
-            .spawn(move || Self::thread_main(network_rt, net_rx))
+            .spawn(move || Self::thread_main(network_rt, net_rx, state))
             .expect("Could not create a thread for the engine");
 
         Self {
@@ -72,25 +73,29 @@ impl NetworkThread {
     }
 
     /// Runs the given function in the context of the network thread.
-    pub fn exec<F: FnOnce() + Send + 'static>(&self, function: F) -> Result<(), NetworkThreadCommandError> {
+    pub fn exec<F: FnOnce(&mut State) + Send + 'static>(&self, function: F) -> Result<(), NetworkThreadCommandError> {
         self.exec_boxed(Box::new(function))
     }
 
     // Non-generic implementation of exec()
-    fn exec_boxed(&self, function: Box<NetworkThreadFunction>) -> Result<(), NetworkThreadCommandError> {
+    fn exec_boxed(&self, function: Box<NetworkThreadFunction<State>>) -> Result<(), NetworkThreadCommandError> {
         self.channel
             .send(NetworkThreadCommand::RunInLocalSet(function))
             .or(Err(NetworkThreadCommandError::NetworkThreadTerminated(self.side)))
     }
 
-    fn thread_main(network_rt: tokio::runtime::Runtime, ctrl_rx: AsyncUnboundedReceiver<NetworkThreadCommand>) {
+    fn thread_main(
+        network_rt: tokio::runtime::Runtime,
+        ctrl_rx: AsyncUnboundedReceiver<NetworkThreadCommand<State>>,
+        state: State,
+    ) {
         network_rt.block_on(async move {
             let local_set = LocalSet::new();
-            local_set.run_until(Self::thread_localset_main(ctrl_rx)).await;
+            local_set.run_until(Self::thread_localset_main(ctrl_rx, state)).await;
         });
     }
 
-    async fn thread_localset_main(mut ctrl_rx: AsyncUnboundedReceiver<NetworkThreadCommand>) {
+    async fn thread_localset_main(mut ctrl_rx: AsyncUnboundedReceiver<NetworkThreadCommand<State>>, mut state: State) {
         while let Some(msg) = ctrl_rx.recv().await {
             match msg {
                 NetworkThreadCommand::Shutdown(feedback) => {
@@ -99,7 +104,7 @@ impl NetworkThread {
                     return;
                 }
                 NetworkThreadCommand::RunInLocalSet(lambda) => {
-                    lambda();
+                    lambda(&mut state);
                 }
             }
         }
