@@ -9,9 +9,12 @@ use crate::concurrency::VersionedArc;
 /// The server-specific configuration.
 #[derive(Clone, Eq, PartialEq, Debug, SmartDefault)]
 pub struct ServerConfig {
-    /// The server name, as advertised to clients on the server list.
+    /// The server title, as advertised to clients on the server list.
     #[default = "OCG Server"]
-    pub server_name: String,
+    pub server_title: String,
+    /// The server subtitle, as advertised to clients on the server list.
+    #[default = ""]
+    pub server_subtitle: String,
     /// The maximum number of players allowed to join the server.
     #[default = 4]
     pub max_players: u32,

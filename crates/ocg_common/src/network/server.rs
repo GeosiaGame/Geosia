@@ -53,8 +53,7 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
         _params: rpc::game_server::GetServerMetadataParams,
         mut results: rpc::game_server::GetServerMetadataResults,
     ) -> Promise<(), Error> {
-        let title = "OCG Server";
-        let subtitle = "Subtitles to be implemented!";
+        let config = self.server.config.peek();
         let mut meta = results.get().init_metadata();
         let mut ver = meta.reborrow().init_server_version();
         ver.set_major(GAME_VERSION_MAJOR);
@@ -63,10 +62,10 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
         ver.set_build(GAME_VERSION_BUILD);
         ver.set_prerelease(GAME_VERSION_PRERELEASE);
 
-        meta.set_title(title);
-        meta.set_subtitle(subtitle);
+        meta.set_title(&config.server.server_title);
+        meta.set_subtitle(&config.server.server_subtitle);
         meta.set_player_count(0);
-        meta.set_player_limit(12);
+        meta.set_player_limit(config.server.max_players as i32);
         Promise::ok(())
     }
 

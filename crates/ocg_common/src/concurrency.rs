@@ -20,6 +20,16 @@ struct VersionedArcInner<T> {
     updater_mutex: Mutex<()>,
 }
 
+/// Returns a fresh config handle that returns `true` from [`VersionedArc::was_updated()`].
+impl<T> Clone for VersionedArc<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            last_revision: AtomicUsize::new(0),
+        }
+    }
+}
+
 impl<T: Clone> VersionedArc<T> {
     /// Constructs a new cloneable config handle.
     /// It will return `true` from [`Self::was_updated()`].

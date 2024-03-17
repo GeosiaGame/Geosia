@@ -90,6 +90,7 @@ pub enum GameServerControlCommand {
 /// A struct to communicate with the "server"-side engine that runs the game simulation.
 /// It has its own bevy App with a very limited set of plugins enabled to be able to run without a graphical user interface.
 pub struct GameServer {
+    config: GameConfigHandle,
     engine_thread: JoinHandle<()>,
     network_thread: NetworkThread<NetworkThreadServerState>,
     pause: AtomicBool,
@@ -117,7 +118,7 @@ impl GameServer {
         let (tx, rx) = std_bounded_channel(1);
         let (ctrl_tx, ctrl_rx) = std_unbounded_channel();
 
-        let network_state = NetworkThreadServerState { config };
+        let network_state = NetworkThreadServerState { config: config.clone() };
         let network_thread = NetworkThread::new(GameSide::Server, network_state);
 
         let engine_thread = std::thread::Builder::new()
@@ -127,6 +128,7 @@ impl GameServer {
             .expect("Could not create a thread for the engine");
 
         let server = Self {
+            config,
             engine_thread,
             network_thread,
             pause: AtomicBool::new(true),
@@ -143,9 +145,15 @@ impl GameServer {
     /// Constructs a simple server for unit tests with no disk IO/savefile location attached.
     pub fn new_test() -> GameServerHandle {
         let mut game_config = GameConfig::default();
-        game_config.server.server_name = "Test server".to_owned();
+        game_config.server.server_title = "Test server".to_owned();
+        game_config.server.server_subtitle = format!("Thread {:?}", std::thread::current().id());
         game_config.server.listen_addresses.clear();
         Self::new(GameConfigHandle::new(game_config)).expect("Could not create a GameServer test instance")
+    }
+
+    /// Returns the global game configuration handle.
+    pub fn config(&self) -> &GameConfigHandle {
+        &self.config
     }
 
     /// Checks if the game logic is paused.
