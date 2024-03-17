@@ -114,7 +114,7 @@ impl GameServer {
         let (tx, rx) = std_bounded_channel(1);
         let (ctrl_tx, ctrl_rx) = std_unbounded_channel();
 
-        let network_state = NetworkThreadServerState::new(config.clone());
+        let network_state = NetworkThreadServerState::new();
         let network_thread = NetworkThread::new(GameSide::Server, network_state);
 
         let engine_thread = std::thread::Builder::new()
@@ -207,8 +207,18 @@ impl GameServer {
         app.insert_resource(GameServerResource(engine));
         app.insert_resource(Time::<Fixed>::from_duration(TICK));
         app.insert_resource(GameServerControlCommandReceiver(SyncCell::new(ctrl_rx)));
+        app.add_systems(Startup, Self::network_startup_system);
         app.add_systems(PostUpdate, Self::control_command_handler_system);
         app.run();
+    }
+
+    fn network_startup_system(engine: Res<GameServerResource>) {
+        let engine = &engine.into_inner().0;
+        let net_engine = Arc::clone(engine);
+        engine
+            .network_thread
+            .exec_async(move |state| Box::pin(state.bootstrap(net_engine)))
+            .unwrap();
     }
 
     fn control_command_handler_system(

@@ -1,5 +1,7 @@
 //! The network (tokio runtime) thread implementation
 
+use std::future::Future;
+use std::pin::Pin;
 use std::thread::JoinHandle;
 
 use ocg_schemas::GameSide;
@@ -18,9 +20,14 @@ pub struct NetworkThread<State> {
 
 type NetworkThreadFunction<State> = dyn FnOnce(&mut State) + Send + 'static;
 
+type NetworkThreadAsyncFuture<'state> = Pin<Box<dyn Future<Output = ()> + 'state>>;
+type NetworkThreadAsyncFunction<State> =
+    dyn for<'state> FnOnce(&'state mut State) -> NetworkThreadAsyncFuture<'state> + Send + 'static;
+
 enum NetworkThreadCommand<State> {
     Shutdown(AsyncOneshotSender<()>),
     RunInLocalSet(Box<NetworkThreadFunction<State>>),
+    RunAsyncInLocalSet(Box<NetworkThreadAsyncFunction<State>>),
 }
 
 /// Potential errors returned when scheduling a function to run on the network thread
@@ -77,10 +84,30 @@ impl<State: Send + 'static> NetworkThread<State> {
         self.exec_boxed(Box::new(function))
     }
 
-    // Non-generic implementation of exec()
-    fn exec_boxed(&self, function: Box<NetworkThreadFunction<State>>) -> Result<(), NetworkThreadCommandError> {
+    /// Awaits the given future in the context of the network thread.
+    pub fn exec_async<
+        F: (for<'state> FnOnce(&'state mut State) -> NetworkThreadAsyncFuture<'state>) + Send + 'static,
+    >(
+        &self,
+        function: F,
+    ) -> Result<(), NetworkThreadCommandError> {
+        self.exec_async_boxed(Box::new(move |state| function(state)))
+    }
+
+    /// Non-generic implementation of exec()
+    pub fn exec_boxed(&self, function: Box<NetworkThreadFunction<State>>) -> Result<(), NetworkThreadCommandError> {
         self.channel
             .send(NetworkThreadCommand::RunInLocalSet(function))
+            .or(Err(NetworkThreadCommandError::NetworkThreadTerminated(self.side)))
+    }
+
+    /// Non-generic implementation of exec()
+    pub fn exec_async_boxed(
+        &self,
+        function: Box<NetworkThreadAsyncFunction<State>>,
+    ) -> Result<(), NetworkThreadCommandError> {
+        self.channel
+            .send(NetworkThreadCommand::RunAsyncInLocalSet(function))
             .or(Err(NetworkThreadCommandError::NetworkThreadTerminated(self.side)))
     }
 
@@ -105,6 +132,10 @@ impl<State: Send + 'static> NetworkThread<State> {
                 }
                 NetworkThreadCommand::RunInLocalSet(lambda) => {
                     lambda(&mut state);
+                }
+                NetworkThreadCommand::RunAsyncInLocalSet(lambda) => {
+                    let future = lambda(&mut state);
+                    future.await;
                 }
             }
         }

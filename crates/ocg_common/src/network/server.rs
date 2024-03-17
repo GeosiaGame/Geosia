@@ -11,25 +11,26 @@ use ocg_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
 };
 
-use crate::config::GameConfigHandle;
 use crate::network::PeerAddress;
 use crate::{
     GameServer, GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE,
 };
 
 /// The network thread game server state, accessible from network functions.
-pub struct NetworkThreadServerState {
-    config: GameConfigHandle,
-}
+pub struct NetworkThreadServerState {}
 
 impl NetworkThreadServerState {
     /// Constructs the server state without starting any listeners.
-    pub fn new(config: GameConfigHandle) -> Self {
-        Self { config }
+    pub fn new() -> Self {
+        Self {}
     }
 
     /// Begins listening on the configured endpoints, and starts looking for configuration changes.
-    pub fn bootstrap(&mut self) {}
+    /// Must be called within the tokio LocalSet.
+    pub async fn bootstrap(&mut self, engine: Arc<GameServer>) {
+        let mut config_listener = engine.config().clone();
+        let config = config_listener.borrow_and_update().server.clone();
+    }
 }
 
 /// An unauthenticated RPC client<->server connection handler on the server side.
