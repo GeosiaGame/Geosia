@@ -4,6 +4,8 @@
 
 //! The common client&server code for OpenCubeGame
 
+mod concurrency;
+pub mod config;
 pub mod network;
 pub mod prelude;
 pub mod voxel;
@@ -21,6 +23,7 @@ use ocg_schemas::voxel::voxeltypes::BlockRegistry;
 use ocg_schemas::{GameSide, OcgExtraData};
 use tokio::io::{duplex, DuplexStream};
 
+use crate::config::{GameConfig, GameConfigHandle};
 use crate::network::thread::NetworkThread;
 use crate::network::transport::create_local_rpc_server;
 use crate::network::PeerAddress;
@@ -67,7 +70,9 @@ pub struct ServerData {
     pub block_registry: Arc<BlockRegistry>,
 }
 
-struct NetworkThreadServerState {}
+struct NetworkThreadServerState {
+    config: GameConfigHandle,
+}
 
 impl OcgExtraData for ServerData {
     type ChunkData = ();
@@ -108,11 +113,11 @@ struct GameServerControlCommandReceiver(SyncCell<StdUnboundedReceiver<GameServer
 impl GameServer {
     /// Spawns a new thread that runs the engine in a paused state, and returns a handle to control it.
     #[allow(clippy::new_ret_no_self)]
-    pub fn new() -> Result<GameServerHandle> {
+    pub fn new(config: GameConfigHandle) -> Result<GameServerHandle> {
         let (tx, rx) = std_bounded_channel(1);
         let (ctrl_tx, ctrl_rx) = std_unbounded_channel();
 
-        let network_state = NetworkThreadServerState {};
+        let network_state = NetworkThreadServerState { config };
         let network_thread = NetworkThread::new(GameSide::Server, network_state);
 
         let engine_thread = std::thread::Builder::new()
@@ -137,7 +142,10 @@ impl GameServer {
 
     /// Constructs a simple server for unit tests with no disk IO/savefile location attached.
     pub fn new_test() -> GameServerHandle {
-        Self::new().expect("Could not create a GameServer test instance")
+        let mut game_config = GameConfig::default();
+        game_config.server.server_name = "Test server".to_owned();
+        game_config.server.listen_addresses.clear();
+        Self::new(GameConfigHandle::new(game_config)).expect("Could not create a GameServer test instance")
     }
 
     /// Checks if the game logic is paused.

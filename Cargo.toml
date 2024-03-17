@@ -20,6 +20,7 @@ ocg_schemas = { version = "0.0.1", path = "lib/ocg_schemas" }
 
 # Remote
 anyhow = "1.0.71"
+arc-swap = "1.7.0"
 bitflags = { version = "2.3.3", features = ["bytemuck", "serde"] }
 bitvec = { version = "1.0.1", features = ["serde"] }
 bytemuck = { version = "1.13.1", features = ["extern_crate_alloc", "extern_crate_std", "min_const_generics", "derive", "zeroable_maybe_uninit", "zeroable_atomics"] }
@@ -32,26 +33,27 @@ either = "1.8.1"
 futures = "0.3.28"
 glam = { version = "0.24.0", features = ["bytemuck", "serde"] }
 hashbrown = { version = "0.14", features = ["serde"] }
+image = "0.24.9"
 itertools = "0.12.0"
 kstring = { version = "2.0.0", features = ["serde"] }
+lazy_static = "1.4.0"
+lru = "0.11.0"
+noise = "0.8.2"
 once_cell = "1.18.0"
 quinn = "0.10.1"
 rand = "0.8.5"
 rand_pcg = "0.3.1"
 rand_xoshiro = "0.6.0"
-noise = "0.8.2"
 rgb = { version = "0.8.36", features = ["serde"] }
 serde = { version = "1.0.164", features = ["derive"] }
 smallvec = { version = "1.10.0", features = ["serde", "const_generics", "const_new", "write", "union"] }
+smart-default = "0.7.1"
 static_assertions = "1.1.0"
 thiserror = "1.0.40"
+thread_local = "1.1.7"
 tokio = { version = "1.29.1", features = ["sync", "rt", "net", "rt-multi-thread", "io-util", "time"] }
 tokio-util = { version = "0.7.9", features = ["compat", "io-util"] }
-thread_local = "1.1.7"
-lru = "0.11.0"
-lazy_static = "1.4.0"
 voronoice = "0.2.0"
-image = "0.24.9"
 
 # Remote, testing
 criterion = { version = "0.5.1", features = ["html_reports"] }

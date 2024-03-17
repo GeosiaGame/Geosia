@@ -266,6 +266,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-swap"
+version = "1.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b3d0060af21e8d11a926981cc00c6c1541aa91dd64b9f881985c3da1094425f"
+
+[[package]]
 name = "arrayref"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3603,6 +3609,7 @@ name = "ocg_common"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "bevy",
  "bevy_math",
  "capnp",
@@ -3619,6 +3626,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_xoshiro",
  "serde",
+ "smart-default",
  "static_assertions",
  "thiserror",
  "thread_local",
@@ -4606,6 +4614,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6ecd384b10a64542d77071bd64bd7b231f4ed5940fba55e98c3de13824cf3d7"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "smart-default"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0eb01866308440fc64d6c44d9e86c5cc17adfe33c4d6eed55da9145044d0ffc1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.52",
 ]
 
 [[package]]
