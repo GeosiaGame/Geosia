@@ -6,13 +6,12 @@ use std::sync::Arc;
 
 use capnp::message::ReaderOptions;
 use capnp_rpc::rpc_twoparty_capnp::Side;
-use capnp_rpc::twoparty::{VatId, VatNetwork};
+use capnp_rpc::twoparty::VatNetwork;
 use capnp_rpc::RpcSystem;
 use futures::AsyncReadExt;
 use ocg_schemas::schemas::network_capnp as rpc;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
-use crate::network::client::Client2ServerConnection;
 use crate::network::server::{NetworkThreadServerState, Server2ClientEndpoint};
 use crate::network::PeerAddress;
 use crate::GameServer;
@@ -36,23 +35,42 @@ pub fn create_local_rpc_server(
     RpcSystem::new(Box::new(network), Some(bootstrap_client.clone().client))
 }
 
-/// Create a Future that will handle in-memory messages coming from a [`Server2ClientEndpoint`] and any child RPC objects on the given `server`&`id`.
-pub fn create_local_rpc_client(
-    pipe: tokio::io::DuplexStream,
-    id: PeerAddress,
-) -> (RpcSystem<Side>, Client2ServerConnection) {
-    let (read, write) = pipe.compat().split();
-    let network = VatNetwork::new(read, write, Side::Client, RPC_LOCAL_READER_OPTIONS);
-    let mut rpc_system = RpcSystem::new(Box::new(network), None);
-    let server_object: rpc::game_server::Client = rpc_system.bootstrap(VatId::Server);
-    (rpc_system, Client2ServerConnection::new(id, server_object))
-}
-
 #[cfg(test)]
-mod test {
+pub mod test {
+    //! Unit test utilities
+
+    use capnp_rpc::twoparty::VatId;
+
     use crate::network::transport::*;
     use crate::prelude::*;
     use crate::GameServerControlCommand;
+
+    /// A dummy client implementation for basic RPC testing
+    pub struct TestClient2ServerConnection {
+        server_addr: PeerAddress,
+        server_rpc: rpc::game_server::Client,
+    }
+
+    impl TestClient2ServerConnection {
+        pub fn new(server_addr: PeerAddress, server_rpc: rpc::game_server::Client) -> Self {
+            Self {
+                server_addr,
+                server_rpc,
+            }
+        }
+    }
+
+    /// Create a Future that will handle in-memory messages coming from a [`Server2ClientEndpoint`] and any child RPC objects on the given `server`&`id`.
+    pub fn create_test_rpc_client(
+        pipe: tokio::io::DuplexStream,
+        id: PeerAddress,
+    ) -> (RpcSystem<Side>, TestClient2ServerConnection) {
+        let (read, write) = pipe.compat().split();
+        let network = VatNetwork::new(read, write, Side::Client, RPC_LOCAL_READER_OPTIONS);
+        let mut rpc_system = RpcSystem::new(Box::new(network), None);
+        let server_object: rpc::game_server::Client = rpc_system.bootstrap(VatId::Server);
+        (rpc_system, TestClient2ServerConnection::new(id, server_object))
+    }
 
     #[test]
     fn test_server_metadata() {
@@ -67,21 +85,21 @@ mod test {
                         let addr = PeerAddress::Local(0);
                         let (cpipe, spipe) = tokio::io::duplex(1024 * 1024);
                         let server = GameServer::new_test();
-                        let rpc_server = create_local_rpc_server(dummy_state, server.server.clone(), spipe, addr);
+                        let rpc_server = create_local_rpc_server(dummy_state, server.clone(), spipe, addr);
                         let s_disconnector = rpc_server.get_disconnector();
                         let rpc_server = tokio::task::spawn_local(rpc_server);
-                        let (rpc_client, c_server) = create_local_rpc_client(cpipe, addr);
+                        let (rpc_client, c_server) = create_test_rpc_client(cpipe, addr);
                         let c_disconnector = rpc_client.get_disconnector();
                         let rpc_client = tokio::task::spawn_local(rpc_client);
 
-                        let mut ping_request = c_server.rpc().ping_request();
+                        let mut ping_request = c_server.server_rpc.ping_request();
                         ping_request.get().set_input(123);
                         let ping_reply = ping_request.send().promise.await.expect("ping request failed");
                         let ping_reply = ping_reply.get().expect("ping reply get failed");
                         assert_eq!(123, ping_reply.get_output());
 
                         let metadata = c_server
-                            .rpc()
+                            .server_rpc
                             .get_server_metadata_request()
                             .send()
                             .promise

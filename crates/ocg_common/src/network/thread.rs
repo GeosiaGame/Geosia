@@ -2,6 +2,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::thread::JoinHandle;
 
 use futures::FutureExt;
@@ -22,14 +23,14 @@ pub struct NetworkThread<State> {
 /// Trait that needs to be implemented for the state object of the network thread.
 pub trait NetworkThreadState: 'static {
     /// Performs a clean shutdown of the network subsystem.
-    fn shutdown(&mut self) -> impl std::future::Future<Output = ()>;
+    fn shutdown(this: Rc<RefCell<Self>>) -> impl Future<Output = ()>;
 }
 
-type NetworkThreadFunction<State> = dyn FnOnce(&mut State) + Send + 'static;
+type NetworkThreadFunction<State> = dyn FnOnce(&Rc<RefCell<State>>) + Send + 'static;
 
 type NetworkThreadAsyncFuture<'state, Output = ()> = Pin<Box<dyn Future<Output = Output> + 'state>>;
 type NetworkThreadAsyncFunction<State> =
-    dyn for<'state> FnOnce(&'state mut State) -> NetworkThreadAsyncFuture<'state> + Send + 'static;
+    dyn for<'state> FnOnce(&'state Rc<RefCell<State>>) -> NetworkThreadAsyncFuture<'state> + Send + 'static;
 
 enum NetworkThreadCommand<State> {
     Shutdown(AsyncOneshotSender<()>),
@@ -87,13 +88,16 @@ impl<State: NetworkThreadState> NetworkThread<State> {
     }
 
     /// Runs the given function in the context of the network thread.
-    pub fn exec<F: FnOnce(&mut State) + Send + 'static>(&self, function: F) -> Result<(), NetworkThreadCommandError> {
+    pub fn exec<F: FnOnce(&Rc<RefCell<State>>) + Send + 'static>(
+        &self,
+        function: F,
+    ) -> Result<(), NetworkThreadCommandError> {
         self.exec_boxed(Box::new(function))
     }
 
     /// Awaits the given future in the network thread.
     pub fn exec_async<
-        F: (for<'state> FnOnce(&'state mut State) -> NetworkThreadAsyncFuture<'state>) + Send + 'static,
+        F: (for<'state> FnOnce(&'state Rc<RefCell<State>>) -> NetworkThreadAsyncFuture<'state>) + Send + 'static,
     >(
         &self,
         function: F,
@@ -104,7 +108,7 @@ impl<State: NetworkThreadState> NetworkThread<State> {
     /// Awaits the given future in the network thread, then awaits and returns the result of execution on the current thread.
     pub fn exec_async_await<
         Output: Send + 'static,
-        F: (for<'state> FnOnce(&'state mut State) -> NetworkThreadAsyncFuture<'state, Output>) + Send + 'static,
+        F: (for<'state> FnOnce(&'state Rc<RefCell<State>>) -> NetworkThreadAsyncFuture<'state, Output>) + Send + 'static,
     >(
         &self,
         function: F,
@@ -151,20 +155,20 @@ impl<State: NetworkThreadState> NetworkThread<State> {
         mut ctrl_rx: AsyncUnboundedReceiver<NetworkThreadCommand<State>>,
         state: fn() -> State,
     ) {
-        let mut state = state();
+        let state = Rc::new(RefCell::new(state()));
         while let Some(msg) = ctrl_rx.recv().await {
             match msg {
                 NetworkThreadCommand::Shutdown(feedback) => {
                     ctrl_rx.close();
-                    state.shutdown().await;
+                    State::shutdown(state).await;
                     let _ = feedback.send(());
                     return;
                 }
                 NetworkThreadCommand::RunInLocalSet(lambda) => {
-                    lambda(&mut state);
+                    lambda(&state);
                 }
                 NetworkThreadCommand::RunAsyncInLocalSet(lambda) => {
-                    let future = lambda(&mut state);
+                    let future = lambda(&state);
                     future.await;
                 }
             }

@@ -38,8 +38,8 @@ struct NetListener {
     task: JoinHandle<Result<()>>,
 }
 
-impl NetworkThreadState for Rc<RefCell<NetworkThreadServerState>> {
-    async fn shutdown(&mut self) {
+impl NetworkThreadState for NetworkThreadServerState {
+    async fn shutdown(_this: Rc<RefCell<Self>>) {
         //
     }
 }

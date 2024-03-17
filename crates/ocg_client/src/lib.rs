@@ -4,6 +4,7 @@
 
 //! The clientside of OpenCubeGame
 mod debugcam;
+pub mod network;
 mod voronoi_renderer;
 pub mod voxel;
 
