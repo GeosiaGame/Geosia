@@ -20,9 +20,9 @@ pub struct NetworkThread<State> {
 }
 
 /// Trait that needs to be implemented for the state object of the network thread.
-pub trait NetworkThreadState: Send + 'static {
+pub trait NetworkThreadState: 'static {
     /// Performs a clean shutdown of the network subsystem.
-    fn shutdown(&mut self) -> impl std::future::Future<Output = ()> + Send;
+    fn shutdown(&mut self) -> impl std::future::Future<Output = ()>;
 }
 
 type NetworkThreadFunction<State> = dyn FnOnce(&mut State) + Send + 'static;
@@ -47,7 +47,7 @@ pub enum NetworkThreadCommandError {
 
 impl<State: NetworkThreadState> NetworkThread<State> {
     /// Creates a new network thread and tokio runtime for the given game side.
-    pub fn new(side: GameSide, state: State) -> Self {
+    pub fn new(side: GameSide, state: fn() -> State) -> Self {
         let (net_tx, net_rx) = async_unbounded_channel();
         let network_rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -139,7 +139,7 @@ impl<State: NetworkThreadState> NetworkThread<State> {
     fn thread_main(
         network_rt: tokio::runtime::Runtime,
         ctrl_rx: AsyncUnboundedReceiver<NetworkThreadCommand<State>>,
-        state: State,
+        state: fn() -> State,
     ) {
         network_rt.block_on(async move {
             let local_set = LocalSet::new();
@@ -147,7 +147,11 @@ impl<State: NetworkThreadState> NetworkThread<State> {
         });
     }
 
-    async fn thread_localset_main(mut ctrl_rx: AsyncUnboundedReceiver<NetworkThreadCommand<State>>, mut state: State) {
+    async fn thread_localset_main(
+        mut ctrl_rx: AsyncUnboundedReceiver<NetworkThreadCommand<State>>,
+        state: fn() -> State,
+    ) {
+        let mut state = state();
         while let Some(msg) = ctrl_rx.recv().await {
             match msg {
                 NetworkThreadCommand::Shutdown(feedback) => {

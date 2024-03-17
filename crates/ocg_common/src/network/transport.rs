@@ -1,5 +1,7 @@
 //! Network transport implementations - local message passing for singleplayer&unit tests and QUIC for multiplayer
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use capnp::message::ReaderOptions;
@@ -11,7 +13,7 @@ use ocg_schemas::schemas::network_capnp as rpc;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
 use crate::network::client::Client2ServerConnection;
-use crate::network::server::Server2ClientEndpoint;
+use crate::network::server::{NetworkThreadServerState, Server2ClientEndpoint};
 use crate::network::PeerAddress;
 use crate::GameServer;
 
@@ -22,13 +24,14 @@ static RPC_LOCAL_READER_OPTIONS: ReaderOptions = ReaderOptions {
 
 /// Create a Future that will handle in-memory messages coming into a [`Server2ClientEndpoint`] and any child RPC objects on the given `server`&`id`.
 pub fn create_local_rpc_server(
+    net_state: Rc<RefCell<NetworkThreadServerState>>,
     server: Arc<GameServer>,
     pipe: tokio::io::DuplexStream,
     id: PeerAddress,
 ) -> RpcSystem<Side> {
     let (read, write) = pipe.compat().split();
     let network = VatNetwork::new(read, write, Side::Server, RPC_LOCAL_READER_OPTIONS);
-    let bootstrap_object = Server2ClientEndpoint::new(server, id);
+    let bootstrap_object = Server2ClientEndpoint::new(net_state, server, id);
     let bootstrap_client: rpc::game_server::Client = capnp_rpc::new_client(bootstrap_object);
     RpcSystem::new(Box::new(network), Some(bootstrap_client.clone().client))
 }
@@ -60,10 +63,11 @@ mod test {
             .block_on(async move {
                 tokio::task::LocalSet::new()
                     .run_until(async move {
+                        let dummy_state = Rc::new(RefCell::new(NetworkThreadServerState::new()));
                         let addr = PeerAddress::Local(0);
                         let (cpipe, spipe) = tokio::io::duplex(1024 * 1024);
                         let server = GameServer::new_test();
-                        let rpc_server = create_local_rpc_server(server.server.clone(), spipe, addr);
+                        let rpc_server = create_local_rpc_server(dummy_state, server.server.clone(), spipe, addr);
                         let s_disconnector = rpc_server.get_disconnector();
                         let rpc_server = tokio::task::spawn_local(rpc_server);
                         let (rpc_client, c_server) = create_local_rpc_client(cpipe, addr);

@@ -9,6 +9,7 @@ pub mod network;
 pub mod prelude;
 pub mod voxel;
 
+use std::rc::Rc;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -88,7 +89,7 @@ pub enum GameServerControlCommand {
 pub struct GameServer {
     config: GameConfigHandle,
     engine_thread: JoinHandle<()>,
-    network_thread: NetworkThread<NetworkThreadServerState>,
+    network_thread: NetworkThread<Rc<RefCell<NetworkThreadServerState>>>,
     pause: AtomicBool,
 }
 
@@ -114,8 +115,9 @@ impl GameServer {
         let (tx, rx) = std_bounded_channel(1);
         let (ctrl_tx, ctrl_rx) = std_unbounded_channel();
 
-        let network_state = NetworkThreadServerState::new();
-        let network_thread = NetworkThread::new(GameSide::Server, network_state);
+        let network_thread = NetworkThread::new(GameSide::Server, || {
+            Rc::new(RefCell::new(NetworkThreadServerState::new()))
+        });
 
         let engine_thread = std::thread::Builder::new()
             .name("OCG Server Engine Thread".to_owned())
@@ -217,7 +219,7 @@ impl GameServer {
         let net_engine = Arc::clone(engine);
         engine
             .network_thread
-            .exec_async(move |state| Box::pin(state.bootstrap(net_engine)))
+            .exec_async(move |state| Box::pin(NetworkThreadServerState::bootstrap(state, net_engine)))
             .unwrap();
     }
 
@@ -240,7 +242,9 @@ impl GameServer {
                     let (addr, cpipe) = engine
                         .network_thread
                         .exec_async_await(move |state| {
-                            Box::pin(async move { state.accept_local_connection(inner_engine).await })
+                            Box::pin(async move {
+                                NetworkThreadServerState::accept_local_connection(state, inner_engine).await
+                            })
                         })
                         .unwrap();
                     if rstx.send((addr, cpipe)).is_err() {

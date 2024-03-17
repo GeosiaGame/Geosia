@@ -1,8 +1,10 @@
 //! The network server protocol implementation, hosting a game for zero or more clients.
 
 use std::net::SocketAddr;
+use std::rc::Rc;
 
 use bevy::log;
+use bevy::prelude::Deref;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::{pry, RpcSystem};
 use ocg_schemas::dependencies::capnp::capability::Promise;
@@ -29,13 +31,14 @@ use crate::{
 pub struct NetworkThreadServerState {
     listeners: HashMap<PeerAddress, NetListener>,
     free_local_id: i32,
+    bootstrapped_clients: HashMap<PeerAddress, Rc<RefCell<AuthenticatedServer2ClientEndpoint>>>,
 }
 
 struct NetListener {
     task: JoinHandle<Result<()>>,
 }
 
-impl NetworkThreadState for NetworkThreadServerState {
+impl NetworkThreadState for Rc<RefCell<NetworkThreadServerState>> {
     async fn shutdown(&mut self) {
         //
     }
@@ -49,35 +52,44 @@ impl NetworkThreadServerState {
 
     /// Begins listening on the configured endpoints, and starts looking for configuration changes.
     /// Must be called within the tokio LocalSet.
-    pub async fn bootstrap(&mut self, engine: Arc<GameServer>) {
+    pub async fn bootstrap(this: &Rc<RefCell<Self>>, engine: Arc<GameServer>) {
         let mut config_listener = engine.config().clone();
         let config = config_listener.borrow_and_update().server.clone();
 
-        self.update_listeners(&engine, &config.listen_addresses).await;
+        Self::update_listeners(this, &engine, &config.listen_addresses).await;
     }
 
     /// Creates a new local server->client connection and returns the client address and stream to pass into the client object.
-    pub async fn accept_local_connection(&mut self, engine: Arc<GameServer>) -> (PeerAddress, DuplexStream) {
-        let id = self.free_local_id;
-        self.free_local_id += 1;
+    pub async fn accept_local_connection(
+        this_ptr: &Rc<RefCell<Self>>,
+        engine: Arc<GameServer>,
+    ) -> (PeerAddress, DuplexStream) {
+        let mut this = this_ptr.borrow_mut();
+        let id = this.free_local_id;
+        this.free_local_id += 1;
         let peer = PeerAddress::Local(id);
 
         let (spipe, cpipe) = duplex(INPROCESS_SOCKET_BUFFER_SIZE);
-        let rpc_server = create_local_rpc_server(Arc::clone(&engine), spipe, peer);
+        let rpc_server = create_local_rpc_server(this_ptr.clone(), Arc::clone(&engine), spipe, peer);
         let listener = Self::local_listener_task(peer, engine, rpc_server);
 
         let task = tokio::task::spawn_local(listener);
-        self.listeners.insert(peer, NetListener { task });
+        this.listeners.insert(peer, NetListener { task });
 
         (peer, cpipe)
     }
 
-    async fn update_listeners(&mut self, _engine: &Arc<GameServer>, new_listeners: &[SocketAddr]) {
+    async fn update_listeners(this: &Rc<RefCell<Self>>, _engine: &Arc<GameServer>, new_listeners: &[SocketAddr]) {
         let new_set: HashSet<SocketAddr> = HashSet::from_iter(new_listeners.iter().copied());
-        let old_set: HashSet<SocketAddr> =
-            HashSet::from_iter(self.listeners.keys().copied().filter_map(PeerAddress::remote_addr));
+        let old_set: HashSet<SocketAddr> = HashSet::from_iter(
+            this.borrow()
+                .listeners
+                .keys()
+                .copied()
+                .filter_map(PeerAddress::remote_addr),
+        );
         for &shutdown_addr in old_set.difference(&new_set) {
-            let listener = self.listeners.remove(&PeerAddress::Remote(shutdown_addr));
+            let listener = this.borrow_mut().listeners.remove(&PeerAddress::Remote(shutdown_addr));
             let Some(listener) = listener else { continue };
             listener.task.abort();
             if let Ok(Err(e)) = listener.task.await {
@@ -109,22 +121,32 @@ impl NetworkThreadServerState {
 
 /// An unauthenticated RPC client<->server connection handler on the server side.
 pub struct Server2ClientEndpoint {
+    net_state: Rc<RefCell<NetworkThreadServerState>>,
     server: Arc<GameServer>,
     peer: PeerAddress,
 }
 
 /// An authenticated RPC client<->server connection handler on the server side.
 pub struct AuthenticatedServer2ClientEndpoint {
+    net_state: Rc<RefCell<NetworkThreadServerState>>,
     _server: Arc<GameServer>,
     _peer: PeerAddress,
     _username: KString,
     connection: rpc::authenticated_client_connection::Client,
 }
 
+#[derive(Clone, Deref)]
+#[repr(transparent)]
+struct RcAuthenticatedServer2ClientEndpoint(Rc<RefCell<AuthenticatedServer2ClientEndpoint>>);
+
 impl Server2ClientEndpoint {
     /// Constructor.
-    pub fn new(server: Arc<GameServer>, peer: PeerAddress) -> Self {
-        Self { server, peer }
+    pub fn new(net_state: Rc<RefCell<NetworkThreadServerState>>, server: Arc<GameServer>, peer: PeerAddress) -> Self {
+        Self {
+            net_state,
+            server,
+            peer,
+        }
     }
 
     /// The server this endpoint is associated with.
@@ -181,16 +203,23 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
 
         // TODO: validate username
 
-        let client = AuthenticatedServer2ClientEndpoint {
+        let client = Rc::new(RefCell::new(AuthenticatedServer2ClientEndpoint {
+            net_state: self.net_state.clone(),
             _server: self.server.clone(),
             _peer: self.peer,
             _username: username,
             connection,
-        };
+        }));
 
         let mut result = results.get().init_conn();
-        let np_client: rpc::authenticated_server_connection::Client = capnp_rpc::new_client(client);
-        pry!(result.set_ok(np_client));
+        let np_client: rpc::authenticated_server_connection::Client =
+            capnp_rpc::new_client(RcAuthenticatedServer2ClientEndpoint(client.clone()));
+        pry!(result.set_ok(np_client.clone()));
+
+        self.net_state
+            .borrow_mut()
+            .bootstrapped_clients
+            .insert(self.peer, client);
 
         Promise::ok(())
     }
@@ -203,7 +232,7 @@ impl AuthenticatedServer2ClientEndpoint {
     }
 }
 
-impl rpc::authenticated_server_connection::Server for AuthenticatedServer2ClientEndpoint {
+impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2ClientEndpoint {
     fn bootstrap_game_data(&mut self, _: BootstrapGameDataParams, _: BootstrapGameDataResults) -> Promise<(), Error> {
         todo!()
     }

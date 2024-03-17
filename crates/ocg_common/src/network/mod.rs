@@ -1,5 +1,5 @@
 //! The networking layer of the game.
-
+#![deny(clippy::await_holding_refcell_ref, clippy::await_holding_lock)]
 use std::net::SocketAddr;
 
 pub mod client;
