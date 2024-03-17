@@ -1,10 +1,10 @@
 //! Biome decorator-related types.
 
+use core::fmt::Debug;
 use core::hash::Hash;
-use std::{any::Any, hash::Hasher, num::NonZeroU32};
+use std::{any::Any, hash::Hasher};
 
 use bevy_math::IVec3;
-use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use tuple_list::TupleList;
 
@@ -14,7 +14,7 @@ use crate::{
     registry::{Registry, RegistryDataSet, RegistryId, RegistryName, RegistryObject},
     voxel::{
         chunk_storage::PaletteStorage,
-        generation::{Context, NumberProvider},
+        generation::Context,
         voxeltypes::{BlockEntry, BlockRegistry},
     },
 };
@@ -29,12 +29,29 @@ pub struct BiomeDecoratorEntry {
     pub pos: AbsBlockPos,
     /// Extra data this feature uses to determine placement.
     pub extra_data: Option<Box<dyn DecoratorData>>,
+    /// is this decorator placement complete?
+    pub is_complete: bool,
+}
+
+impl Debug for BiomeDecoratorEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BiomeDecoratorEntry")
+            .field("id", &self.id)
+            .field("pos", &self.pos)
+            .field("is_complete", &self.is_complete)
+            .finish()
+    }
 }
 
 impl BiomeDecoratorEntry {
     /// Helper to construct a new decorator entry
     pub fn new(id: RegistryId, pos: AbsBlockPos, extra_data: Option<Box<dyn DecoratorData>>) -> Self {
-        Self { id, pos, extra_data }
+        Self {
+            id,
+            pos,
+            extra_data,
+            is_complete: false,
+        }
     }
 
     /// Helper to look up the decorator definition corresponding to this ID
@@ -143,8 +160,6 @@ where
 pub struct BiomeDecoratorDefinition {
     /// The unique registry name
     pub name: RegistryName,
-    /// Placement of this biome decorator.
-    pub placement: Vec<PlacementModifier>,
     /// The biomes this decorator can be placed in.
     pub biomes: RegistryDataSet<BiomeDefinition>,
     /// An offset added to the random placement function.
@@ -174,95 +189,5 @@ impl Hash for BiomeDecoratorDefinition {
 impl RegistryObject for BiomeDecoratorDefinition {
     fn registry_name(&self) -> crate::registry::RegistryNameRef {
         self.name.as_ref()
-    }
-}
-
-/// Decorator types.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum PlacementModifier {
-    /// Y-position based on number provider
-    YProvider(PlacementHeight, NumberProvider<i32>),
-    /// On the surface of the `height_map` map of the BiomeMap.
-    OnSurface(),
-    /// Copy this placement `count` times.
-    Count(u32),
-    /// Rarity filter. chance is calculated as 1 / this.
-    RarityFilter(NonZeroU32),
-    /// offset xyz by the value the NumberProviders give.
-    RandomOffset(NumberProvider<i32>, NumberProvider<i32>, NumberProvider<i32>),
-    /// Return current position if this definition's biomes are valid. otherwise, none.
-    BiomeFilter,
-}
-
-impl PlacementModifier {
-    /// Pick blocks to place at based on the placer & placement type.
-    pub fn pick_positions(
-        &self,
-        pos: IVec3,
-        context: &Context<'_>,
-        definition: &BiomeDecoratorDefinition,
-    ) -> Vec<IVec3> {
-        let mut rand = rand_xoshiro::Xoshiro512StarStar::seed_from_u64(context.seed);
-        let mut positions = Vec::new();
-        match self {
-            PlacementModifier::YProvider(p, provider) => {
-                positions.push(IVec3::new(
-                    pos.x,
-                    p.get_point(&IVec3::new(pos.x, provider.sample(&mut rand), pos.z), context),
-                    pos.z,
-                ));
-            }
-            PlacementModifier::OnSurface() => positions.push(IVec3::new(pos.x, context.ground_y, pos.z)),
-            PlacementModifier::Count(count) => {
-                for _ in 0..=*count {
-                    positions.push(pos);
-                }
-            }
-            PlacementModifier::RarityFilter(chance) => {
-                if rand.gen::<f32>() > (1.0 / chance.get() as f32) {
-                    positions.push(pos);
-                }
-            }
-            PlacementModifier::RandomOffset(x, y, z) => {
-                positions.push(IVec3::new(
-                    pos.x + x.sample(&mut rand),
-                    pos.y + y.sample(&mut rand),
-                    pos.z + z.sample(&mut rand),
-                ));
-            }
-            PlacementModifier::BiomeFilter => {
-                if context
-                    .biomes
-                    .iter()
-                    .any(|(biome, _)| definition.biomes.contains_value(biome))
-                {
-                    positions.push(pos);
-                }
-            }
-        };
-        positions
-    }
-}
-
-/// Decorator placement on the Y-axis
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum PlacementHeight {
-    /// Y above the bottom of the world.
-    AboveBottom,
-    /// Absolute Y value.
-    Absolute,
-    /// Y below the top of the world.
-    BelowTop,
-}
-
-impl PlacementHeight {
-    /// Get the Y value for this placement.
-    pub fn get_point(&self, pos: &IVec3, context: &Context<'_>) -> i32 {
-        let y = pos.y;
-        match self {
-            PlacementHeight::AboveBottom => context.depth + y,
-            PlacementHeight::Absolute => y,
-            PlacementHeight::BelowTop => context.height - y,
-        }
     }
 }

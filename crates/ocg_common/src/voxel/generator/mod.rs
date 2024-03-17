@@ -28,7 +28,10 @@ use rand_xoshiro::Xoshiro512StarStar;
 use serde::{Deserialize, Serialize};
 use voronoice::*;
 
-use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME, RIVER_BIOME_NAME};
+use crate::voxel::{
+    biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME, RIVER_BIOME_NAME},
+    generator::decorator::GROUP_SIZE,
+};
 
 pub mod decorator;
 
@@ -227,8 +230,8 @@ impl StdGenerator {
         }
 
         println!("generated base layer for chunk {:?}, starting decorators.", c_pos);
-        for (x, z) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM) {
-            let index = (x + z * CHUNK_DIM) as usize;
+        for (dx, dz) in iproduct!(0..2, 0..2) {
+            let index = (dx * GROUP_SIZE + dz * GROUP_SIZE * CHUNK_DIM) as usize;
             let height = vparams[index];
             let mut biomes: SmallVec<[(&BiomeDefinition, f64); EXPECTED_BIOME_COUNT]> = SmallVec::new();
             for b in blended[index].iter() {
@@ -249,12 +252,14 @@ impl StdGenerator {
                 &mut self.decorator_cache,
                 chunk,
                 &context,
-                &vparams,
-                &blended,
                 c_pos,
-                InChunkPos::try_new(x, (height - c_pos.y * CHUNK_DIM).min(CHUNK_DIM - 1).max(0), z).unwrap(),
+                InChunkPos::try_new(
+                    dx * GROUP_SIZE,
+                    (height - c_pos.y * CHUNK_DIM).min(CHUNK_DIM - 1).max(0),
+                    dz * GROUP_SIZE,
+                )
+                .unwrap(),
                 biome_decorator_registry,
-                biome_registry,
                 block_registry,
             );
         }
@@ -265,14 +270,11 @@ impl StdGenerator {
 
         chunk: &mut PaletteStorage<BlockEntry>,
         context: &Context<'a>,
-        vparams: &[i32; CHUNK_DIM2Z],
-        blended: &'a [SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>],
 
         chunk_pos: AbsChunkPos,
         in_chunk_pos: InChunkPos,
 
         registry: &BiomeDecoratorRegistry,
-        biome_registry: &'a BiomeRegistry,
         block_registry: &BlockRegistry,
     ) {
         let g_pos = *in_chunk_pos + *chunk_pos * CHUNK_DIM;
@@ -280,52 +282,27 @@ impl StdGenerator {
             let positions = decorator::decorator_positions_around(id, decorator, context, g_pos.xz(), cache);
 
             for entry in positions {
-                let pos = entry.pos;
-                let decorator = entry.lookup(registry).unwrap();
-
-                let iter = [*pos];
-                let mut iter = Box::new(iter.into_iter()) as Box<dyn Iterator<Item = IVec3>>;
-
-                for modifier in &decorator.placement {
-                    let val = iter.flat_map(|pos| {
-                        let in_chunk_pos = pos - *chunk_pos * CHUNK_DIM;
-                        let context = {
-                            let mut context = context.clone();
-                            let index = (in_chunk_pos.x + in_chunk_pos.z * CHUNK_DIM) as usize;
-                            context.ground_y = vparams[index];
-                            context.biomes = {
-                                let mut biomes: SmallVec<[(&BiomeDefinition, f64); EXPECTED_BIOME_COUNT]> =
-                                    SmallVec::new();
-                                for b in blended[index].iter() {
-                                    let e = b.lookup(biome_registry).unwrap();
-                                    let w = b.weight * e.block_influence;
-                                    biomes.push((e, w));
-                                }
-                                biomes
-                            };
-                            context
-                        };
-                        // TODO somehow get rid of the PositionalRandomFactory usage, it bothers me.
-                        modifier.pick_positions(pos,  &context, decorator)
-                    });
-                    iter = Box::new(val) as Box<dyn Iterator<Item = IVec3>>;
+                if entry.is_complete {
+                    continue;
                 }
+                let pos = *entry.pos;
 
                 if let Some(placer_fn) = decorator.placer_fn {
-                    for pos in iter {
-                        let (some, _, _) = placer_fn(
-                            decorator,
-                            &entry.extra_data,
-                            chunk,
-                            &mut PositionalRandomFactory::get_at_pos(pos),
-                            pos,
-                            chunk_pos,
-                            block_registry,
-                        );
-                        if some {
-                            println!("placed decorator {} at {pos}", decorator.name);
-                            break;
-                        }
+                    let (some, all, extra_data) = placer_fn(
+                        decorator,
+                        &entry.extra_data,
+                        chunk,
+                        &mut PositionalRandomFactory::get_at_pos(pos),
+                        pos,
+                        chunk_pos,
+                        block_registry,
+                    );
+                    if some {
+                        entry.extra_data = Some(extra_data);
+                        println!("placed decorator {} at {pos}", decorator.name);
+                    }
+                    if all {
+                        entry.is_complete = true;
                     }
                 }
             }

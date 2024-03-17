@@ -1,8 +1,6 @@
 //! The builtin biome decorator types.
 //! Most of this will be moved to a "base" mod at some point in the future.
 
-use std::num::NonZeroU32;
-
 use bevy_math::IVec3;
 use ocg_schemas::{
     coordinates::{InChunkPos, CHUNK_DIM},
@@ -10,7 +8,7 @@ use ocg_schemas::{
     registry::{RegistryDataSet, RegistryName},
     voxel::{
         biome::{
-            decorator::{BiomeDecoratorDefinition, BiomeDecoratorRegistry, PlacementModifier},
+            decorator::{BiomeDecoratorDefinition, BiomeDecoratorRegistry},
             BiomeRegistry,
         },
         chunk_storage::ChunkStorage,
@@ -34,27 +32,18 @@ pub fn setup_basic_decorators(registry: &mut BiomeDecoratorRegistry, biome_regis
     registry
         .push_object(BiomeDecoratorDefinition {
             name: TREE_DECORATOR_NAME,
-            placement: vec![
-                PlacementModifier::RarityFilter(NonZeroU32::new(16).unwrap()),
-                //                PlacementModifier::RandomOffset(
-                //                    NumberProvider::UniformRange(0, 8),
-                //                    NumberProvider::Constant(0),
-                //                    NumberProvider::UniformRange(0, 8),
-                //                ),
-                PlacementModifier::OnSurface(),
-            ],
             biomes: RegistryDataSet::new(
                 TREE_BIOMES,
                 biome_registry,
-                [PLAINS_BIOME_NAME].iter().cloned().collect(),
+                [PLAINS_BIOME_NAME].into_iter().collect(),
             ),
             salt: 124567,
             count_fn: Some(|_def, _context, elevation, _temperature, moisture| {
                 if elevation <= 4.0 && moisture > 1.0 {
-                    return 10;
+                    return 1;
                 }
                 if elevation <= 3.0 && moisture > 2.0 {
-                    return 15;
+                    return 3;
                 }
                 0
             }),
