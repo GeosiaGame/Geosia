@@ -11,10 +11,26 @@ use ocg_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
 };
 
+use crate::config::GameConfigHandle;
 use crate::network::PeerAddress;
 use crate::{
     GameServer, GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE,
 };
+
+/// The network thread game server state, accessible from network functions.
+pub struct NetworkThreadServerState {
+    config: GameConfigHandle,
+}
+
+impl NetworkThreadServerState {
+    /// Constructs the server state without starting any listeners.
+    pub fn new(config: GameConfigHandle) -> Self {
+        Self { config }
+    }
+
+    /// Begins listening on the configured endpoints, and starts looking for configuration changes.
+    pub fn bootstrap(&mut self) {}
+}
 
 /// An unauthenticated RPC client<->server connection handler on the server side.
 pub struct Server2ClientEndpoint {
@@ -53,7 +69,7 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
         _params: rpc::game_server::GetServerMetadataParams,
         mut results: rpc::game_server::GetServerMetadataResults,
     ) -> Promise<(), Error> {
-        let config = self.server.config.peek();
+        let config = self.server.config().borrow();
         let mut meta = results.get().init_metadata();
         let mut ver = meta.reborrow().init_server_version();
         ver.set_major(GAME_VERSION_MAJOR);

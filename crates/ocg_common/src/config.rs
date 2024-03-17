@@ -1,10 +1,11 @@
 //! Game configuration handling
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use smart_default::SmartDefault;
 
-use crate::concurrency::VersionedArc;
+use crate::prelude::{async_watch_channel, AsyncWatchReceiver, AsyncWatchSender};
 
 /// The server-specific configuration.
 #[derive(Clone, Eq, PartialEq, Debug, SmartDefault)]
@@ -30,8 +31,15 @@ pub struct GameConfig {
     pub server: ServerConfig,
 }
 
-/// A versioned GameConfig handle, used as the primary way of accessing the game configuration.
-pub type GameConfigHandle = VersionedArc<GameConfig>;
+/// A GameConfig handle that can listen to changes, used as the primary way of accessing the game configuration.
+pub type GameConfigHandle = Arc<(AsyncWatchSender<GameConfig>, AsyncWatchReceiver<GameConfig>)>;
+
+impl GameConfig {
+    /// Constructs a [`GameConfigHandle`] from this [`GameConfig`]
+    pub fn new_handle(self) -> GameConfigHandle {
+        GameConfigHandle::new(async_watch_channel(self))
+    }
+}
 
 fn default_listen_addresses() -> Vec<SocketAddr> {
     vec!["0.0.0.0:28032".parse().unwrap(), "[::]:28032".parse().unwrap()]

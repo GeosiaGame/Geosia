@@ -4,7 +4,6 @@
 
 //! The common client&server code for OpenCubeGame
 
-mod concurrency;
 pub mod config;
 pub mod network;
 pub mod prelude;
@@ -24,6 +23,7 @@ use ocg_schemas::{GameSide, OcgExtraData};
 use tokio::io::{duplex, DuplexStream};
 
 use crate::config::{GameConfig, GameConfigHandle};
+use crate::network::server::NetworkThreadServerState;
 use crate::network::thread::NetworkThread;
 use crate::network::transport::create_local_rpc_server;
 use crate::network::PeerAddress;
@@ -70,10 +70,6 @@ pub struct ServerData {
     pub block_registry: Arc<BlockRegistry>,
 }
 
-struct NetworkThreadServerState {
-    config: GameConfigHandle,
-}
-
 impl OcgExtraData for ServerData {
     type ChunkData = ();
     type GroupData = ();
@@ -118,7 +114,7 @@ impl GameServer {
         let (tx, rx) = std_bounded_channel(1);
         let (ctrl_tx, ctrl_rx) = std_unbounded_channel();
 
-        let network_state = NetworkThreadServerState { config: config.clone() };
+        let network_state = NetworkThreadServerState::new(config.clone());
         let network_thread = NetworkThread::new(GameSide::Server, network_state);
 
         let engine_thread = std::thread::Builder::new()
@@ -148,11 +144,21 @@ impl GameServer {
         game_config.server.server_title = "Test server".to_owned();
         game_config.server.server_subtitle = format!("Thread {:?}", std::thread::current().id());
         game_config.server.listen_addresses.clear();
-        Self::new(GameConfigHandle::new(game_config)).expect("Could not create a GameServer test instance")
+        Self::new(GameConfig::new_handle(game_config)).expect("Could not create a GameServer test instance")
     }
 
-    /// Returns the global game configuration handle.
-    pub fn config(&self) -> &GameConfigHandle {
+    /// Returns a shared accessor to the global game configuration handle.
+    pub fn config(&self) -> &AsyncWatchReceiver<GameConfig> {
+        &self.config.1
+    }
+
+    /// Returns a shared publisher to the global game configuration handle.
+    pub fn config_updater(&self) -> &AsyncWatchSender<GameConfig> {
+        &self.config.0
+    }
+
+    /// Returns the game configuration handle.
+    pub fn config_handle(&self) -> &GameConfigHandle {
         &self.config
     }
 

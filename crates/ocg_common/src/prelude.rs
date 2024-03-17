@@ -15,6 +15,9 @@ pub use std::sync::mpsc::{
 pub use std::sync::{Arc, Mutex, MutexGuard, Once, OnceLock, RwLock, Weak};
 
 pub use anyhow::{anyhow, bail, ensure, Context, Ok, Result};
+pub use tokio::sync::broadcast::{
+    channel as async_broadcast_channel, Receiver as AsyncBroadcastReceiver, Sender as AsyncBroadcastSender,
+};
 pub use tokio::sync::mpsc::{
     channel as async_bounded_channel, unbounded_channel as async_unbounded_channel, Receiver as AsyncBoundedReceiver,
     Sender as AsyncBoundedServer, UnboundedReceiver as AsyncUnboundedReceiver, UnboundedSender as AsyncUnboundedSender,
@@ -22,4 +25,7 @@ pub use tokio::sync::mpsc::{
 // Tokio oneshot
 pub use tokio::sync::oneshot::{
     channel as async_oneshot_channel, Receiver as AsyncOneshotReceiver, Sender as AsyncOneshotSender,
+};
+pub use tokio::sync::watch::{
+    channel as async_watch_channel, Receiver as AsyncWatchReceiver, Sender as AsyncWatchSender,
 };
