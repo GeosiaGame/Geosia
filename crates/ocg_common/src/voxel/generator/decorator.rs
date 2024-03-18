@@ -16,8 +16,10 @@ use rand_xoshiro::Xoshiro512StarStar;
 
 /// The size of a decorator group.
 pub const GROUP_SIZE: i32 = 16;
+/// half of the size of a decorator group.
+pub const GROUP_SIZE_HALF: i32 = GROUP_SIZE / 2;
 /// The area of a decorator group.
-pub const GROUP_SIZE2: i32 = 16 * 16;
+pub const GROUP_SIZE2: i32 = GROUP_SIZE * GROUP_SIZE;
 /// A helper for the maximum size of a decorator group.
 pub const GROUP_SIZEV: IVec2 = IVec2::splat(GROUP_SIZE);
 
@@ -28,7 +30,7 @@ fn decorator_positions_in_chunk(
     group_xz: IVec2,
     global_xz: IVec2,
 ) -> SmallVec<[BiomeDecoratorEntry; 8]> {
-    let heights = ctx.biome_map.heightmap_between(global_xz - 8, global_xz + 8);
+    let heights = ctx.biome_map.heightmap_between(global_xz - GROUP_SIZE_HALF, global_xz + GROUP_SIZE_HALF);
     let (elevation, temperature, moisture) = ctx.biome_map.noise_map[&global_xz.to_array()];
     let count: usize = if let Some(count_fn) = decorator.count_fn {
         count_fn(decorator, ctx, elevation, temperature, moisture)
@@ -48,8 +50,8 @@ fn decorator_positions_in_chunk(
             .wrapping_add(group_xz.x as u64)
             .wrapping_sub(group_xz.y as u64),
     );
-    let range_x = rand::distributions::Uniform::new(-8, 8);
-    let range_y = rand::distributions::Uniform::new(-8, 8);
+    let range_x = rand::distributions::Uniform::new(-GROUP_SIZE_HALF, GROUP_SIZE_HALF);
+    let range_y = rand::distributions::Uniform::new(-GROUP_SIZE_HALF, GROUP_SIZE_HALF);
 
     let mut seen = Vec::new();
     for _ in 0..count {
@@ -89,8 +91,10 @@ pub fn decorator_positions_around<'a>(
     let mut output = SmallVec::new();
     for tx in min_tree_group_xz.x..=max_tree_group_xz.x {
         for tz in min_tree_group_xz.y..=max_tree_group_xz.y {
+            let group_pos = IVec2::new(tx, tz);
+            let global_pos = pos + group_pos;
             output.append(
-                &mut decorator_positions_in_chunk(id, decorator, ctx, IVec2::new(tx, tz), pos)
+                &mut decorator_positions_in_chunk(id, decorator, ctx, group_pos, global_pos)
                     .into_iter()
                     .filter(|entry| {
                         let distance_x = entry.pos.x - pos.x;

@@ -3,7 +3,7 @@
 use std::{cell::RefCell, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::Instant};
 
 use bevy::utils::hashbrown::HashMap;
-use bevy_math::{DVec2, IVec2, IVec3, Vec3Swizzles};
+use bevy_math::{DVec2, IVec2, Vec3Swizzles};
 use noise::OpenSimplex;
 use ocg_schemas::{
     coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIMZ},
@@ -213,11 +213,12 @@ impl StdGenerator {
             let ctx = Context {
                 seed: self.seed,
                 biomes: biomes.clone(),
+                biome_map: &self.biome_map,
                 ground_y: height,
                 sea_level: 0, //hardcoded for now...
                 height: self.size_blocks_y() / 2,
                 depth: self.size_blocks_y() / 2,
-                biome_map: &self.biome_map,
+                width: self.size_blocks_xz() / 2,
             };
             for (biome, _) in biomes.iter() {
                 if let Some(rule_source) = biome.rule_source {
@@ -242,11 +243,12 @@ impl StdGenerator {
             let context = Context {
                 seed: self.seed,
                 biomes,
+                biome_map: &self.biome_map,
                 ground_y: height,
                 sea_level: 0, //hardcoded for now...
                 height: self.size_blocks_y() / 2,
                 depth: self.size_blocks_y() / 2,
-                biome_map: &self.biome_map,
+                width: self.size_blocks_xz() / 2,
             };
             Self::place_decorators(
                 &mut self.decorator_cache,

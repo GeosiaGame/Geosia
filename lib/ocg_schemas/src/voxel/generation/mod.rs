@@ -22,6 +22,8 @@ pub struct Context<'a> {
     pub seed: u64,
     /// the current biome at this position.
     pub biomes: SmallVec<[(&'a BiomeDefinition, f64); EXPECTED_BIOME_COUNT]>,
+    /// The noise data.
+    pub biome_map: &'a BiomeMap,
     /// The ground Y level in this block position.
     pub ground_y: i32,
     /// The sea level for this planet.
@@ -30,8 +32,8 @@ pub struct Context<'a> {
     pub height: i32,
     /// depth of the world below y=0
     pub depth: i32,
-    /// The noise data.
-    pub biome_map: &'a BiomeMap,
+    /// Size of the world on +X+Z
+    pub width: i32,
 }
 
 /// Number provider.
