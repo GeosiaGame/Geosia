@@ -1,8 +1,10 @@
 //! Range wrappers for mostly world generation, because the default std::ops::Range isn't an enum for some reason.
 
+use serde::{Deserialize, Serialize};
+
 // My own type of ranges, now that I cannot use the built-in type...
 /// Wrapper of Range that we can work with within Rust's type system
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum Range<Idx> {
     /// start..end
     Closed(Idx, Idx),
@@ -16,6 +18,12 @@ pub enum Range<Idx> {
     RightInclusive(Idx),
     /// ..
     Full,
+}
+
+impl<Idx: Default> Default for Range<Idx> {
+    fn default() -> Self {
+        Self::Closed(Idx::default(), Idx::default())
+    }
 }
 
 impl<Idx> Range<Idx>

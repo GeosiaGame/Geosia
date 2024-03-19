@@ -52,6 +52,8 @@ lru = "0.11.0"
 lazy_static = "1.4.0"
 voronoice = "0.2.0"
 image = "0.24.9"
+tuple_list = "0.1.3"
+bluenoise = "0.2.1"
 
 # Remote, testing
 criterion = { version = "0.5.1", features = ["html_reports"] }

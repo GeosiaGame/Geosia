@@ -4,7 +4,8 @@ use std::hash::Hash;
 use std::num::{NonZeroU32, TryFromIntError};
 
 use bytemuck::{PodInOption, TransparentWrapper, ZeroableInOption};
-use hashbrown::{Equivalent, HashMap};
+use hashbrown::{Equivalent, HashMap, HashSet};
+use itertools::Itertools;
 use kstring::{KString, KStringRef};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -25,7 +26,7 @@ pub struct RegistryName {
     pub key: KString,
 }
 
-/// Reference to a simple namespaced registry object name, see RegistryNamed for the owned variant
+/// Reference to a simple namespaced registry object name, see RegistryName for the owned variant
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Default, Hash)]
 pub struct RegistryNameRef<'n> {
     /// The namespace
@@ -141,7 +142,7 @@ impl<'a> Display for RegistryNameRef<'a> {
 }
 
 /// Needs to be implemented on any object that can be a part of a Registry
-pub trait RegistryObject: PartialEq + Hash {
+pub trait RegistryObject: PartialEq + Hash + Clone {
     /// Should be trivial
     fn registry_name(&self) -> RegistryNameRef;
 }
@@ -184,6 +185,12 @@ pub enum RegistryError {
     /// No more unallocated space in the registry. The allocator is a simple bump allocator, so if objects were removed, it might be possible to optimize the registry down to have free space again.
     #[error("No free space in the registry")]
     NoFreeSpace,
+    /// A registry data set isn't loaded yet.
+    #[error("Registry data set is not loaded (yet?).")]
+    DataSetNotFilled {
+        /// The name of the set that isn't loaded.
+        name: RegistryName,
+    },
 }
 
 /// A registry of up to 2^32-2 named objects.
@@ -265,15 +272,92 @@ impl<Object: RegistryObject> Registry<Object> {
     }
 
     /// Gets a `Vec` of all the ID -> Object mappings in this registry.
-    pub fn get_objects_ids(&self) -> Vec<(&RegistryId, &Object)> {
+    pub fn get_objects_ids(&self) -> Vec<(RegistryId, &Object)> {
         let mut result = Vec::new();
         for id in self.name_to_id.values() {
             let obj = self.lookup_id_to_object(*id);
             if let Some(o) = obj {
-                result.push((id, o));
+                result.push((*id, o));
             }
         }
         result
+    }
+}
+
+/// A registry data set, like tags in *Minecraft*.
+// TODO fix deserialization
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RegistryDataSet<Object: RegistryObject> {
+    key: RegistryName,
+
+    names: HashSet<RegistryName>,
+    values: Option<Vec<(RegistryId, Object)>>,
+}
+
+impl<Object: RegistryObject> Clone for RegistryDataSet<Object> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+            names: self.names.clone(),
+            values: self.values.clone(),
+        }
+    }
+}
+
+impl<Object: RegistryObject> RegistryDataSet<Object> {
+    /// Utility to create a new RegistyDataSet.
+    pub fn new(key: RegistryName, registry: &Registry<Object>, names: HashSet<RegistryName>) -> Self {
+        let mut s = Self {
+            key,
+            names,
+            values: None,
+        };
+        s.load(registry);
+        s
+    }
+
+    /// load this registry data set from it's registry.
+    pub fn load(&mut self, registry: &Registry<Object>) {
+        self.values = Some(
+            self.names
+                .iter()
+                .map(|name| {
+                    registry
+                        .lookup_name_to_object(name.as_ref())
+                        .map(|(key, value)| (key, value.to_owned()))
+                        .unwrap_or_else(|| panic!("registry key {name} not found in registry."))
+                })
+                .collect_vec(),
+        );
+    }
+
+    /// Get the values of this RegistryDataSet, or an error if it isn't loaded yet.
+    pub fn values(&self) -> Result<&[(RegistryId, Object)], RegistryError> {
+        match &self.values {
+            Some(v) => Ok(v),
+            None => Err(RegistryError::DataSetNotFilled { name: self.key.clone() }),
+        }
+    }
+
+    /// Does this RegistryDataSet contain the given key?
+    /// NOTE: only returns true if the set is filled.
+    pub fn contains_key(&self, obj: &RegistryName) -> bool {
+        self.names.iter().any(|name| name == obj)
+    }
+
+    /// Does this RegistryDataSet contain the given key?
+    /// NOTE: only returns true if the set is filled.
+    pub fn contains_key_ref(&self, obj: RegistryNameRef<'_>) -> bool {
+        self.names.iter().any(|name| *name == obj.to_owned())
+    }
+
+    /// Does this RegistryDataSet contain the given value?
+    /// NOTE: only returns true if the set is filled.
+    pub fn contains_value(&self, obj: &Object) -> bool {
+        if let Ok(values) = self.values() {
+            return values.iter().any(|(_, value)| value == obj);
+        }
+        false
     }
 }
 

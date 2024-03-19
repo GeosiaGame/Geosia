@@ -67,6 +67,14 @@ pub struct AbsChunkPos(pub(crate) IVec3);
 pub struct RelChunkPos(pub(crate) IVec3);
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Pod, Zeroable, Serialize, Deserialize)]
+#[repr(C)]
+/// A range of block positions (min&max are *inclusive*)
+pub struct AbsBlockRange {
+    pub(crate) min: AbsBlockPos,
+    pub(crate) max: AbsBlockPos,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Pod, Zeroable, Serialize, Deserialize)]
 #[repr(transparent)]
 /// An absolute block position in a voxel world
 pub struct AbsBlockPos(pub(crate) IVec3);
@@ -127,6 +135,11 @@ macro_rules! impl_simple_ivec3_newtype {
 
             fn deref(&self) -> &Self::Target {
                 &self.0
+            }
+        }
+        impl std::ops::DerefMut for $T {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.0
             }
         }
     };
@@ -412,6 +425,71 @@ impl From<AbsBlockPos> for AbsChunkPos {
 // === RelChunkPos
 impl_simple_ivec3_newtype!(RelChunkPos);
 impl_rel_abs_pair!(RelChunkPos, AbsChunkPos);
+
+impl AbsBlockRange {
+    /// Empty range containing no chunks, originating at (0, 0, 0).
+    pub const ZERO: Self = Self::from_corners(AbsBlockPos::ZERO, AbsBlockPos::ZERO);
+    /// A single chunk at (0, 0, 0).
+    pub const BLOCK_AT_ZERO: Self = Self::from_corners(AbsBlockPos::ZERO, AbsBlockPos::ONE);
+
+    /// Constructs a new range from two (inclusive) corner positions.
+    pub const fn from_corners(a: AbsBlockPos, b: AbsBlockPos) -> Self {
+        // Min/max manually implemented to allow for `const` calls
+        let (min_x, max_x) = if a.0.x < b.0.x {
+            (a.0.x, b.0.x)
+        } else {
+            (b.0.x, (a.0.x))
+        };
+        let (min_y, max_y) = if a.0.y < b.0.y {
+            (a.0.y, b.0.y)
+        } else {
+            (b.0.y, (a.0.y))
+        };
+        let (min_z, max_z) = if a.0.z < b.0.z {
+            (a.0.z, b.0.z)
+        } else {
+            (b.0.z, (a.0.z))
+        };
+        let min = AbsBlockPos(IVec3::new(min_x, min_y, min_z));
+        let max = AbsBlockPos(IVec3::new(max_x, max_y, max_z));
+        Self { min, max }
+    }
+
+    /// Checks if the range has any blocks, false if one or more of the dimensions are zero.
+    pub const fn is_empty(self) -> bool {
+        (self.min.0.x == self.max.0.x) || (self.min.0.y == self.max.0.y) || (self.min.0.z == self.max.0.z)
+    }
+
+    /// Checks if the range covers the entire chunk
+    pub const fn is_everything(self) -> bool {
+        self.min.0.x == 0
+            && self.min.0.y == 0
+            && self.min.0.z == 0
+            && self.max.0.x == (CHUNK_DIM - 1)
+            && self.max.0.y == (CHUNK_DIM - 1)
+            && self.max.0.z == (CHUNK_DIM - 1)
+    }
+
+    /// Returns the corner with the smallest coordinates.
+    pub const fn min(self) -> AbsBlockPos {
+        self.min
+    }
+
+    /// Returns the corner with the largest coordinates.
+    pub const fn max(self) -> AbsBlockPos {
+        self.max
+    }
+
+    /// Returns an iterator over all the coordinates inside this range, in XZY order.
+    pub fn iter_xzy(self) -> impl Iterator<Item = AbsBlockPos> {
+        itertools::iproduct!(
+            self.min.y..=self.max.y,
+            self.min.z..=self.max.z,
+            self.min.x..=self.max.x
+        )
+        .map(|(y, z, x)| AbsBlockPos(IVec3::new(y, z, x)))
+    }
+}
 
 // === AbsBlockPos
 impl_simple_ivec3_newtype!(AbsBlockPos);

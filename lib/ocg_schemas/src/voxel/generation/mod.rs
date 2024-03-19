@@ -1,28 +1,85 @@
 //! World generation related methods.
 
-use std::f64::consts::TAU;
+use std::{f64::consts::TAU, fmt::Debug};
 
 use noise::{NoiseFn, Seedable};
+use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 
-use self::positional_random::PositionalRandomFactory;
-use super::{chunk_storage::PaletteStorage, voxeltypes::BlockEntry};
+use super::biome::{
+    biome_map::{BiomeMap, EXPECTED_BIOME_COUNT},
+    BiomeDefinition,
+};
 
 pub mod blur;
 pub mod fbm_noise;
 pub mod positional_random;
 
 /// Context data for world generation.
+#[derive(Clone)]
 pub struct Context<'a> {
     /// The world seed.
     pub seed: u64,
-    /// The chunk. Unmodifiable through here.
-    pub chunk: &'a PaletteStorage<BlockEntry>,
-    /// A positional random factory.
-    pub random: PositionalRandomFactory<rand_xoshiro::Xoshiro512StarStar>,
+    /// the current biome at this position.
+    pub biomes: SmallVec<[(&'a BiomeDefinition, f64); EXPECTED_BIOME_COUNT]>,
+    /// The noise data.
+    pub biome_map: &'a BiomeMap,
     /// The ground Y level in this block position.
     pub ground_y: i32,
     /// The sea level for this planet.
     pub sea_level: i32,
+    /// height of the world above y=0
+    pub height: i32,
+    /// depth of the world below y=0
+    pub depth: i32,
+    /// Size of the world on +X+Z
+    pub width: i32,
+}
+
+/// Number provider.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum NumberProvider<Idx> {
+    /// Constant value.
+    Constant(Idx),
+    /// Uniform range of `min..max` values.
+    UniformRange(Idx, Idx),
+    /// Uniform range of `min..=max` values.
+    UniformRangeInclusive(Idx, Idx),
+    /// Weighted range of values.
+    WeightedRange(Vec<(Idx, Idx)>),
+}
+
+impl<Idx> NumberProvider<Idx>
+where
+    Idx: rand::distributions::uniform::SampleUniform
+        + Copy
+        + Debug
+        + PartialOrd
+        + Default
+        + for<'a> ::core::ops::AddAssign<&'a Idx>,
+{
+    /// Sample this number provider for a value, given the RNG provided.
+    pub fn sample<T>(&self, rand: &mut T) -> Idx
+    where
+        T: rand::Rng,
+    {
+        match self {
+            NumberProvider::Constant(x) => *x,
+            NumberProvider::UniformRange(min, max) => rand.sample(rand::distributions::Uniform::new(min, max)),
+            NumberProvider::UniformRangeInclusive(min, max) => {
+                rand.sample(rand::distributions::Uniform::new_inclusive(min, max))
+            }
+            NumberProvider::WeightedRange(weights) => {
+                weights[rand.sample(
+                    rand::distributions::WeightedIndex::new(weights.iter().map(|w| w.1))
+                        .unwrap_or_else(|_| panic!("failed to generate weighted distribution from {:?}", weights)),
+                )]
+                .0
+            }
+            #[allow(unreachable_patterns)]
+            x => panic!("failed to sample the range for {:?}", x),
+        }
+    }
 }
 
 fn build_sources<Source>(seed: u32, octaves: &[f64]) -> Vec<Source>
@@ -36,8 +93,6 @@ where
     }
     sources
 }
-
-const CONVERT_NOISE_SCALE: f64 = 1.0;
 
 /// Get a point of 4D "torus" noise as if it were a plane of 2D noise
 pub trait Noise4DTo2D<const T: usize> {
@@ -53,10 +108,10 @@ where
         let angle_x = TAU * point[0];
         let angle_y = TAU * point[1];
         self.get([
-            angle_x.cos() / TAU * CONVERT_NOISE_SCALE,
-            angle_x.sin() / TAU * CONVERT_NOISE_SCALE,
-            angle_y.cos() / TAU * CONVERT_NOISE_SCALE,
-            angle_y.sin() / TAU * CONVERT_NOISE_SCALE,
+            angle_x.cos() / TAU,
+            angle_x.sin() / TAU,
+            angle_y.cos() / TAU,
+            angle_y.sin() / TAU,
         ]) * 1.5
     }
 }
