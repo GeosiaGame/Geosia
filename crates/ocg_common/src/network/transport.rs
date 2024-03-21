@@ -1,22 +1,18 @@
 //! Network transport implementations - local message passing for singleplayer&unit tests and QUIC for multiplayer
 
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::sync::Arc;
-
 use capnp::message::ReaderOptions;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::VatNetwork;
 use capnp_rpc::RpcSystem;
-use futures::AsyncReadExt;
 use ocg_schemas::schemas::network_capnp as rpc;
-use tokio_util::compat::TokioAsyncReadCompatExt;
 
 use crate::network::server::{NetworkThreadServerState, Server2ClientEndpoint};
 use crate::network::PeerAddress;
+use crate::prelude::*;
 use crate::GameServer;
 
-static RPC_LOCAL_READER_OPTIONS: ReaderOptions = ReaderOptions {
+/// Capnproto reader options for local connections
+pub static RPC_LOCAL_READER_OPTIONS: ReaderOptions = ReaderOptions {
     traversal_limit_in_words: Some(1024 * 1024 * 1024),
     nesting_limit: 128,
 };
@@ -42,7 +38,6 @@ pub mod test {
     use capnp_rpc::twoparty::VatId;
 
     use crate::network::transport::*;
-    use crate::prelude::*;
     use crate::GameServerControlCommand;
 
     /// A dummy client implementation for basic RPC testing
@@ -57,6 +52,14 @@ pub mod test {
                 server_addr,
                 server_rpc,
             }
+        }
+
+        pub fn server_addr(&self) -> PeerAddress {
+            self.server_addr
+        }
+
+        pub fn server_rpc(&self) -> &rpc::game_server::Client {
+            &self.server_rpc
         }
     }
 

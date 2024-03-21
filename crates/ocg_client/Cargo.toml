@@ -16,12 +16,15 @@ ocg_schemas.workspace = true
 ocg_common.workspace = true
 # Remote
 anyhow.workspace = true
+capnp-rpc.workspace = true
+capnp.workspace = true
 hashbrown.workspace = true
+image.workspace = true
 quinn.workspace = true
 thiserror.workspace = true
+tokio-util.workspace = true
 tokio.workspace = true
 voronoice.workspace = true
-image.workspace = true
 
 [dependencies.bevy]
 workspace = true

@@ -3594,6 +3594,8 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "bevy",
+ "capnp",
+ "capnp-rpc",
  "hashbrown",
  "image",
  "ocg_common",
@@ -3601,6 +3603,7 @@ dependencies = [
  "quinn",
  "thiserror",
  "tokio",
+ "tokio-util",
  "voronoice",
 ]
 

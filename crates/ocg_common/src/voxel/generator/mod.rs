@@ -30,9 +30,9 @@ use voronoice::*;
 use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME, RIVER_BIOME_NAME};
 
 /// World size of the +X & +Z axis, in chunks.
-pub const WORLD_SIZE_XZ: i32 = 8;
+pub const WORLD_SIZE_XZ: i32 = 1;
 /// World size of the +Y axis, in chunks.
-pub const WORLD_SIZE_Y: i32 = 4;
+pub const WORLD_SIZE_Y: i32 = 1;
 
 const TRIANGLE_VERTICES: [(usize, usize); 3] = [(0, 1), (1, 2), (2, 0)];
 const LAKE_TRESHOLD: f64 = 0.3;

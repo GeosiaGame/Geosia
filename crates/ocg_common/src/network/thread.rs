@@ -2,7 +2,6 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::rc::Rc;
 use std::thread::JoinHandle;
 
 use futures::FutureExt;

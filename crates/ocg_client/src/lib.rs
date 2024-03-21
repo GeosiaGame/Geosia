@@ -14,7 +14,6 @@ use bevy::core_pipeline::CorePipelinePlugin;
 use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::gltf::GltfPlugin;
 use bevy::input::InputPlugin;
-use bevy::log::LogPlugin;
 use bevy::pbr::PbrPlugin;
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
@@ -26,7 +25,13 @@ use bevy::time::TimePlugin;
 use bevy::ui::UiPlugin;
 use bevy::window::{ExitCondition, PresentMode};
 use bevy::winit::WinitPlugin;
-use ocg_schemas::OcgExtraData;
+use ocg_common::config::{GameConfig, ServerConfig};
+use ocg_common::network::thread::NetworkThread;
+use ocg_common::prelude::*;
+use ocg_common::GameServer;
+use ocg_schemas::{GameSide, OcgExtraData};
+
+use crate::network::NetworkThreadClientState;
 
 /// An [`OcgExtraData`] implementation containing the client-side data for the game engine.
 pub struct ClientData;
@@ -41,10 +46,39 @@ pub fn client_main() {
     // Unset the manifest dir to make bevy load assets from the workspace root
     std::env::set_var("CARGO_MANIFEST_DIR", "");
 
+    let game_config = GameConfig {
+        server: ServerConfig {
+            server_title: String::from("Integrated server"),
+            ..Default::default()
+        },
+    };
+    let game_config = GameConfig::new_handle(game_config);
+    let integ_server = GameServer::new(game_config).expect("Could not start integrated server");
+    integ_server.set_paused(false);
+    let server_pipe = integ_server
+        .create_local_connection()
+        .expect("Could not create an integrated server connection");
+
+    let net_thread = NetworkThread::new(GameSide::Client, NetworkThreadClientState::default);
+    net_thread
+        .exec_async_await(|state| {
+            Box::pin(async move {
+                NetworkThreadClientState::connect_locally(
+                    state,
+                    server_pipe.await.context("integ_server.create_local_connection")?,
+                )
+                .await
+                .context("NetworkThreadClientState::connect_locally")
+            })
+        })
+        .expect("Could not connect the the client to the integrated server")
+        .expect("Could not connect the the client to the integrated server");
+
+    // let integ_conn = integ_server
+
     let mut app = App::new();
     // Bevy Base
-    app.add_plugins(LogPlugin::default())
-        .add_plugins(TaskPoolPlugin::default())
+    app.add_plugins(TaskPoolPlugin::default())
         .add_plugins(TypeRegistrationPlugin)
         .add_plugins(FrameCountPlugin)
         .add_plugins(TimePlugin)

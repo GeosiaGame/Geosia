@@ -1,9 +1,9 @@
 //! The network server protocol implementation, hosting a game for zero or more clients.
 
 use std::net::SocketAddr;
-use std::rc::Rc;
 
 use bevy::log;
+use bevy::log::info;
 use bevy::prelude::Deref;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::{pry, RpcSystem};
@@ -44,6 +44,9 @@ impl NetworkThreadState for NetworkThreadServerState {
     }
 }
 
+/// The type to connect two local network runtimes together via an in-memory virtual "connection".
+pub type LocalConnectionPipe = (PeerAddress, DuplexStream);
+
 impl NetworkThreadServerState {
     /// Constructs the server state without starting any listeners.
     pub fn new() -> Self {
@@ -60,10 +63,7 @@ impl NetworkThreadServerState {
     }
 
     /// Creates a new local server->client connection and returns the client address and stream to pass into the client object.
-    pub async fn accept_local_connection(
-        this_ptr: &Rc<RefCell<Self>>,
-        engine: Arc<GameServer>,
-    ) -> (PeerAddress, DuplexStream) {
+    pub async fn accept_local_connection(this_ptr: &Rc<RefCell<Self>>, engine: Arc<GameServer>) -> LocalConnectionPipe {
         let mut this = this_ptr.borrow_mut();
         let id = this.free_local_id;
         this.free_local_id += 1;
@@ -75,6 +75,8 @@ impl NetworkThreadServerState {
 
         let task = tokio::task::spawn_local(listener);
         this.listeners.insert(peer, NetListener { task });
+
+        info!("Constructed a new local connection: {peer:?}");
 
         (peer, cpipe)
     }
@@ -128,7 +130,7 @@ pub struct Server2ClientEndpoint {
 
 /// An authenticated RPC client<->server connection handler on the server side.
 pub struct AuthenticatedServer2ClientEndpoint {
-    net_state: Rc<RefCell<NetworkThreadServerState>>,
+    _net_state: Rc<RefCell<NetworkThreadServerState>>,
     _server: Arc<GameServer>,
     _peer: PeerAddress,
     _username: KString,
@@ -204,7 +206,7 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
         // TODO: validate username
 
         let client = Rc::new(RefCell::new(AuthenticatedServer2ClientEndpoint {
-            net_state: self.net_state.clone(),
+            _net_state: self.net_state.clone(),
             _server: self.server.clone(),
             _peer: self.peer,
             _username: username,

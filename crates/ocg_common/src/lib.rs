@@ -14,19 +14,16 @@ use std::time::Duration;
 
 use bevy::app::AppExit;
 use bevy::diagnostic::DiagnosticsPlugin;
-use bevy::log;
-use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::time::TimePlugin;
 use bevy::utils::smallvec::SmallVec;
 use bevy::utils::synccell::SyncCell;
 use ocg_schemas::voxel::voxeltypes::BlockRegistry;
 use ocg_schemas::{GameSide, OcgExtraData};
-use tokio::io::DuplexStream;
 
 use crate::config::{GameConfig, GameConfigHandle};
-use crate::network::server::NetworkThreadServerState;
-use crate::network::thread::NetworkThread;
+use crate::network::server::{LocalConnectionPipe, NetworkThreadServerState};
+use crate::network::thread::{NetworkThread, NetworkThreadCommandError};
 use crate::network::PeerAddress;
 use crate::prelude::*;
 
@@ -83,8 +80,6 @@ pub type GameServerBevyCommand<Output = ()> = dyn (FnOnce(&mut World) -> Output)
 pub enum GameServerControlCommand {
     /// Gracefully shuts down the server, notifies on the given channel when done.
     Shutdown(AsyncOneshotSender<()>),
-    /// Creates a new local (in-process) player connection, returns the result asynchronously on the given channel.
-    CreateLocalConnection(AsyncOneshotSender<(PeerAddress, DuplexStream)>),
     /// Queues the given command to run in an exclusive system with full World access.
     Invoke(Box<GameServerBevyCommand>),
 }
@@ -164,7 +159,7 @@ impl GameServer {
     }
 
     /// Sets the paused state for game logic, returns the previous state.
-    pub fn set_paused(&mut self, paused: bool) -> bool {
+    pub fn set_paused(&self, paused: bool) -> bool {
         self.pause.swap(paused, AtomicOrdering::SeqCst)
     }
 
@@ -203,6 +198,25 @@ impl GameServer {
         let _ = self.control_channel.send(GameServerControlCommand::Invoke(cmd));
     }
 
+    /// Asynchronously creates a new local connection to this server's network runtime.
+    pub fn create_local_connection(
+        self: &Arc<Self>,
+    ) -> Result<AsyncOneshotReceiver<LocalConnectionPipe>, NetworkThreadCommandError> {
+        let inner_engine = Arc::clone(self);
+        let (rtx, rrx) = async_oneshot_channel();
+        self.network_thread.exec_async(move |state| {
+            Box::pin(async move {
+                if let Err(pipe) =
+                    rtx.send(NetworkThreadServerState::accept_local_connection(state, inner_engine).await)
+                {
+                    let addr: PeerAddress = pipe.0;
+                    error!("Could not forward local connection {addr:?}");
+                }
+            })
+        })?;
+        Ok(rrx)
+    }
+
     fn engine_thread_main(
         engine: StdUnboundedReceiver<Arc<GameServer>>,
         ctrl_rx: StdUnboundedReceiver<GameServerControlCommand>,
@@ -215,8 +229,7 @@ impl GameServer {
             e
         };
         let mut app = App::new();
-        app.add_plugins(LogPlugin::default())
-            .add_plugins(TaskPoolPlugin::default())
+        app.add_plugins(TaskPoolPlugin::default())
             .add_plugins(TypeRegistrationPlugin)
             .add_plugins(FrameCountPlugin)
             .add_plugins(TimePlugin)
@@ -255,22 +268,6 @@ impl GameServer {
                     engine.network_thread.sync_shutdown();
                     world.send_event(AppExit);
                     let _ = notif.send(());
-                }
-                GameServerControlCommand::CreateLocalConnection(rstx) => {
-                    let engine: &GameServerResource = world.resource();
-                    let engine = &engine.0;
-                    let inner_engine = Arc::clone(engine);
-                    let (addr, cpipe) = engine
-                        .network_thread
-                        .exec_async_await(move |state| {
-                            Box::pin(async move {
-                                NetworkThreadServerState::accept_local_connection(state, inner_engine).await
-                            })
-                        })
-                        .unwrap();
-                    if rstx.send((addr, cpipe)).is_err() {
-                        log::error!("Could not forward local connection {addr:?}");
-                    }
                 }
                 GameServerControlCommand::Invoke(cmd) => {
                     cmd(world);
