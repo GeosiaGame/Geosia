@@ -132,8 +132,8 @@ pub struct Server2ClientEndpoint {
 pub struct AuthenticatedServer2ClientEndpoint {
     _net_state: Rc<RefCell<NetworkThreadServerState>>,
     _server: Arc<GameServer>,
-    _peer: PeerAddress,
-    _username: KString,
+    peer: PeerAddress,
+    username: KString,
     connection: rpc::authenticated_client_connection::Client,
 }
 
@@ -208,8 +208,8 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
         let client = Rc::new(RefCell::new(AuthenticatedServer2ClientEndpoint {
             _net_state: self.net_state.clone(),
             _server: self.server.clone(),
-            _peer: self.peer,
-            _username: username,
+            peer: self.peer,
+            username,
             connection,
         }));
 
@@ -239,7 +239,15 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
         todo!()
     }
 
-    fn send_chat_message(&mut self, _: SendChatMessageParams, _: SendChatMessageResults) -> Promise<(), Error> {
-        todo!()
+    fn send_chat_message(&mut self, params: SendChatMessageParams, _: SendChatMessageResults) -> Promise<(), Error> {
+        let params = pry!(params.get());
+        let text = pry!(pry!(params.get_text()).to_str());
+        info!(
+            "Client {} ({:?}) sent a chat message `{}`",
+            self.0.borrow().username,
+            self.0.borrow().peer,
+            text
+        );
+        Promise::ok(())
     }
 }

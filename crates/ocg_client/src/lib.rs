@@ -74,6 +74,19 @@ pub fn client_main() {
         .expect("Could not connect the the client to the integrated server")
         .expect("Could not connect the the client to the integrated server");
 
+    net_thread
+        .exec_async(|state| {
+            Box::pin(async move {
+                let auth_rpc = state.borrow().server_auth_rpc().cloned();
+                if let Some(auth_rpc) = auth_rpc {
+                    let mut rq = auth_rpc.send_chat_message_request();
+                    rq.get().set_text("Hello in-process networking!");
+                    let _ = rq.send().promise.await;
+                }
+            })
+        })
+        .expect("Could not send message");
+
     // let integ_conn = integ_server
 
     let mut app = App::new();
