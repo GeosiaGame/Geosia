@@ -71,8 +71,8 @@ pub fn client_main() {
                 .context("NetworkThreadClientState::connect_locally")
             })
         })
-        .expect("Could not connect the the client to the integrated server")
-        .expect("Could not connect the the client to the integrated server");
+        .expect("Could not connect the client to the integrated server")
+        .expect("Could not connect the client to the integrated server");
 
     net_thread
         .exec_async(|state| {

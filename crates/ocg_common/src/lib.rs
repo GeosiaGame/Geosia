@@ -193,7 +193,7 @@ impl GameServer {
         rx
     }
 
-    /// Non-generic version of [``]
+    /// Non-generic version of [`Self::remote_bevy_invoke`]
     pub fn remote_bevy_invoke_boxed(&self, cmd: Box<GameServerBevyCommand>) {
         let _ = self.control_channel.send(GameServerControlCommand::Invoke(cmd));
     }
