@@ -4,6 +4,7 @@
 
 //! The common client&server code for OpenCubeGame
 
+pub mod config;
 pub mod network;
 pub mod prelude;
 pub mod voxel;
@@ -13,16 +14,16 @@ use std::time::Duration;
 
 use bevy::app::AppExit;
 use bevy::diagnostic::DiagnosticsPlugin;
-use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::time::TimePlugin;
+use bevy::utils::smallvec::SmallVec;
 use bevy::utils::synccell::SyncCell;
 use ocg_schemas::voxel::voxeltypes::BlockRegistry;
-use ocg_schemas::OcgExtraData;
-use tokio::io::{duplex, DuplexStream};
-use tokio::task::LocalSet;
+use ocg_schemas::{GameSide, OcgExtraData};
 
-use crate::network::transport::create_local_rpc_server;
+use crate::config::{GameConfig, GameConfigHandle};
+use crate::network::server::{LocalConnectionPipe, NetworkThreadServerState};
+use crate::network::thread::{NetworkThread, NetworkThreadCommandError};
 use crate::network::PeerAddress;
 use crate::prelude::*;
 
@@ -72,38 +73,25 @@ impl OcgExtraData for ServerData {
     type GroupData = ();
 }
 
+/// A command that can be remotely executed on the bevy world.
+pub type GameServerBevyCommand<Output = ()> = dyn (FnOnce(&mut World) -> Output) + Send + 'static;
+
 /// Control commands for the server, for in-process communication.
 pub enum GameServerControlCommand {
     /// Gracefully shuts down the server, notifies on the given channel when done.
     Shutdown(AsyncOneshotSender<()>),
-    /// Creates a new local (in-process) player connection, returns the result asynchronously on the given channel.
-    CreateLocalConnection(AsyncOneshotSender<(PeerAddress, DuplexStream)>),
-}
-
-type NetworkThreadLambda = dyn FnOnce(&Arc<GameServer>) + Send + 'static;
-
-enum NetworkThreadCommand {
-    Shutdown(AsyncOneshotSender<()>),
-    /// Runs the given function in the context of a LocalSet on the network thread.
-    Run(Box<NetworkThreadLambda>),
+    /// Queues the given command to run in an exclusive system with full World access.
+    Invoke(Box<GameServerBevyCommand>),
 }
 
 /// A struct to communicate with the "server"-side engine that runs the game simulation.
 /// It has its own bevy App with a very limited set of plugins enabled to be able to run without a graphical user interface.
 pub struct GameServer {
+    config: GameConfigHandle,
     engine_thread: JoinHandle<()>,
-    network_thread: JoinHandle<()>,
+    network_thread: NetworkThread<NetworkThreadServerState>,
     pause: AtomicBool,
-    network_rt: tokio::runtime::Runtime,
-}
-
-/// A handle to a [`GameServer`] and its in-process control channel.
-pub struct GameServerHandle {
-    /// The spawned [`GameServer`] instance.
-    pub server: Arc<GameServer>,
-    /// The channel for sending [`GameServerControlCommand`] such as "Shutdown".
-    pub control_channel: StdUnboundedSender<GameServerControlCommand>,
-    _network_channel: AsyncUnboundedSender<NetworkThreadCommand>,
+    control_channel: StdUnboundedSender<GameServerControlCommand>,
 }
 
 /// A handle to a [`GameServer`] accessible from within bevy systems.
@@ -113,54 +101,56 @@ pub struct GameServerResource(Arc<GameServer>);
 #[derive(Resource)]
 struct GameServerControlCommandReceiver(SyncCell<StdUnboundedReceiver<GameServerControlCommand>>);
 
-#[derive(Resource)]
-struct NetworkServerControlCommandSender(SyncCell<AsyncUnboundedSender<NetworkThreadCommand>>);
-
 impl GameServer {
     /// Spawns a new thread that runs the engine in a paused state, and returns a handle to control it.
     #[allow(clippy::new_ret_no_self)]
-    pub fn new() -> Result<GameServerHandle> {
+    pub fn new(config: GameConfigHandle) -> Result<Arc<GameServer>> {
         let (tx, rx) = std_bounded_channel(1);
-        let (ntx, nrx) = async_oneshot_channel();
         let (ctrl_tx, ctrl_rx) = std_unbounded_channel();
-        let (net_tx, net_rx) = async_unbounded_channel();
-        let network_rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .thread_name("OCG Server")
-            .build()?;
-        let net_tx2 = net_tx.clone();
+
+        let network_thread = NetworkThread::new(GameSide::Server, NetworkThreadServerState::new);
+
         let engine_thread = std::thread::Builder::new()
             .name("OCG Server Engine Thread".to_owned())
             .stack_size(8 * 1024 * 1024)
-            .spawn(move || GameServer::engine_thread_main(rx, ctrl_rx, net_tx2))
+            .spawn(move || GameServer::engine_thread_main(rx, ctrl_rx))
             .expect("Could not create a thread for the engine");
-        let network_thread = std::thread::Builder::new()
-            .name("OCG Server Network Thread".to_owned())
-            .stack_size(8 * 1024 * 1024)
-            .spawn(move || GameServer::network_thread_main(nrx, net_rx))
-            .expect("Could not create a thread for the engine");
+
         let server = Self {
+            config,
             engine_thread,
             network_thread,
             pause: AtomicBool::new(true),
-            network_rt,
+            control_channel: ctrl_tx,
         };
         let server = Arc::new(server);
         tx.send(Arc::clone(&server))
             .expect("Could not pass initialization data to the server engine thread");
-        ntx.send(Arc::clone(&server))
-            .ok()
-            .expect("Could not pass initialization data to the server network thread.");
-        Ok(GameServerHandle {
-            server,
-            control_channel: ctrl_tx,
-            _network_channel: net_tx,
-        })
+        Ok(server)
     }
 
     /// Constructs a simple server for unit tests with no disk IO/savefile location attached.
-    pub fn new_test() -> GameServerHandle {
-        Self::new().expect("Could not create a GameServer test instance")
+    pub fn new_test() -> Arc<GameServer> {
+        let mut game_config = GameConfig::default();
+        game_config.server.server_title = "Test server".to_owned();
+        game_config.server.server_subtitle = format!("Thread {:?}", std::thread::current().id());
+        game_config.server.listen_addresses.clear();
+        Self::new(GameConfig::new_handle(game_config)).expect("Could not create a GameServer test instance")
+    }
+
+    /// Returns a shared accessor to the global game configuration handle.
+    pub fn config(&self) -> &AsyncWatchReceiver<GameConfig> {
+        &self.config.1
+    }
+
+    /// Returns a shared publisher to the global game configuration handle.
+    pub fn config_updater(&self) -> &AsyncWatchSender<GameConfig> {
+        &self.config.0
+    }
+
+    /// Returns the game configuration handle.
+    pub fn config_handle(&self) -> &GameConfigHandle {
+        &self.config
     }
 
     /// Checks if the game logic is paused.
@@ -169,7 +159,7 @@ impl GameServer {
     }
 
     /// Sets the paused state for game logic, returns the previous state.
-    pub fn set_paused(&mut self, paused: bool) -> bool {
+    pub fn set_paused(&self, paused: bool) -> bool {
         self.pause.swap(paused, AtomicOrdering::SeqCst)
     }
 
@@ -180,47 +170,56 @@ impl GameServer {
 
     /// Checks if the network thread is still alive.
     pub fn is_network_alive(&self) -> bool {
-        !self.network_thread.is_finished()
+        self.network_thread.is_alive()
     }
 
-    fn network_thread_main(
-        nrx: AsyncOneshotReceiver<Arc<GameServer>>,
-        mut ctrl_rx: AsyncUnboundedReceiver<NetworkThreadCommand>,
-    ) {
-        let engine = nrx.blocking_recv().expect("Engine not sent");
-        let netrt_engine = Arc::clone(&engine);
-
-        netrt_engine.network_rt.block_on(async move {
-            let local_set = LocalSet::new();
-            local_set
-                .run_until(async move {
-                    while let Some(msg) = ctrl_rx.recv().await {
-                        if !Self::network_thread_on_msg(&engine, msg).await {
-                            break;
-                        }
-                    }
-                })
-                .await;
-        });
+    /// Queues the given function to run with exclusive access to the bevy [`World`].
+    pub fn remote_bevy_invoke<BevyCmd: FnOnce(&mut World) + Send + 'static>(&self, cmd: BevyCmd) {
+        self.remote_bevy_invoke_boxed(Box::new(cmd))
     }
 
-    async fn network_thread_on_msg(engine: &Arc<GameServer>, msg: NetworkThreadCommand) -> bool {
-        match msg {
-            NetworkThreadCommand::Shutdown(feedback) => {
-                let _ = feedback.send(());
-                return false;
-            }
-            NetworkThreadCommand::Run(lambda) => {
-                lambda(engine);
-            }
-        }
-        true
+    /// Queues the given function to run with exclusive access to the bevy [`World`], returns a oneshot channel to listen for the return value.
+    pub fn remote_bevy_invoke_await<
+        Output: Send + 'static,
+        BevyCmd: (FnOnce(&mut World) -> Output) + Send + 'static,
+    >(
+        &self,
+        cmd: BevyCmd,
+    ) -> AsyncOneshotReceiver<Output> {
+        let (tx, rx) = async_oneshot_channel();
+        self.remote_bevy_invoke_boxed(Box::new(move |world| {
+            let _ = tx.send(cmd(world));
+        }));
+        rx
+    }
+
+    /// Non-generic version of [`Self::remote_bevy_invoke`]
+    pub fn remote_bevy_invoke_boxed(&self, cmd: Box<GameServerBevyCommand>) {
+        let _ = self.control_channel.send(GameServerControlCommand::Invoke(cmd));
+    }
+
+    /// Asynchronously creates a new local connection to this server's network runtime.
+    pub fn create_local_connection(
+        self: &Arc<Self>,
+    ) -> Result<AsyncOneshotReceiver<LocalConnectionPipe>, NetworkThreadCommandError> {
+        let inner_engine = Arc::clone(self);
+        let (rtx, rrx) = async_oneshot_channel();
+        self.network_thread.exec_async(move |state| {
+            Box::pin(async move {
+                if let Err(pipe) =
+                    rtx.send(NetworkThreadServerState::accept_local_connection(state, inner_engine).await)
+                {
+                    let addr: PeerAddress = pipe.0;
+                    error!("Could not forward local connection {addr:?}");
+                }
+            })
+        })?;
+        Ok(rrx)
     }
 
     fn engine_thread_main(
         engine: StdUnboundedReceiver<Arc<GameServer>>,
         ctrl_rx: StdUnboundedReceiver<GameServerControlCommand>,
-        net_tx: tokio::sync::mpsc::UnboundedSender<NetworkThreadCommand>,
     ) {
         let engine = {
             let e = engine
@@ -230,8 +229,7 @@ impl GameServer {
             e
         };
         let mut app = App::new();
-        app.add_plugins(LogPlugin::default())
-            .add_plugins(TaskPoolPlugin::default())
+        app.add_plugins(TaskPoolPlugin::default())
             .add_plugins(TypeRegistrationPlugin)
             .add_plugins(FrameCountPlugin)
             .add_plugins(TimePlugin)
@@ -243,44 +241,36 @@ impl GameServer {
         app.insert_resource(GameServerResource(engine));
         app.insert_resource(Time::<Fixed>::from_duration(TICK));
         app.insert_resource(GameServerControlCommandReceiver(SyncCell::new(ctrl_rx)));
-        app.insert_resource(NetworkServerControlCommandSender(SyncCell::new(net_tx)));
+        app.add_systems(Startup, Self::network_startup_system);
         app.add_systems(PostUpdate, Self::control_command_handler_system);
         app.run();
     }
 
-    fn control_command_handler_system(
-        engine: Res<GameServerResource>,
-        ctrl_rx: ResMut<GameServerControlCommandReceiver>,
-        net_tx: ResMut<NetworkServerControlCommandSender>,
-        mut exiter: EventWriter<AppExit>,
-    ) {
-        let ctrl_rx = ctrl_rx.into_inner().0.get();
-        let net_tx = net_tx.into_inner().0.get();
-        let _engine = &engine.into_inner().0;
-        for cmd in ctrl_rx.try_iter() {
+    fn network_startup_system(engine: Res<GameServerResource>) {
+        let engine = &engine.into_inner().0;
+        let net_engine = Arc::clone(engine);
+        engine
+            .network_thread
+            .exec_async(move |state| Box::pin(NetworkThreadServerState::bootstrap(state, net_engine)))
+            .unwrap();
+    }
+
+    fn control_command_handler_system(world: &mut World) {
+        let pending_cmds: SmallVec<[GameServerControlCommand; 32]> = {
+            let mut ctrl_rx: Mut<GameServerControlCommandReceiver> = world.resource_mut();
+            SmallVec::from_iter(ctrl_rx.as_mut().0.get().try_iter())
+        };
+        for cmd in pending_cmds {
             match cmd {
                 GameServerControlCommand::Shutdown(notif) => {
-                    let (feedback_tx, feedback_rx) = async_oneshot_channel();
-                    let _ = net_tx.send(NetworkThreadCommand::Shutdown(feedback_tx));
-                    let _ = feedback_rx.blocking_recv();
-                    exiter.send(AppExit);
+                    let engine: &GameServerResource = world.resource();
+                    let engine = &engine.0;
+                    engine.network_thread.sync_shutdown();
+                    world.send_event(AppExit);
                     let _ = notif.send(());
                 }
-                GameServerControlCommand::CreateLocalConnection(rstx) => {
-                    net_tx
-                        .send(NetworkThreadCommand::Run(Box::new(move |engine| {
-                            let addr = PeerAddress::Local(0);
-                            let (spipe, cpipe) = duplex(INPROCESS_SOCKET_BUFFER_SIZE);
-                            let rpc_server = create_local_rpc_server(Arc::clone(engine), spipe, addr);
-                            let _s_disconnector = rpc_server.get_disconnector();
-                            tokio::task::spawn_local(async move {
-                                rstx.send((addr, cpipe)).ok().context(
-                                    "Could not send GameServerControlCommand::CreateLocalConnection response",
-                                )?;
-                                rpc_server.await.context("Local RPC server failure")
-                            });
-                        })))
-                        .unwrap();
+                GameServerControlCommand::Invoke(cmd) => {
+                    cmd(world);
                 }
             }
         }
