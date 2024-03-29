@@ -60,12 +60,12 @@ jobs:
         run: sccache --start-server
 
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo "+${{ matrix.rust }}" test --workspace
       - name: Clippy
-        run: cargo clippy --all-targets
+        run: cargo "+${{ matrix.rust }}" clippy --all-targets
       - name: Check formatting
         if: startsWith(matrix.rust, 'nightly')
-        run: cargo fmt --check --all
+        run: cargo "+${{ matrix.rust }}" fmt --check --all
 
       - name: Print sccache stats
         run: ${SCCACHE_PATH} --show-stats
