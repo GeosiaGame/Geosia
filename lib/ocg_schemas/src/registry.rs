@@ -264,16 +264,14 @@ impl<Object: RegistryObject> Registry<Object> {
             .map(|i| RegistryId(NonZeroU32::new(i as u32).unwrap()))
     }
 
-    /// Gets a `Vec` of all the ID -> Object mappings in this registry.
-    pub fn get_objects_ids(&self) -> Vec<(&RegistryId, &Object)> {
-        let mut result = Vec::new();
-        for id in self.name_to_id.values() {
-            let obj = self.lookup_id_to_object(*id);
-            if let Some(o) = obj {
-                result.push((id, o));
-            }
-        }
-        result
+    /// Iterates over all the registry objects.
+    pub fn iter(&self) -> impl Iterator<Item = (RegistryId, RegistryNameRef, &Object)> {
+        self.name_to_id.iter().filter_map(|(name, &id)| {
+            self.id_to_obj
+                .get(id.0.get() as usize)
+                .and_then(Option::as_ref)
+                .map(|obj| (id, name.as_ref(), obj))
+        })
     }
 }
 

@@ -100,9 +100,9 @@ impl StdGenerator {
     pub fn generate_world_biomes(&mut self, biome_registry: &BiomeRegistry) {
         // initialize generatable biomes
         let mut biomes: Vec<(RegistryId, BiomeDefinition)> = Vec::new();
-        for def in biome_registry.get_objects_ids().iter() {
-            if def.1.can_generate {
-                biomes.push((*def.0, def.1.to_owned()));
+        for (id, _name, def) in biome_registry.iter() {
+            if def.can_generate {
+                biomes.push((id, def.to_owned()));
             }
         }
         self.biome_map.generatable_biomes = biomes;
