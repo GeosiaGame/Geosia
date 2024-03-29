@@ -31,9 +31,9 @@ pub fn create_local_rpc_server(
     RpcSystem::new(Box::new(network), Some(bootstrap_client.clone().client))
 }
 
+/// Unit test utilities
 #[cfg(test)]
 pub mod test {
-    //! Unit test utilities
 
     use capnp_rpc::twoparty::VatId;
 

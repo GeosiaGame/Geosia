@@ -24,51 +24,31 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest ]
-        rust: [ stable, nightly-2024-03-01 ]
+        rust: [ stable, nightly-2024-03-29 ]
         include:
           - os: ubuntu-latest
-            sccache-path: /home/runner/.cache/sccache
 #          - os: macos-latest
-#            sccache-path: /Users/runner/Library/Caches/Mozilla.sccache
     env:
       RUST_BACKTRACE: full
-      RUSTC_WRAPPER: sccache
       RUSTV: ${{ matrix.rust }}
-      SCCACHE_CACHE_SIZE: 2G
-      SCCACHE_DIR: ${{ matrix.sccache-path }}
-      # SCCACHE_RECACHE: 1 # Uncomment this to clear cache, then comment it back out
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - name: Install dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update --yes
           sudo apt-get install --yes --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev libvulkan-dev
-      - uses: actions/checkout@v3
-      - name: Install sccache (ubuntu-latest)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          SCCACHE_FILE=sccache-v0.5.4-x86_64-unknown-linux-musl
-          mkdir -p "$HOME"/.local/bin
-          curl -L "https://github.com/mozilla/sccache/releases/download/v0.5.4/sccache-v0.5.4-x86_64-unknown-linux-musl.tar.gz" --output sccache.tar.gz
-          tar xzf sccache.tar.gz
-          rm sccache.tar.gz
-          mv -f "$SCCACHE_FILE"/sccache "$HOME"/.local/bin/sccache
-          rm -rf "$SCCACHE_FILE"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Install sccache (macos-latest)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew update
-          brew install sccache
+      - uses: actions/checkout@v4
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.4
       - name: Install Rust ${{ matrix.rust }}
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
-          profile: default
-          override: true
           components: rustfmt, clippy
       - name: Cache cargo registry
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -76,26 +56,19 @@ jobs:
           key: ${{ runner.os }}-cargo-r${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-      - name: Cache sccache
-        uses: actions/cache@v3
-        with:
-          path: ${{ matrix.sccache-path }}
-          key: ${{ runner.os }}-sccache-r${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-sccache-
       - name: Start sccache server
         run: sccache --start-server
 
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo "+${{ matrix.rust }}" test --workspace
       - name: Clippy
-        run: cargo clippy --all-targets
+        run: cargo "+${{ matrix.rust }}" clippy --all-targets
       - name: Check formatting
         if: startsWith(matrix.rust, 'nightly')
-        run: cargo fmt --check --all
+        run: cargo "+${{ matrix.rust }}" fmt --check --all
 
       - name: Print sccache stats
-        run: sccache --show-stats
+        run: ${SCCACHE_PATH} --show-stats
       - name: Stop sccache server
-        run: sccache --stop-server || true
+        run: ${SCCACHE_PATH} --stop-server || true
 

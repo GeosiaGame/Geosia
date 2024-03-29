@@ -132,7 +132,7 @@ impl GameServer {
     /// Constructs a simple server for unit tests with no disk IO/savefile location attached.
     pub fn new_test() -> Arc<GameServer> {
         let mut game_config = GameConfig::default();
-        game_config.server.server_title = "Test server".to_owned();
+        "Test server".clone_into(&mut game_config.server.server_title);
         game_config.server.server_subtitle = format!("Thread {:?}", std::thread::current().id());
         game_config.server.listen_addresses.clear();
         Self::new(GameConfig::new_handle(game_config)).expect("Could not create a GameServer test instance")
