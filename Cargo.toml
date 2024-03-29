@@ -61,7 +61,7 @@ quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
 [workspace.dependencies.bevy]
-version = "0.13.0"
+version = "0.13.1"
 default-features = false
 # Extra features are used in ocg_client on top of these common ones
 features = [
@@ -84,7 +84,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_math]
-version = "0.13.0"
+version = "0.13.1"
 default-features = false
 features = [
     "serialize",            # Support for `serde` Serialize/Deserialize

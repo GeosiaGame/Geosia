@@ -155,10 +155,9 @@ impl StdGenerator {
             for (i, v) in vparams[..].iter_mut().enumerate() {
                 let ix = (i % CHUNK_DIMZ) as i32;
                 let iz = ((i / CHUNK_DIMZ) % CHUNK_DIMZ) as i32;
-                blended[(ix + iz * CHUNK_DIM) as usize] = self
-                    .get_biomes_at_point(&[ix + c_pos.x * CHUNK_DIM, iz + c_pos.z * CHUNK_DIM])
+                self.get_biomes_at_point(&[ix + c_pos.x * CHUNK_DIM, iz + c_pos.z * CHUNK_DIM])
                     .unwrap_or(&SmallVec::<[BiomeEntry; EXPECTED_BIOME_COUNT]>::new())
-                    .to_owned();
+                    .clone_into(&mut blended[(ix + iz * CHUNK_DIM) as usize]);
                 let p = Self::elevation_noise(
                     IVec2::new(ix, iz),
                     IVec2::new(c_pos.x, c_pos.z),
@@ -535,6 +534,7 @@ impl StdGenerator {
     /// watersheds are currently calculated on corners, but it'd be
     /// more useful to compute them on polygon centers so that every
     /// polygon can be marked as being in one watershed.
+    #[allow(clippy::assigning_clones)] // false positive, "fixing" this causes a borrow checker error
     fn calculate_watersheds(&mut self, biome_registry: &BiomeRegistry) {
         let (ocean_id, _) = biome_registry.lookup_name_to_object(OCEAN_BIOME_NAME.as_ref()).unwrap();
         let (beach_id, _) = biome_registry.lookup_name_to_object(BEACH_BIOME_NAME.as_ref()).unwrap();
@@ -753,7 +753,7 @@ impl StdGenerator {
             while data[offset_x].get(offset_y).is_none() {
                 data[offset_x].push(smallvec![]);
             }
-            data[offset_x][offset_y] = self.biome_map.biome_map[&[x, y]].clone();
+            data[offset_x][offset_y].clone_from(&self.biome_map.biome_map[&[x, y]]);
         }
         let output =
             ocg_schemas::voxel::generation::blur::blur_biomes(&data.iter().map(Vec::as_slice).collect_vec()[..]);
