@@ -22,7 +22,6 @@ clap.workspace = true
 futures.workspace = true
 hashbrown.workspace = true
 image.workspace = true
-lazy_static.workspace = true
 lru.workspace = true
 noise.workspace = true
 quinn.workspace = true

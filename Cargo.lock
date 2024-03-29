@@ -3590,7 +3590,6 @@ dependencies = [
  "futures",
  "hashbrown",
  "image",
- "lazy_static",
  "lru",
  "noise",
  "ocg_schemas",
