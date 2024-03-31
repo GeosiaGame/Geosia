@@ -3609,6 +3609,7 @@ dependencies = [
  "thread_local",
  "tokio",
  "tokio-util",
+ "uuid",
  "voronoice",
 ]
 

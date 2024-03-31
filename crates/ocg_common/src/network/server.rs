@@ -10,12 +10,13 @@ use capnp_rpc::{pry, RpcSystem};
 use ocg_schemas::dependencies::capnp::capability::Promise;
 use ocg_schemas::dependencies::capnp::Error;
 use ocg_schemas::dependencies::kstring::KString;
-use ocg_schemas::schemas::network_capnp as rpc;
 use ocg_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
 };
+use ocg_schemas::schemas::{network_capnp as rpc, SchemaUuidExt};
 use tokio::io::{duplex, DuplexStream};
 use tokio::task::JoinHandle;
+use uuid::Uuid;
 
 use crate::network::thread::NetworkThreadState;
 use crate::network::transport::create_local_rpc_server;
@@ -131,7 +132,7 @@ pub struct Server2ClientEndpoint {
 /// An authenticated RPC client<->server connection handler on the server side.
 pub struct AuthenticatedServer2ClientEndpoint {
     _net_state: Rc<RefCell<NetworkThreadServerState>>,
-    _server: Arc<GameServer>,
+    server: Arc<GameServer>,
     peer: PeerAddress,
     username: KString,
     connection: rpc::authenticated_client_connection::Client,
@@ -207,7 +208,7 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
 
         let client = Rc::new(RefCell::new(AuthenticatedServer2ClientEndpoint {
             _net_state: self.net_state.clone(),
-            _server: self.server.clone(),
+            server: self.server.clone(),
             peer: self.peer,
             username,
             connection,
@@ -235,8 +236,24 @@ impl AuthenticatedServer2ClientEndpoint {
 }
 
 impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2ClientEndpoint {
-    fn bootstrap_game_data(&mut self, _: BootstrapGameDataParams, _: BootstrapGameDataResults) -> Promise<(), Error> {
-        todo!()
+    fn bootstrap_game_data(
+        &mut self,
+        _: BootstrapGameDataParams,
+        mut results: BootstrapGameDataResults,
+    ) -> Promise<(), Error> {
+        let builder = results.get();
+        let mut data = builder.init_data();
+        // TODO: use saved world data here
+        Uuid::parse_str("05aaf964-aefa-49d0-9b6a-0aa376016ac2")
+            .unwrap()
+            .write_to_message(&mut data.reborrow().init_universe_id());
+        self.0
+            .borrow()
+            .server
+            .server_data
+            .shared_registries
+            .serialize_ids(&mut data);
+        Promise::ok(())
     }
 
     fn send_chat_message(&mut self, params: SendChatMessageParams, _: SendChatMessageResults) -> Promise<(), Error> {

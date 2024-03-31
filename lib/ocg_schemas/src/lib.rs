@@ -1,5 +1,9 @@
 #![warn(missing_docs)]
-#![deny(clippy::disallowed_types)]
+#![deny(
+    clippy::disallowed_types,
+    clippy::await_holding_refcell_ref,
+    clippy::await_holding_lock
+)]
 
 //! A library crate of the in-memory, on-disk and network representations of the game's core data.
 
@@ -7,6 +11,7 @@ pub mod coordinates;
 pub mod direction;
 pub mod physics;
 pub mod range;
+pub mod registries;
 pub mod registry;
 pub mod schemas;
 pub mod voxel;
@@ -46,4 +51,5 @@ pub mod dependencies {
     pub use serde;
     pub use smallvec;
     pub use thiserror;
+    pub use uuid;
 }

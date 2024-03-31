@@ -1,5 +1,4 @@
 //! The network client thread implementation.
-#![deny(clippy::await_holding_refcell_ref, clippy::await_holding_lock)]
 
 use bevy::log::{error, info};
 use capnp::capability::Promise;

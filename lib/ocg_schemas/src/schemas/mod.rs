@@ -33,7 +33,7 @@ pub trait SchemaUuidExt {
     /// Serializes a UUID into a capnp message.
     fn write_to_message(self, builder: &mut game_types_capnp::uuid::Builder);
     /// Deserializes a UUID from a capnp message.
-    fn read_from_message(reader: &game_types_capnp::uuid::Reader);
+    fn read_from_message(reader: &game_types_capnp::uuid::Reader) -> Self;
 }
 
 impl SchemaUuidExt for Uuid {
@@ -43,8 +43,8 @@ impl SchemaUuidExt for Uuid {
         builder.set_high(high);
     }
 
-    fn read_from_message(reader: &game_types_capnp::uuid::Reader) {
+    fn read_from_message(reader: &game_types_capnp::uuid::Reader) -> Self {
         let (high, low) = (reader.get_high(), reader.get_low());
-        Self::from_u64_pair(high, low);
+        Self::from_u64_pair(high, low)
     }
 }

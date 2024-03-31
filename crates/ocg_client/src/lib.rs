@@ -1,5 +1,9 @@
 #![warn(missing_docs)]
-#![deny(clippy::disallowed_types)]
+#![deny(
+    clippy::disallowed_types,
+    clippy::await_holding_refcell_ref,
+    clippy::await_holding_lock
+)]
 #![allow(clippy::type_complexity)]
 
 //! The clientside of OpenCubeGame
@@ -28,13 +32,20 @@ use bevy::winit::WinitPlugin;
 use ocg_common::config::{GameConfig, ServerConfig};
 use ocg_common::network::thread::NetworkThread;
 use ocg_common::prelude::*;
-use ocg_common::GameServer;
+use ocg_common::{builtin_game_registries, GameServer};
+use ocg_schemas::dependencies::uuid::Uuid;
+use ocg_schemas::registries::GameRegistries;
+use ocg_schemas::schemas::SchemaUuidExt;
 use ocg_schemas::{GameSide, OcgExtraData};
 
 use crate::network::NetworkThreadClientState;
 
 /// An [`OcgExtraData`] implementation containing the client-side data for the game engine.
-pub struct ClientData;
+#[derive(Resource)]
+pub struct ClientData {
+    /// Shared client/server registries.
+    pub shared_registries: GameRegistries,
+}
 
 impl OcgExtraData for ClientData {
     type ChunkData = voxel::ClientChunkData;
@@ -46,6 +57,7 @@ pub fn client_main() {
     // Unset the manifest dir to make bevy load assets from the workspace root
     std::env::set_var("CARGO_MANIFEST_DIR", "");
 
+    let default_registries = builtin_game_registries();
     let game_config = GameConfig {
         server: ServerConfig {
             server_title: String::from("Integrated server"),
@@ -60,7 +72,12 @@ pub fn client_main() {
         .expect("Could not create an integrated server connection");
 
     let net_thread = NetworkThread::new(GameSide::Client, NetworkThreadClientState::default);
-    net_thread
+
+    struct IntegBootstrap {
+        registries: GameRegistries,
+    }
+
+    let bootstrap_data = net_thread
         .exec_async_await(|state| {
             Box::pin(async move {
                 NetworkThreadClientState::connect_locally(
@@ -68,11 +85,32 @@ pub fn client_main() {
                     server_pipe.await.context("integ_server.create_local_connection")?,
                 )
                 .await
-                .context("NetworkThreadClientState::connect_locally")
+                .context("NetworkThreadClientState::connect_locally")?;
+                let bootstrap_request = state
+                    .borrow()
+                    .server_auth_rpc()
+                    .context("Missing auth endpoint")?
+                    .bootstrap_game_data_request();
+                let bootstrap_response = bootstrap_request
+                    .send()
+                    .promise
+                    .await
+                    .context("Failed bootstrap request to the integrated server")?;
+                let bootstrap_response = bootstrap_response.get()?.get_data()?;
+                let uuid = Uuid::read_from_message(&bootstrap_response.get_universe_id()?);
+                let registries = default_registries.clone_with_serialized_ids(&bootstrap_response)?;
+                let nblocks = registries.block_types.len();
+                info!("Joining server world {uuid} with {nblocks} block types.");
+
+                anyhow::Ok(IntegBootstrap { registries })
             })
         })
         .expect("Could not connect the client to the integrated server")
         .expect("Could not connect the client to the integrated server");
+
+    let client_data = ClientData {
+        shared_registries: bootstrap_data.registries,
+    };
 
     net_thread
         .exec_async(|state| {
@@ -126,6 +164,8 @@ pub fn client_main() {
         .add_plugins(GltfPlugin::default())
         .add_plugins(debugcam::PlayerPlugin);
 
+    app.insert_resource(client_data);
+
     app.add_plugins(debug_window::DebugWindow);
 
     app.run();
@@ -137,18 +177,17 @@ mod debug_window {
     use bevy::log;
     use bevy::prelude::*;
     use ocg_common::voxel::biomes::setup_basic_biomes;
-    use ocg_common::voxel::blocks::setup_basic_blocks;
     use ocg_common::voxel::generator::StdGenerator;
     use ocg_common::voxel::generator::WORLD_SIZE_XZ;
     use ocg_common::voxel::generator::WORLD_SIZE_Y;
     use ocg_schemas::coordinates::AbsChunkPos;
     use ocg_schemas::dependencies::itertools::iproduct;
     use ocg_schemas::voxel::biome::BiomeRegistry;
-    use ocg_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME};
+    use ocg_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 
-    use crate::voronoi_renderer;
     use crate::voxel::meshgen::mesh_from_chunk;
     use crate::voxel::{ClientChunk, ClientChunkGroup};
+    use crate::{voronoi_renderer, ClientData};
 
     pub struct DebugWindow;
 
@@ -164,6 +203,7 @@ mod debug_window {
         mut images: ResMut<Assets<Image>>,
         mut meshes: ResMut<Assets<Mesh>>,
         mut materials: ResMut<Assets<StandardMaterial>>,
+        client_data: Res<ClientData>,
     ) {
         log::warn!("Setting up debug window");
         let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
@@ -172,10 +212,7 @@ mod debug_window {
             base_color: Color::GRAY,
             ..default()
         });
-
-        let mut block_reg = BlockRegistry::default();
-        setup_basic_blocks(&mut block_reg);
-        let block_reg = block_reg;
+        let block_reg = &client_data.shared_registries.block_types;
         let (empty, _) = block_reg.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
 
         let mut biome_reg = BiomeRegistry::default();
@@ -202,13 +239,13 @@ mod debug_window {
         ) {
             let cpos = AbsChunkPos::new(cx, cy, cz);
             let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
-            generator.generate_chunk(cpos, &mut chunk.blocks, &block_reg, &biome_reg);
+            generator.generate_chunk(cpos, &mut chunk.blocks, block_reg, &biome_reg);
             test_chunks.chunks.insert(cpos, chunk);
         }
         for (pos, _) in test_chunks.chunks.iter() {
             let chunks = &test_chunks.get_neighborhood_around(*pos).transpose_option();
             if let Some(chunks) = chunks {
-                let chunk_mesh = mesh_from_chunk(&block_reg, chunks).unwrap();
+                let chunk_mesh = mesh_from_chunk(block_reg, chunks).unwrap();
 
                 commands.spawn(PbrBundle {
                     mesh: meshes.add(chunk_mesh),

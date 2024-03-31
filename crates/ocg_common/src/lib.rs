@@ -1,5 +1,9 @@
 #![warn(missing_docs)]
-#![deny(clippy::disallowed_types)]
+#![deny(
+    clippy::disallowed_types,
+    clippy::await_holding_refcell_ref,
+    clippy::await_holding_lock
+)]
 #![allow(clippy::type_complexity)]
 
 //! The common client&server code for OpenCubeGame
@@ -18,7 +22,8 @@ use bevy::prelude::*;
 use bevy::time::TimePlugin;
 use bevy::utils::smallvec::SmallVec;
 use bevy::utils::synccell::SyncCell;
-use ocg_schemas::voxel::voxeltypes::BlockRegistry;
+use ocg_schemas::registries::GameRegistries;
+use ocg_schemas::registry::Registry;
 use ocg_schemas::{GameSide, OcgExtraData};
 
 use crate::config::{GameConfig, GameConfigHandle};
@@ -62,10 +67,9 @@ static_assertions::const_assert_eq!(1_000_000i64 / MICROSECONDS_PER_TICK, TICKS_
 
 /// An [`OcgExtraData`] implementation containing server-side data for the game engine.
 /// The struct holds server state, the trait points to per chunk/group/etc. data.
-#[derive(Clone)]
 pub struct ServerData {
-    /// A full registry of block types currently in game.
-    pub block_registry: Arc<BlockRegistry>,
+    /// Shared client/server registries.
+    pub shared_registries: GameRegistries,
 }
 
 impl OcgExtraData for ServerData {
@@ -88,6 +92,7 @@ pub enum GameServerControlCommand {
 /// It has its own bevy App with a very limited set of plugins enabled to be able to run without a graphical user interface.
 pub struct GameServer {
     config: GameConfigHandle,
+    server_data: ServerData,
     engine_thread: JoinHandle<()>,
     network_thread: NetworkThread<NetworkThreadServerState>,
     pause: AtomicBool,
@@ -116,8 +121,13 @@ impl GameServer {
             .spawn(move || GameServer::engine_thread_main(rx, ctrl_rx))
             .expect("Could not create a thread for the engine");
 
+        let server_data = ServerData {
+            shared_registries: builtin_game_registries(),
+        };
+
         let server = Self {
             config,
+            server_data,
             engine_thread,
             network_thread,
             pause: AtomicBool::new(true),
@@ -275,4 +285,12 @@ impl GameServer {
             }
         }
     }
+}
+
+/// Simple hardcoded registries of some game objects.
+pub fn builtin_game_registries() -> GameRegistries {
+    let mut block_types = Registry::default();
+    crate::voxel::blocks::setup_basic_blocks(&mut block_types);
+
+    GameRegistries { block_types }
 }

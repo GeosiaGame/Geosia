@@ -193,7 +193,7 @@ impl<O: RegistryObject> RegistryObject for Arc<O> {
 }
 
 /// A data structure for keeping track of a stable mapping between: namespaced strings, numerical IDs and objects.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Registry<Object: RegistryObject> {
     next_free_id: NonZeroU32,
     id_to_obj: Vec<Option<Object>>,
@@ -353,6 +353,16 @@ impl<Object: RegistryObject> Registry<Object> {
                 .and_then(Option::as_ref)
                 .map(|obj| (id, name.as_ref(), obj))
         })
+    }
+
+    /// Returns the number of registered mappings.
+    pub fn len(&self) -> usize {
+        self.name_to_id.len()
+    }
+
+    /// Returns if the registry has no mappings.
+    pub fn is_empty(&self) -> bool {
+        self.name_to_id.is_empty()
     }
 
     /// Serializes the ID-name mappings to a schema bundle message.

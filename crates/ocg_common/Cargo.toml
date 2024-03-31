@@ -34,4 +34,5 @@ thiserror.workspace = true
 thread_local.workspace = true
 tokio-util.workspace = true
 tokio.workspace = true
+uuid.workspace = true
 voronoice.workspace = true
