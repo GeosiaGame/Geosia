@@ -338,7 +338,7 @@ impl<Object: RegistryObject> Registry<Object> {
     }
 
     /// Given a registry object, find look up its ID, or return `None` if it's not found.
-    pub fn lookup_object_to_id(&self, object: &Object) -> Option<RegistryId> {
+    pub fn search_object_to_id(&self, object: &Object) -> Option<RegistryId> {
         self.id_to_obj
             .iter()
             .position(|r| r.as_ref().is_some_and(|o| o == object))

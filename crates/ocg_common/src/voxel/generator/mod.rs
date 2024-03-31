@@ -189,8 +189,8 @@ impl StdGenerator {
             biomes.sort_by(|a, b| {
                 a.1.partial_cmp(&b.1).unwrap_or_else(|| {
                     biome_registry
-                        .lookup_object_to_id(a.0)
-                        .cmp(&biome_registry.lookup_object_to_id(b.0))
+                        .search_object_to_id(a.0)
+                        .cmp(&biome_registry.search_object_to_id(b.0))
                 })
             });
 
