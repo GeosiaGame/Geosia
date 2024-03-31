@@ -1,7 +1,6 @@
 //! Generic code for a stable forwards/backwards compatible serialization framework for game objects.
 //!
-//! Overview:
-//!  - Based on
+//! Based on capnproto: https://capnproto.org/language.html, https://docs.rs/capnp/latest/capnp/
 
 use uuid::Uuid;
 
