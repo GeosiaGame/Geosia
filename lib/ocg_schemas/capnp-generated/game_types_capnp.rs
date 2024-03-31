@@ -920,7 +920,7 @@ pub mod version {
   }
 }
 
-pub mod u_u_i_d {
+pub mod uuid {
   #[derive(Copy, Clone)]
   pub struct Owned(());
   impl ::capnp::introspect::Introspect for Owned { fn introspect() -> ::capnp::introspect::Type { ::capnp::introspect::TypeVariant::Struct(::capnp::introspect::RawBrandedStructSchema { generic: &_private::RAW_SCHEMA, field_types: _private::get_field_types, annotation_types: _private::get_annotation_types }).into() } }
@@ -1085,7 +1085,7 @@ pub mod u_u_i_d {
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(103, 97, 109, 101, 95, 116, 121, 112),
       ::capnp::word(101, 115, 46, 99, 97, 112, 110, 112),
-      ::capnp::word(58, 85, 85, 73, 68, 0, 0, 0),
+      ::capnp::word(58, 85, 117, 105, 100, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 1, 0, 1, 0),
       ::capnp::word(8, 0, 0, 0, 3, 0, 4, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
@@ -3476,7 +3476,7 @@ pub mod game_bootstrap_data {
       self.reader.total_size()
     }
     #[inline]
-    pub fn get_universe_id(self) -> ::capnp::Result<crate::schemas::game_types_capnp::u_u_i_d::Reader<'a>> {
+    pub fn get_universe_id(self) -> ::capnp::Result<crate::schemas::game_types_capnp::uuid::Reader<'a>> {
       ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(0), ::core::option::Option::None)
     }
     #[inline]
@@ -3546,15 +3546,15 @@ pub mod game_bootstrap_data {
       self.builder.as_reader().total_size()
     }
     #[inline]
-    pub fn get_universe_id(self) -> ::capnp::Result<crate::schemas::game_types_capnp::u_u_i_d::Builder<'a>> {
+    pub fn get_universe_id(self) -> ::capnp::Result<crate::schemas::game_types_capnp::uuid::Builder<'a>> {
       ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(0), ::core::option::Option::None)
     }
     #[inline]
-    pub fn set_universe_id(&mut self, value: crate::schemas::game_types_capnp::u_u_i_d::Reader<'_>) -> ::capnp::Result<()> {
+    pub fn set_universe_id(&mut self, value: crate::schemas::game_types_capnp::uuid::Reader<'_>) -> ::capnp::Result<()> {
       ::capnp::traits::SetterInput::set_pointer_builder(self.builder.reborrow().get_pointer_field(0), value, false)
     }
     #[inline]
-    pub fn init_universe_id(self, ) -> crate::schemas::game_types_capnp::u_u_i_d::Builder<'a> {
+    pub fn init_universe_id(self, ) -> crate::schemas::game_types_capnp::uuid::Builder<'a> {
       ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(0), 0)
     }
     #[inline]
@@ -3586,7 +3586,7 @@ pub mod game_bootstrap_data {
     }
   }
   impl Pipeline  {
-    pub fn get_universe_id(&self) -> crate::schemas::game_types_capnp::u_u_i_d::Pipeline {
+    pub fn get_universe_id(&self) -> crate::schemas::game_types_capnp::uuid::Pipeline {
       ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(0))
     }
     pub fn get_block_registry(&self) -> crate::schemas::game_types_capnp::registry_id_mapping_bundle::Pipeline {
@@ -3649,7 +3649,7 @@ pub mod game_bootstrap_data {
     ];
     pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
       match index {
-        0 => <crate::schemas::game_types_capnp::u_u_i_d::Owned as ::capnp::introspect::Introspect>::introspect(),
+        0 => <crate::schemas::game_types_capnp::uuid::Owned as ::capnp::introspect::Introspect>::introspect(),
         1 => <crate::schemas::game_types_capnp::registry_id_mapping_bundle::Owned as ::capnp::introspect::Introspect>::introspect(),
         _ => panic!("invalid field index {}", index),
       }

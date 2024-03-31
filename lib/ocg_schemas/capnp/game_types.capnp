@@ -27,7 +27,7 @@ struct Version @0x838ff703b6e691c4 {
     build @4 :Text;
 }
 
-struct UUID @0xad396073ac7dea91 {
+struct Uuid @0xad396073ac7dea91 {
     low @0 :UInt64;
     high @1 :UInt64;
 }
@@ -91,7 +91,7 @@ struct RegistryIdMappingBundle @0xe1c96c086209943d {
 # The bootstrap data package to set up all client-side data for the connection.
 struct GameBootstrapData @0xb0778941893c57e5 {
     # Stable UUID of the server's universe, used for identifying unique server "savefiles".
-    universeId @0 :UUID;
+    universeId @0 :Uuid;
     # Name->ID mappings for the block registry.
     blockRegistry @1 :RegistryIdMappingBundle;
 }

@@ -3,6 +3,8 @@
 //! Overview:
 //!  - Based on
 
+use uuid::Uuid;
+
 /// Common game object types.
 #[allow(missing_docs, clippy::all)] // Auto-generated
 pub mod game_types_capnp {
@@ -25,4 +27,25 @@ pub mod voxel_mesh_capnp {
 #[allow(missing_docs, clippy::all)] // Auto-generated
 pub mod network_capnp {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/capnp-generated/network_capnp.rs"));
+}
+
+/// Helpers for (de)serializing UUIDs.
+pub trait SchemaUuidExt {
+    /// Serializes a UUID into a capnp message.
+    fn write_to_message(self, builder: &mut game_types_capnp::uuid::Builder);
+    /// Deserializes a UUID from a capnp message.
+    fn read_from_message(reader: &game_types_capnp::uuid::Reader);
+}
+
+impl SchemaUuidExt for Uuid {
+    fn write_to_message(self, builder: &mut game_types_capnp::uuid::Builder) {
+        let (high, low) = self.as_u64_pair();
+        builder.set_low(low);
+        builder.set_high(high);
+    }
+
+    fn read_from_message(reader: &game_types_capnp::uuid::Reader) {
+        let (high, low) = (reader.get_high(), reader.get_low());
+        Self::from_u64_pair(high, low);
+    }
 }

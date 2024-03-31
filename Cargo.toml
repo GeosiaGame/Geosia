@@ -52,6 +52,7 @@ thiserror = "1.0.40"
 thread_local = "1.1.7"
 tokio = { version = "1.29.1", features = ["sync", "rt", "net", "rt-multi-thread", "io-util", "time"] }
 tokio-util = { version = "0.7.9", features = ["compat", "io-util"] }
+uuid = { version = "1.8.0", features = ["fast-rng", "serde", "bytemuck", "v4", "v6"] }
 voronoice = "0.2.0"
 
 # Remote, testing
