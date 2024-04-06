@@ -4,9 +4,11 @@ use bitvec::prelude::*;
 use either::Either;
 use itertools::{iproduct, Itertools};
 use smallvec::{smallvec, SmallVec};
+use thiserror::Error;
 
 use crate::coordinates::{InChunkPos, InChunkRange, CHUNK_DIM, CHUNK_DIM2, CHUNK_DIM3Z};
 use crate::voxel::chunk_storage::{ChunkDataType, ChunkIterator, ChunkStorage};
+use crate::SmallCowVec;
 
 /// Chunk data compressed by storing a list of used values in a `palette` array and indices into that array for every chunk element.
 /// A special case for all data being of the same type has a very small memory footprint.
@@ -82,6 +84,17 @@ const PAL_DATA_ARRAY_U8_LEN: usize = CHUNK_DIM3Z / 2;
 /// Length of the data array when using u16-typed data
 const PAL_DATA_ARRAY_U16_LEN: usize = CHUNK_DIM3Z;
 
+/// Error returned from deserializing palette storage
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum PaletteDeserializationError {
+    /// Wrong palette length
+    #[error("Illegal palette length {0}")]
+    IllegalPaletteLength(usize),
+    /// Wrong data array length
+    #[error("Illegal data array length {0}")]
+    IllegalDataLength(usize),
+}
+
 impl<DataType: ChunkDataType + Copy> PaletteStorage<DataType> {
     /// Constructs new palette storage filled with the given value
     pub fn new(fill_with: DataType) -> Self {
@@ -90,6 +103,32 @@ impl<DataType: ChunkDataType + Copy> PaletteStorage<DataType> {
             data_storage: smallvec![0],
             last_gc_palette_len: 0,
         }
+    }
+
+    /// Deserializes the raw palette and data arrays.
+    pub fn from_serialized(
+        palette: SmallCowVec<[DataType; 16]>,
+        data: SmallCowVec<[u16; 1]>,
+    ) -> Result<Self, PaletteDeserializationError> {
+        let palette: SmallVec<[DataType; 16]> = palette.into();
+        let data: SmallVec<[u16; 1]> = data.into();
+        let palette_len = palette.len();
+
+        if palette_len == CHUNK_DIM3Z {
+            return Err(PaletteDeserializationError::IllegalPaletteLength(palette_len));
+        }
+
+        let data_storage = match data.len() {
+            0 | 1 => smallvec![0],
+            PAL_DATA_ARRAY_U8_LEN | PAL_DATA_ARRAY_U16_LEN => data,
+            _ => return Err(PaletteDeserializationError::IllegalDataLength(data.len())),
+        };
+
+        Ok(Self {
+            palette,
+            data_storage,
+            last_gc_palette_len: palette_len,
+        })
     }
 
     /// Returns the list of the current palette entries.
@@ -118,6 +157,16 @@ impl<DataType: ChunkDataType + Copy> PaletteStorage<DataType> {
                 Either::Right(Either::Right(indices.iter().map(|&idx| &self.palette[idx as usize])))
             }
         }
+    }
+
+    /// Returns raw palette for serialization
+    pub fn serialized_palette(&self) -> &[DataType] {
+        &self.palette
+    }
+
+    /// Returns raw data for serialization
+    pub fn serialized_data(&self) -> &[u16] {
+        &self.data_storage
     }
 
     /// Iterates over all the data paired with the block coordinates inside the chunk, in XZY order.

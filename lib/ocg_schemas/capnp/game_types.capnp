@@ -95,3 +95,8 @@ struct GameBootstrapData @0xb0778941893c57e5 {
     # Name->ID mappings for the block registry.
     blockRegistry @1 :RegistryIdMappingBundle;
 }
+
+struct FullChunkData {
+    blockPalette @0 :List(UInt64);
+    blockData @1 :List(UInt16);
+}

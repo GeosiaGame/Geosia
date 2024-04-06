@@ -7,6 +7,10 @@
 
 //! A library crate of the in-memory, on-disk and network representations of the game's core data.
 
+extern crate core;
+
+use smallvec::{Array, SmallVec};
+
 pub mod coordinates;
 pub mod direction;
 pub mod physics;
@@ -52,4 +56,54 @@ pub mod dependencies {
     pub use smallvec;
     pub use thiserror;
     pub use uuid;
+}
+
+/// A simple wrapper type that's either a slice borrow, or an owned SmallVec.
+pub enum SmallCowVec<'b, A: Array> {
+    /// The slice variant.
+    Borrowed(&'b [A::Item]),
+    /// The SmallVec variant.
+    Owned(SmallVec<A>),
+}
+
+impl<'b, Item, const N: usize> From<&'b [Item]> for SmallCowVec<'b, [Item; N]> {
+    fn from(value: &'b [Item]) -> Self {
+        Self::Borrowed(value)
+    }
+}
+
+impl<A: Array> From<SmallVec<A>> for SmallCowVec<'static, A> {
+    fn from(value: SmallVec<A>) -> Self {
+        Self::Owned(value)
+    }
+}
+
+impl<A: Array> From<Vec<A::Item>> for SmallCowVec<'static, A> {
+    fn from(value: Vec<A::Item>) -> Self {
+        Self::Owned(SmallVec::from_vec(value))
+    }
+}
+
+impl<'b, A: Array> From<SmallCowVec<'b, A>> for SmallVec<A>
+where
+    A::Item: Clone,
+{
+    fn from(val: SmallCowVec<'b, A>) -> Self {
+        match val {
+            SmallCowVec::Owned(v) => v,
+            SmallCowVec::Borrowed(b) => SmallVec::from(b),
+        }
+    }
+}
+
+impl<'b, A: Array> From<SmallCowVec<'b, A>> for Vec<A::Item>
+where
+    A::Item: Clone,
+{
+    fn from(val: SmallCowVec<'b, A>) -> Self {
+        match val {
+            SmallCowVec::Owned(v) => v.into_vec(),
+            SmallCowVec::Borrowed(b) => Vec::from(b),
+        }
+    }
 }
