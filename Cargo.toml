@@ -31,15 +31,15 @@ capnpc = "0.19.0"
 clap = { version = "4.3.19", features = ["derive"] }
 either = "1.8.1"
 futures = "0.3.28"
-glam = { version = "0.24.0", features = ["bytemuck", "serde"] }
+glam = { version = "0.25.0", features = ["bytemuck", "serde"] } # Keep in sync with bevy
 hashbrown = { version = "0.14", features = ["serde"] }
-image = "0.24.9"
-itertools = "0.12.0"
+image = "0.24.9" # Keep in sync with bevy
+itertools = "0.13.0"
 kstring = { version = "2.0.0", features = ["serde"] }
-lru = "0.11.0"
-noise = "0.8.2"
+lru = "0.12.3"
+noise = "0.9.0"
 once_cell = "1.18.0"
-quinn = "0.10.1"
+quinn = "0.11.1"
 rand = "0.8.5"
 rand_pcg = "0.3.1"
 rand_xoshiro = "0.6.0"
@@ -61,7 +61,7 @@ quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
 [workspace.dependencies.bevy]
-version = "0.13.1"
+version = "0.13.2"
 default-features = false
 # Extra features are used in ocg_client on top of these common ones
 features = [
@@ -84,7 +84,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_math]
-version = "0.13.1"
+version = "0.13.2"
 default-features = false
 features = [
     "serialize",            # Support for `serde` Serialize/Deserialize
