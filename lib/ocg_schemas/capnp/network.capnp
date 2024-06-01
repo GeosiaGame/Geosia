@@ -39,6 +39,8 @@ struct AuthenticationError @0x9ed4d9765d345c1e {
 
 # A stream startup message, determining the type of the stream.
 # Sent as a LEB128-encoded data length + the encoded data array on a fresh QUIC stream.
+# A single packet on an asynchronous stream is sent as a LEB128-encoded data length + the encoded data array.
+# The data arrays are compressed on network sockets, and the capnp unpacked encoding is used.
 struct StreamHeader {
     enum StandardTypes {
         chunkData @0;
@@ -47,19 +49,6 @@ struct StreamHeader {
     union {
         standardType @0 :StandardTypes;
         customType @1 :GameTypes.RegistryName;
-    }
-}
-
-# A single packet on an asynchronous stream.
-# Sent as a LEB128-encoded data length + the encoded data array.
-struct StreamPacket {
-    union {
-        # Stream shutdown
-        shutdown @0 :Void;
-        # Standard protocol message
-        structured @1 :AnyPointer;
-        # Unstructured message for mod usage
-        unstructured @2 :Data;
     }
 }
 

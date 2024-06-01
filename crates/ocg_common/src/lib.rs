@@ -75,14 +75,14 @@ impl OcgExtraData for ServerData {
 }
 
 /// A command that can be remotely executed on the bevy world.
-pub type GameServerBevyCommand<Output = ()> = dyn (FnOnce(&mut World) -> Output) + Send + 'static;
+pub type GameBevyCommand<Output = ()> = dyn (FnOnce(&mut World) -> Output) + Send + 'static;
 
 /// Control commands for the server, for in-process communication.
 pub enum GameServerControlCommand {
     /// Gracefully shuts down the server, notifies on the given channel when done.
     Shutdown(AsyncOneshotSender<()>),
     /// Queues the given command to run in an exclusive system with full World access.
-    Invoke(Box<GameServerBevyCommand>),
+    Invoke(Box<GameBevyCommand>),
 }
 
 /// A struct to communicate with the "server"-side engine that runs the game simulation.
@@ -201,7 +201,7 @@ impl GameServer {
     }
 
     /// Non-generic version of [`Self::remote_bevy_invoke`]
-    pub fn remote_bevy_invoke_boxed(&self, cmd: Box<GameServerBevyCommand>) {
+    pub fn remote_bevy_invoke_boxed(&self, cmd: Box<GameBevyCommand>) {
         let _ = self.control_channel.send(GameServerControlCommand::Invoke(cmd));
     }
 

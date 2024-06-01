@@ -1,7 +1,9 @@
 //! The network client thread implementation.
 
-use bevy::log::{error, info};
+use bevy::log::{error, info, warn};
+use bevy::prelude::World;
 use capnp::capability::Promise;
+use capnp::message::TypedReader;
 use capnp::Error;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::{VatId, VatNetwork};
@@ -15,7 +17,11 @@ use ocg_schemas::schemas::network_capnp as rpc;
 use ocg_schemas::schemas::network_capnp::authenticated_client_connection::{
     AddChatMessageParams, AddChatMessageResults, TerminateConnectionParams, TerminateConnectionResults,
 };
+use ocg_schemas::schemas::NetworkStreamHeader;
 use tokio::task::{spawn_local, JoinHandle};
+use tokio_util::bytes::Bytes;
+
+use crate::GameControlChannel;
 
 /// Pre-authentication
 pub struct NetworkThreadClientConnectingState {
@@ -42,9 +48,9 @@ pub struct NetworkThreadClientAuthenticatedState {
     server_auth_rpc: rpc::authenticated_server_connection::Client,
 }
 
-/// The network thread game client state, accessible from network functions.
+/// The state machine for [`NetworkThreadClientState`].
 #[derive(Default)]
-pub enum NetworkThreadClientState {
+pub enum NetworkThreadClientStateVariant {
     /// No peer connected
     #[default]
     Disconnected,
@@ -52,6 +58,14 @@ pub enum NetworkThreadClientState {
     Connecting(NetworkThreadClientConnectingState),
     /// Post-authentication
     Authenticated(NetworkThreadClientAuthenticatedState),
+}
+
+/// The network thread game client state, accessible from network functions.
+pub struct NetworkThreadClientState {
+    /// Channel for communicating with the client bevy instance
+    game_control: GameControlChannel,
+    /// The current variant storage.
+    variant: NetworkThreadClientStateVariant,
 }
 
 impl NetworkThreadState for NetworkThreadClientState {
@@ -73,11 +87,19 @@ impl NetworkThreadState for NetworkThreadClientState {
 }
 
 impl NetworkThreadClientState {
+    /// Constructor.
+    pub fn new(game_control: GameControlChannel) -> Self {
+        Self {
+            game_control,
+            variant: Default::default(),
+        }
+    }
+
     fn connecting_state(&self) -> Option<&NetworkThreadClientConnectingState> {
-        match self {
-            NetworkThreadClientState::Disconnected => None,
-            NetworkThreadClientState::Connecting(state) => Some(state),
-            NetworkThreadClientState::Authenticated(NetworkThreadClientAuthenticatedState {
+        match &self.variant {
+            NetworkThreadClientStateVariant::Disconnected => None,
+            NetworkThreadClientStateVariant::Connecting(state) => Some(state),
+            NetworkThreadClientStateVariant::Authenticated(NetworkThreadClientAuthenticatedState {
                 connection: state,
                 ..
             }) => Some(state),
@@ -85,10 +107,10 @@ impl NetworkThreadClientState {
     }
 
     fn connecting_state_mut(&mut self) -> Option<&mut NetworkThreadClientConnectingState> {
-        match self {
-            NetworkThreadClientState::Disconnected => None,
-            NetworkThreadClientState::Connecting(state) => Some(state),
-            NetworkThreadClientState::Authenticated(NetworkThreadClientAuthenticatedState {
+        match &mut self.variant {
+            NetworkThreadClientStateVariant::Disconnected => None,
+            NetworkThreadClientStateVariant::Connecting(state) => Some(state),
+            NetworkThreadClientStateVariant::Authenticated(NetworkThreadClientAuthenticatedState {
                 connection: state,
                 ..
             }) => Some(state),
@@ -96,10 +118,10 @@ impl NetworkThreadClientState {
     }
 
     fn authenticated_state(&self) -> Option<&NetworkThreadClientAuthenticatedState> {
-        match self {
-            NetworkThreadClientState::Disconnected => None,
-            NetworkThreadClientState::Connecting(_) => None,
-            NetworkThreadClientState::Authenticated(state) => Some(state),
+        match &self.variant {
+            NetworkThreadClientStateVariant::Disconnected => None,
+            NetworkThreadClientStateVariant::Connecting(_) => None,
+            NetworkThreadClientStateVariant::Authenticated(state) => Some(state),
         }
     }
 
@@ -165,17 +187,18 @@ impl NetworkThreadClientState {
         let stream_task: JoinHandle<Result<()>> =
             spawn_local(Self::local_stream_acceptor(Rc::clone(this), pipe.incoming_streams));
 
-        *this.borrow_mut() = Self::Authenticated(NetworkThreadClientAuthenticatedState {
-            connection: NetworkThreadClientConnectingState {
-                server_address: connection.server_addr,
-                server_rpc: connection,
-                rpc_disconnector: Some(rpc_disconnector),
-                rpc_task,
-                stream_task,
-                stream_sender: pipe.outgoing_streams,
-            },
-            server_auth_rpc,
-        });
+        this.borrow_mut().variant =
+            NetworkThreadClientStateVariant::Authenticated(NetworkThreadClientAuthenticatedState {
+                connection: NetworkThreadClientConnectingState {
+                    server_address: connection.server_addr,
+                    server_rpc: connection,
+                    rpc_disconnector: Some(rpc_disconnector),
+                    rpc_task,
+                    stream_task,
+                    stream_sender: pipe.outgoing_streams,
+                },
+                server_auth_rpc,
+            });
 
         Ok(())
     }
@@ -185,9 +208,46 @@ impl NetworkThreadClientState {
         mut incoming_streams: AsyncUnboundedReceiver<InProcessStream>,
     ) -> Result<()> {
         while let Some(stream) = incoming_streams.recv().await {
-            // handle here
-            drop(stream);
+            use rpc::stream_header::StandardTypes;
+            match stream.header {
+                NetworkStreamHeader::Standard(StandardTypes::ChunkData) => {
+                    spawn_local(Self::chunk_data_handler(Rc::clone(&this), stream));
+                }
+                unknown => {
+                    warn!("Unrecognized network stream type {unknown:?}");
+                }
+            }
         }
+        Ok(())
+    }
+
+    async fn chunk_data_handler(this: Rc<RefCell<Self>>, stream: InProcessStream) {
+        let InProcessStream { mut rx, .. } = stream;
+        while let Some(raw_packet) = rx.recv().await {
+            if let Err(e) = this.borrow().handle_chunk_packet_net(raw_packet) {
+                error!("Error while processing chunk data packet: {e:?}");
+            }
+        }
+    }
+
+    fn handle_chunk_packet_net(&self, raw_packet: Bytes) -> Result<()> {
+        self.game_control
+            .send(Box::new(move |world| {
+                if let Err(e) = Self::handle_chunk_packet_engine(world, raw_packet) {
+                    error!("Could not handle chunk packet: {e:?}");
+                }
+            }))
+            .ok()
+            .context("Game control socket closed")?;
+
+        Ok(())
+    }
+
+    fn handle_chunk_packet_engine(_world: &mut World, raw_packet: Bytes) -> Result<()> {
+        let mut slice = &raw_packet as &[u8];
+        let msg = capnp::serialize::read_message_from_flat_slice(&mut slice, RPC_LOCAL_READER_OPTIONS)?;
+        let typed_reader = TypedReader::<_, rpc::chunk_data_stream_packet::Owned>::new(msg);
+        let root = typed_reader.get()?;
         Ok(())
     }
 }

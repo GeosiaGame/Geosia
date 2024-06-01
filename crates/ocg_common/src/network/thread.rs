@@ -47,7 +47,7 @@ pub enum NetworkThreadCommandError {
 
 impl<State: NetworkThreadState> NetworkThread<State> {
     /// Creates a new network thread and tokio runtime for the given game side.
-    pub fn new(side: GameSide, state: fn() -> State) -> Self {
+    pub fn new(side: GameSide, state: impl (FnOnce() -> State) + Send + 'static) -> Self {
         let (net_tx, net_rx) = async_unbounded_channel();
         let network_rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -142,7 +142,7 @@ impl<State: NetworkThreadState> NetworkThread<State> {
     fn thread_main(
         network_rt: tokio::runtime::Runtime,
         ctrl_rx: AsyncUnboundedReceiver<NetworkThreadCommand<State>>,
-        state: fn() -> State,
+        state: impl FnOnce() -> State,
     ) {
         network_rt.block_on(async move {
             let local_set = LocalSet::new();
@@ -152,7 +152,7 @@ impl<State: NetworkThreadState> NetworkThread<State> {
 
     async fn thread_localset_main(
         mut ctrl_rx: AsyncUnboundedReceiver<NetworkThreadCommand<State>>,
-        state: fn() -> State,
+        state: impl FnOnce() -> State,
     ) {
         let state = Rc::new(RefCell::new(state()));
         while let Some(msg) = ctrl_rx.recv().await {

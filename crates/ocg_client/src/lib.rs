@@ -27,12 +27,14 @@ use bevy::sprite::SpritePlugin;
 use bevy::text::TextPlugin;
 use bevy::time::TimePlugin;
 use bevy::ui::UiPlugin;
+use bevy::utils::synccell::SyncCell;
 use bevy::window::{ExitCondition, PresentMode};
 use bevy::winit::WinitPlugin;
 use ocg_common::config::{GameConfig, ServerConfig};
 use ocg_common::network::thread::NetworkThread;
 use ocg_common::prelude::*;
-use ocg_common::{builtin_game_registries, GameServer};
+use ocg_common::{builtin_game_registries, GameBevyCommand, GameServer};
+use ocg_schemas::dependencies::smallvec::SmallVec;
 use ocg_schemas::dependencies::uuid::Uuid;
 use ocg_schemas::registries::GameRegistries;
 use ocg_schemas::schemas::SchemaUuidExt;
@@ -52,6 +54,9 @@ impl OcgExtraData for ClientData {
     type GroupData = ();
 }
 
+/// Channel for executing commands on the client bevy App.
+pub type GameControlChannel = StdUnboundedSender<Box<GameBevyCommand>>;
+
 /// The entry point to the client executable
 pub fn client_main() {
     // Unset the manifest dir to make bevy load assets from the workspace root
@@ -70,8 +75,9 @@ pub fn client_main() {
     let server_pipe = integ_server
         .create_local_connection()
         .expect("Could not create an integrated server connection");
+    let (control_tx, control_rx) = std_unbounded_channel();
 
-    let net_thread = NetworkThread::new(GameSide::Client, NetworkThreadClientState::default);
+    let net_thread = NetworkThread::new(GameSide::Client, move || NetworkThreadClientState::new(control_tx));
 
     struct IntegBootstrap {
         registries: GameRegistries,
@@ -163,10 +169,25 @@ pub fn client_main() {
         .add_plugins(debugcam::PlayerPlugin);
 
     app.insert_resource(client_data);
+    app.insert_resource(GameClientControlCommandReceiver(SyncCell::new(control_rx)));
 
     app.add_plugins(debug_window::DebugWindow);
+    app.add_systems(PostUpdate, control_command_handler_system);
 
     app.run();
+}
+
+#[derive(Resource)]
+struct GameClientControlCommandReceiver(SyncCell<StdUnboundedReceiver<Box<GameBevyCommand>>>);
+
+fn control_command_handler_system(world: &mut World) {
+    let pending_cmds: SmallVec<[Box<GameBevyCommand>; 32]> = {
+        let mut ctrl_rx: Mut<GameClientControlCommandReceiver> = world.resource_mut();
+        SmallVec::from_iter(ctrl_rx.as_mut().0.get().try_iter())
+    };
+    for cmd in pending_cmds {
+        cmd(world);
+    }
 }
 
 mod debug_window {
