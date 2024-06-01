@@ -4,6 +4,9 @@
 
 use uuid::Uuid;
 
+use crate::registry::RegistryName;
+use crate::schemas::network_capnp::stream_header::WhichReader;
+
 /// Common game object types.
 #[allow(missing_docs, clippy::all)] // Auto-generated
 pub mod game_types_capnp {
@@ -46,5 +49,54 @@ impl SchemaUuidExt for Uuid {
     fn read_from_message(reader: &game_types_capnp::uuid::Reader) -> Self {
         let (high, low) = (reader.get_high(), reader.get_low());
         Self::from_u64_pair(high, low)
+    }
+}
+
+/// Helpers for network stream headers.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum NetworkStreamHeader {
+    /// A builtin stream type.
+    Standard(network_capnp::stream_header::StandardTypes),
+    /// A custom (modded) stream type.
+    Custom(RegistryName),
+}
+
+/// Helpers for (de)serializing stream headers.
+pub trait NetworkStreamHeaderExt {
+    /// Serializes a stream header into a capnp message.
+    fn write_to_message(&self, builder: &mut network_capnp::stream_header::Builder);
+    /// Deserializes a stream header from a capnp message.
+    fn read_from_message(reader: &network_capnp::stream_header::Reader) -> capnp::Result<Self>
+    where
+        Self: Sized;
+}
+
+impl NetworkStreamHeaderExt for NetworkStreamHeader {
+    fn write_to_message(&self, builder: &mut network_capnp::stream_header::Builder) {
+        match self {
+            Self::Standard(standard) => {
+                builder.set_standard_type(*standard);
+            }
+            Self::Custom(custom) => {
+                let mut ser = builder.reborrow().init_custom_type();
+                ser.set_ns(&custom.ns);
+                ser.set_key(&custom.key);
+            }
+        }
+    }
+
+    fn read_from_message(reader: &network_capnp::stream_header::Reader) -> capnp::Result<Self> {
+        match reader.which()? {
+            WhichReader::StandardType(standard) => {
+                let standard = standard?;
+                Ok(Self::Standard(standard))
+            }
+            WhichReader::CustomType(custom) => {
+                let custom = custom?;
+                let ns = custom.get_ns()?.to_str()?;
+                let key = custom.get_key()?.to_str()?;
+                Ok(Self::Custom(RegistryName::new(ns, key)))
+            }
+        }
     }
 }

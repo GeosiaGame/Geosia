@@ -8,7 +8,7 @@ use capnp_rpc::twoparty::{VatId, VatNetwork};
 use capnp_rpc::{pry, Disconnector, RpcSystem};
 use ocg_common::network::server::LocalConnectionPipe;
 use ocg_common::network::thread::NetworkThreadState;
-use ocg_common::network::transport::RPC_LOCAL_READER_OPTIONS;
+use ocg_common::network::transport::{InProcessStream, RPC_LOCAL_READER_OPTIONS};
 use ocg_common::network::PeerAddress;
 use ocg_common::prelude::*;
 use ocg_schemas::schemas::network_capnp as rpc;
@@ -27,6 +27,11 @@ pub struct NetworkThreadClientConnectingState {
     rpc_disconnector: Option<Disconnector<Side>>,
     /// The RPC system task.
     rpc_task: JoinHandle<Result<()>>,
+    /// The async stream system task.
+    stream_task: JoinHandle<Result<()>>,
+    /// The async stream creation channel.
+    // TODO: use a trait object here, so we can use sockets too.
+    stream_sender: AsyncUnboundedSender<InProcessStream>,
 }
 
 /// Post-authentication
@@ -57,11 +62,12 @@ impl NetworkThreadState for NetworkThreadClientState {
             .and_then(|s| s.rpc_disconnector.take());
         if let Some(disconnector) = disconnector {
             if let Err(e) = disconnector.await {
-                error!("Error on client RPC shutdown: {e}");
+                error!("Error on client RPC disconnect: {e}");
             }
         }
         if let Some(s) = this.borrow_mut().connecting_state() {
             s.rpc_task.abort();
+            s.stream_task.abort();
         }
     }
 }
@@ -113,12 +119,12 @@ impl NetworkThreadClientState {
     }
 
     /// Initiates a new local connection on the given pipe.
-    pub async fn connect_locally(this: &Rc<RefCell<Self>>, pipe: LocalConnectionPipe) -> Result<()> {
+    pub async fn connect_locally(this: &Rc<RefCell<Self>>, (address, pipe): LocalConnectionPipe) -> Result<()> {
         if let Some(existing_connection) = this.borrow().peer_address() {
             return Err(anyhow!("Already connected to {existing_connection:?}"));
         }
 
-        let (rpc_system, connection) = create_local_rpc_client(pipe);
+        let (rpc_system, connection) = create_local_rpc_client(address, pipe.rpc_pipe);
         let rpc_disconnector = rpc_system.get_disconnector();
         let rpc_task: JoinHandle<Result<()>> =
             spawn_local(async move { rpc_system.await.map_err(anyhow::Error::from) });
@@ -156,16 +162,32 @@ impl NetworkThreadClientState {
             connection.server_addr
         );
 
+        let stream_task: JoinHandle<Result<()>> =
+            spawn_local(Self::local_stream_acceptor(Rc::clone(this), pipe.incoming_streams));
+
         *this.borrow_mut() = Self::Authenticated(NetworkThreadClientAuthenticatedState {
             connection: NetworkThreadClientConnectingState {
                 server_address: connection.server_addr,
                 server_rpc: connection,
                 rpc_disconnector: Some(rpc_disconnector),
                 rpc_task,
+                stream_task,
+                stream_sender: pipe.outgoing_streams,
             },
             server_auth_rpc,
         });
 
+        Ok(())
+    }
+
+    async fn local_stream_acceptor(
+        this: Rc<RefCell<Self>>,
+        mut incoming_streams: AsyncUnboundedReceiver<InProcessStream>,
+    ) -> Result<()> {
+        while let Some(stream) = incoming_streams.recv().await {
+            // handle here
+            drop(stream);
+        }
         Ok(())
     }
 }
@@ -220,7 +242,10 @@ impl ocg_schemas::schemas::network_capnp::authenticated_client_connection::Serve
 }
 
 /// Create a Future that will handle in-memory messages coming from a [`Server2ClientEndpoint`] and any child RPC objects on the given `server`&`id`.
-pub fn create_local_rpc_client((id, pipe): LocalConnectionPipe) -> (RpcSystem<Side>, Client2ServerConnection) {
+pub fn create_local_rpc_client(
+    id: PeerAddress,
+    pipe: tokio::io::DuplexStream,
+) -> (RpcSystem<Side>, Client2ServerConnection) {
     let (read, write) = pipe.compat().split();
     let network = VatNetwork::new(read, write, Side::Client, RPC_LOCAL_READER_OPTIONS);
     let mut rpc_system = RpcSystem::new(Box::new(network), None);

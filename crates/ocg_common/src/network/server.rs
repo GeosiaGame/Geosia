@@ -14,17 +14,15 @@ use ocg_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
 };
 use ocg_schemas::schemas::{network_capnp as rpc, SchemaUuidExt};
-use tokio::io::{duplex, DuplexStream};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use crate::network::thread::NetworkThreadState;
-use crate::network::transport::create_local_rpc_server;
+use crate::network::transport::{create_local_rpc_server, InProcessDuplex, InProcessStream};
 use crate::network::PeerAddress;
 use crate::prelude::*;
 use crate::{
-    GameServer, GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH,
-    GAME_VERSION_PRERELEASE, INPROCESS_SOCKET_BUFFER_SIZE,
+    GameServer, GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE,
 };
 
 /// The network thread game server state, accessible from network functions.
@@ -36,7 +34,9 @@ pub struct NetworkThreadServerState {
 }
 
 struct NetListener {
-    task: JoinHandle<Result<()>>,
+    rpc_task: JoinHandle<Result<()>>,
+    stream_task: JoinHandle<Result<()>>,
+    stream_sender: AsyncUnboundedSender<InProcessStream>,
 }
 
 impl NetworkThreadState for NetworkThreadServerState {
@@ -46,7 +46,7 @@ impl NetworkThreadState for NetworkThreadServerState {
 }
 
 /// The type to connect two local network runtimes together via an in-memory virtual "connection".
-pub type LocalConnectionPipe = (PeerAddress, DuplexStream);
+pub type LocalConnectionPipe = (PeerAddress, InProcessDuplex);
 
 impl NetworkThreadServerState {
     /// Constructs the server state without starting any listeners.
@@ -70,12 +70,21 @@ impl NetworkThreadServerState {
         this.free_local_id += 1;
         let peer = PeerAddress::Local(id);
 
-        let (spipe, cpipe) = duplex(INPROCESS_SOCKET_BUFFER_SIZE);
-        let rpc_server = create_local_rpc_server(this_ptr.clone(), Arc::clone(&engine), spipe, peer);
-        let listener = Self::local_listener_task(peer, engine, rpc_server);
+        let (spipe, cpipe) = InProcessDuplex::new_pair();
+        let rpc_server = create_local_rpc_server(this_ptr.clone(), Arc::clone(&engine), spipe.rpc_pipe, peer);
+        let rpc_listener = Self::local_listener_task(peer, engine, rpc_server);
+        let stream_listener = Self::local_stream_task(peer, spipe.incoming_streams);
 
-        let task = tokio::task::spawn_local(listener);
-        this.listeners.insert(peer, NetListener { task });
+        let rpc_task = tokio::task::spawn_local(rpc_listener);
+        let stream_task = tokio::task::spawn_local(stream_listener);
+        this.listeners.insert(
+            peer,
+            NetListener {
+                rpc_task,
+                stream_task,
+                stream_sender: spipe.outgoing_streams,
+            },
+        );
 
         info!("Constructed a new local connection: {peer:?}");
 
@@ -94,9 +103,13 @@ impl NetworkThreadServerState {
         for &shutdown_addr in old_set.difference(&new_set) {
             let listener = this.borrow_mut().listeners.remove(&PeerAddress::Remote(shutdown_addr));
             let Some(listener) = listener else { continue };
-            listener.task.abort();
-            if let Ok(Err(e)) = listener.task.await {
-                log::warn!("Listener for address {shutdown_addr} finished with an error {e}");
+            listener.rpc_task.abort();
+            listener.stream_task.abort();
+            if let Ok(Err(e)) = listener.rpc_task.await {
+                log::warn!("RPC listener for address {shutdown_addr} finished with an error {e}");
+            }
+            if let Ok(Err(e)) = listener.stream_task.await {
+                log::warn!("Stream listener for address {shutdown_addr} finished with an error {e}");
             }
         }
         for &_setup_addr in new_set.difference(&old_set) {
@@ -118,6 +131,17 @@ impl NetworkThreadServerState {
         let _s_disconnector = rpc_server.get_disconnector();
         log::debug!("Starting the local listener for {addr:?}");
         rpc_server.await?;
+        Ok(())
+    }
+
+    async fn local_stream_task(
+        _addr: PeerAddress,
+        mut incoming_streams: AsyncUnboundedReceiver<InProcessStream>,
+    ) -> Result<()> {
+        while let Some(stream) = incoming_streams.recv().await {
+            // Currently we have no client->server streams to handle.
+            drop(stream);
+        }
         Ok(())
     }
 }

@@ -59,9 +59,6 @@ pub const MICROSECONDS_PER_TICK: i64 = 1_000_000i64 / TICKS_PER_SECOND as i64;
 /// One game tick as a [`Duration`]
 pub const TICK: Duration = Duration::from_micros(MICROSECONDS_PER_TICK as u64);
 
-/// Size in bytes of the internal client-server "socket" buffer.
-const INPROCESS_SOCKET_BUFFER_SIZE: usize = 1024 * 1024;
-
 // Ensure `MICROSECONDS_PER_TICK` is perfectly accurate.
 static_assertions::const_assert_eq!(1_000_000i64 / MICROSECONDS_PER_TICK, TICKS_PER_SECOND as i64);
 

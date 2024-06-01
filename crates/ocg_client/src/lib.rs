@@ -80,12 +80,10 @@ pub fn client_main() {
     let bootstrap_data = net_thread
         .exec_async_await(|state| {
             Box::pin(async move {
-                NetworkThreadClientState::connect_locally(
-                    state,
-                    server_pipe.await.context("integ_server.create_local_connection")?,
-                )
-                .await
-                .context("NetworkThreadClientState::connect_locally")?;
+                let local_conn = server_pipe.await.context("integ_server.create_local_connection")?;
+                NetworkThreadClientState::connect_locally(state, local_conn)
+                    .await
+                    .context("NetworkThreadClientState::connect_locally")?;
                 let bootstrap_request = state
                     .borrow()
                     .server_auth_rpc()

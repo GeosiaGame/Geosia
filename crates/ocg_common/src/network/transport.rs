@@ -4,7 +4,8 @@ use capnp::message::ReaderOptions;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::VatNetwork;
 use capnp_rpc::RpcSystem;
-use ocg_schemas::schemas::network_capnp as rpc;
+use ocg_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader};
+use tokio_util::bytes::Bytes;
 
 use crate::network::server::{NetworkThreadServerState, Server2ClientEndpoint};
 use crate::network::PeerAddress;
@@ -16,6 +17,50 @@ pub static RPC_LOCAL_READER_OPTIONS: ReaderOptions = ReaderOptions {
     traversal_limit_in_words: Some(1024 * 1024 * 1024),
     nesting_limit: 128,
 };
+
+/// Size in bytes of the in-process client-server "socket" buffer.
+const INPROCESS_SOCKET_BUFFER_SIZE: usize = 1024 * 1024;
+
+/// An in-process stream, modelling QUIC streams when using in-process communication.
+pub struct InProcessStream {
+    /// The stream header, determining its type.
+    pub header: NetworkStreamHeader,
+    /// The sender "socket" for this stream side.
+    pub tx: AsyncUnboundedSender<Bytes>,
+    /// The receiver "socket" for this stream side.
+    pub rx: AsyncUnboundedReceiver<Bytes>,
+}
+
+/// The bidirectional in-process "socket" used for client-integrated server communication
+pub struct InProcessDuplex {
+    /// The main RPC pipe for hosting the Cap'n proto RPC interfaces (corresponding to the initial QUIC stream)
+    pub rpc_pipe: tokio::io::DuplexStream,
+    /// Stream for accepting new in-process streams.
+    pub incoming_streams: AsyncUnboundedReceiver<InProcessStream>,
+    /// Stream for sending new in-process streams to the other side.
+    pub outgoing_streams: AsyncUnboundedSender<InProcessStream>,
+}
+
+impl InProcessDuplex {
+    /// Makes a new pair of connected in-process "sockets".
+    pub fn new_pair() -> (Self, Self) {
+        let (duplex1, duplex2) = tokio::io::duplex(INPROCESS_SOCKET_BUFFER_SIZE);
+        let (streams12_tx, streams12_rx) = async_unbounded_channel();
+        let (streams21_tx, streams21_rx) = async_unbounded_channel();
+        (
+            Self {
+                rpc_pipe: duplex1,
+                incoming_streams: streams21_rx,
+                outgoing_streams: streams12_tx,
+            },
+            Self {
+                rpc_pipe: duplex2,
+                incoming_streams: streams12_rx,
+                outgoing_streams: streams21_tx,
+            },
+        )
+    }
+}
 
 /// Create a Future that will handle in-memory messages coming into a [`Server2ClientEndpoint`] and any child RPC objects on the given `server`&`id`.
 pub fn create_local_rpc_server(
