@@ -23,7 +23,8 @@ use bevy::time::TimePlugin;
 use bevy::utils::smallvec::SmallVec;
 use bevy::utils::synccell::SyncCell;
 use capnp::message::TypedBuilder;
-use ocg_schemas::coordinates::{AbsChunkPos, InChunkRange};
+use ocg_schemas::coordinates::{AbsChunkPos, InChunkPos, InChunkRange};
+use ocg_schemas::dependencies::itertools::iproduct;
 use ocg_schemas::registries::GameRegistries;
 use ocg_schemas::registry::Registry;
 use ocg_schemas::schemas::network_capnp::stream_header::StandardTypes;
@@ -31,6 +32,7 @@ use ocg_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader};
 use ocg_schemas::voxel::chunk_storage::ChunkStorage;
 use ocg_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use ocg_schemas::{GameSide, OcgExtraData};
+use rand::{Rng, SeedableRng};
 use tokio_util::bytes::Bytes;
 
 use crate::config::{GameConfig, GameConfigHandle};
@@ -39,7 +41,7 @@ use crate::network::thread::{NetworkThread, NetworkThreadCommandError};
 use crate::network::transport::InProcessStream;
 use crate::network::PeerAddress;
 use crate::prelude::*;
-use crate::voxel::blocks::DIRT_BLOCK_NAME;
+use crate::voxel::blocks::{DIRT_BLOCK_NAME, GRASS_BLOCK_NAME};
 use crate::voxel::persistence::empty::EmptyPersistenceLayer;
 use crate::voxel::persistence::memory::MemoryPersistenceLayer;
 use crate::voxel::persistence::ChunkPersistenceLayer;
@@ -281,6 +283,13 @@ impl GameServer {
             .lookup_name_to_object(DIRT_BLOCK_NAME.as_ref())
             .unwrap()
             .0;
+        let grass = engine
+            .server_data
+            .shared_registries
+            .block_types
+            .lookup_name_to_object(GRASS_BLOCK_NAME.as_ref())
+            .unwrap()
+            .0;
         let null_world = EmptyPersistenceLayer::new(BlockEntry::new(air, 0), ());
         let mut persistence = MemoryPersistenceLayer::new(Box::new(null_world));
         persistence.request_load(&[AbsChunkPos::ZERO]);
@@ -292,6 +301,21 @@ impl GameServer {
             .unwrap()
             .1;
         chunk0.blocks.fill(InChunkRange::WHOLE_CHUNK, BlockEntry::new(dirt, 0));
+        chunk0.blocks.fill(
+            InChunkRange::from_corners(
+                InChunkPos::try_new(0, 30, 0).unwrap(),
+                InChunkPos::try_new(31, 31, 31).unwrap(),
+            ),
+            BlockEntry::new(grass, 0),
+        );
+        let mut rng = rand_xoshiro::Xoshiro256StarStar::from_entropy();
+        for (x, y) in iproduct!(0..32, 0..32) {
+            if rng.gen_bool(0.67) {
+                chunk0
+                    .blocks
+                    .put(InChunkPos::try_new(x, 29, y).unwrap(), BlockEntry::new(grass, 0));
+            }
+        }
         persistence.request_save(Box::new([(AbsChunkPos::ZERO, chunk0)]));
 
         // TODO: fix cloning here
