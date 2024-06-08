@@ -31,6 +31,27 @@ pub struct InProcessStream {
     pub rx: AsyncUnboundedReceiver<Bytes>,
 }
 
+impl InProcessStream {
+    /// Constructs a new, pre-connected bidirectional stream for in-process communication.
+    pub fn new_pair(header: NetworkStreamHeader) -> (Self, Self) {
+        let (tx12, rx12) = async_unbounded_channel();
+        let (tx21, rx21) = async_unbounded_channel();
+        let header2 = header.clone();
+        (
+            Self {
+                header,
+                tx: tx12,
+                rx: rx21,
+            },
+            Self {
+                header: header2,
+                tx: tx21,
+                rx: rx12,
+            },
+        )
+    }
+}
+
 /// The bidirectional in-process "socket" used for client-integrated server communication
 pub struct InProcessDuplex {
     /// The main RPC pipe for hosting the Cap'n proto RPC interfaces (corresponding to the initial QUIC stream)

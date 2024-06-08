@@ -24,6 +24,7 @@ quinn.workspace = true
 thiserror.workspace = true
 tokio-util.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 voronoice.workspace = true
 
 [dependencies.bevy]

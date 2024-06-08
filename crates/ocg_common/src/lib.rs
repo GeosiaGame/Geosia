@@ -16,21 +16,34 @@ pub mod voxel;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use bevy::app::AppExit;
+use bevy::app::{AppExit, ScheduleRunnerPlugin};
 use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::prelude::*;
 use bevy::time::TimePlugin;
 use bevy::utils::smallvec::SmallVec;
 use bevy::utils::synccell::SyncCell;
+use capnp::message::TypedBuilder;
+use ocg_schemas::coordinates::{AbsChunkPos, InChunkRange};
 use ocg_schemas::registries::GameRegistries;
 use ocg_schemas::registry::Registry;
+use ocg_schemas::schemas::network_capnp::stream_header::StandardTypes;
+use ocg_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader};
+use ocg_schemas::voxel::chunk_storage::ChunkStorage;
+use ocg_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use ocg_schemas::{GameSide, OcgExtraData};
+use tokio_util::bytes::Bytes;
 
 use crate::config::{GameConfig, GameConfigHandle};
-use crate::network::server::{LocalConnectionPipe, NetworkThreadServerState};
+use crate::network::server::{ConnectedPlayer, LocalConnectionPipe, NetworkServerPlugin, NetworkThreadServerState};
 use crate::network::thread::{NetworkThread, NetworkThreadCommandError};
+use crate::network::transport::InProcessStream;
 use crate::network::PeerAddress;
 use crate::prelude::*;
+use crate::voxel::blocks::DIRT_BLOCK_NAME;
+use crate::voxel::persistence::empty::EmptyPersistenceLayer;
+use crate::voxel::persistence::memory::MemoryPersistenceLayer;
+use crate::voxel::persistence::ChunkPersistenceLayer;
+use crate::voxel::plugin::{VoxelUniverse, VoxelUniversePlugin};
 
 // TODO: Populate these from build/git info
 /// The major SemVer field of the current build's version
@@ -72,6 +85,10 @@ pub struct ServerData {
 impl OcgExtraData for ServerData {
     type ChunkData = ();
     type GroupData = ();
+
+    fn side() -> GameSide {
+        GameSide::Server
+    }
 }
 
 /// A command that can be remotely executed on the bevy world.
@@ -244,13 +261,55 @@ impl GameServer {
             .add_plugins(HierarchyPlugin)
             .add_plugins(DiagnosticsPlugin)
             .add_plugins(AssetPlugin::default())
-            .add_plugins(AnimationPlugin);
-        app.insert_resource(GameServerResource(engine));
+            .add_plugins(AnimationPlugin)
+            .add_plugins(ScheduleRunnerPlugin::run_loop(TICK));
+
+        app.add_plugins(VoxelUniversePlugin::<ServerData>::new())
+            .add_plugins(NetworkServerPlugin);
+
+        let air = engine
+            .server_data
+            .shared_registries
+            .block_types
+            .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
+            .unwrap()
+            .0;
+        let dirt = engine
+            .server_data
+            .shared_registries
+            .block_types
+            .lookup_name_to_object(DIRT_BLOCK_NAME.as_ref())
+            .unwrap()
+            .0;
+        let null_world = EmptyPersistenceLayer::new(BlockEntry::new(air, 0), ());
+        let mut persistence = MemoryPersistenceLayer::new(Box::new(null_world));
+        persistence.request_load(&[AbsChunkPos::ZERO]);
+        let mut chunk0 = persistence
+            .try_dequeue_responses(1)
+            .into_iter()
+            .next()
+            .unwrap()
+            .unwrap()
+            .1;
+        chunk0.blocks.fill(InChunkRange::WHOLE_CHUNK, BlockEntry::new(dirt, 0));
+        persistence.request_save(Box::new([(AbsChunkPos::ZERO, chunk0)]));
+
+        // TODO: fix cloning here
+        app.insert_resource(VoxelUniverse::<ServerData>::new(
+            Arc::new(engine.server_data.shared_registries.block_types.clone()),
+            Box::new(persistence),
+            (),
+        ));
+
         app.insert_resource(Time::<Fixed>::from_duration(TICK));
         app.insert_resource(GameServerControlCommandReceiver(SyncCell::new(ctrl_rx)));
+        app.insert_resource(GameServerResource(engine));
+
         app.add_systems(Startup, Self::network_startup_system);
-        app.add_systems(PostUpdate, Self::control_command_handler_system);
+        app.add_systems(FixedPostUpdate, Self::control_command_handler_system);
+        app.add_systems(FixedUpdate, Self::send_new_players_chunks_system);
         app.run();
+        info!("Engine thread terminating");
     }
 
     fn network_startup_system(engine: Res<GameServerResource>) {
@@ -260,6 +319,49 @@ impl GameServer {
             .network_thread
             .exec_async(move |state| Box::pin(NetworkThreadServerState::bootstrap(state, net_engine)))
             .unwrap();
+    }
+
+    // temporary testing stuff to send some chunk data to the client
+    fn send_new_players_chunks_system(
+        engine: Res<GameServerResource>,
+        voxels: Res<VoxelUniverse<ServerData>>,
+        new_players: Query<&ConnectedPlayer, Added<ConnectedPlayer>>,
+    ) {
+        let engine = &engine.into_inner().0;
+        let chunk0 = voxels.chunk_loader.try_get_loaded_chunk(AbsChunkPos::ZERO).unwrap();
+        let mut builder = TypedBuilder::<rpc::chunk_data_stream_packet::Owned>::new_default();
+        let mut root = builder.init_root();
+        let mut position = root.reborrow().init_position();
+        position.set_x(0);
+        position.set_y(0);
+        position.set_z(0);
+        chunk0.write_full(&mut root.reborrow().init_data());
+        let mut buffer = Vec::new();
+        capnp::serialize::write_message(&mut buffer, builder.borrow_inner()).unwrap();
+        let buffer = Bytes::from(buffer);
+
+        for player in new_players.into_iter() {
+            let addr = player.address;
+            let my_buffer = buffer.clone();
+            engine
+                .network_thread
+                .exec_async(move |rstate| {
+                    Box::pin(async move {
+                        let state = rstate.borrow();
+                        let Some(peer) = state.find_connected_client(addr) else {
+                            return;
+                        };
+                        let chunk_stream = peer
+                            .open_stream(NetworkStreamHeader::Standard(StandardTypes::ChunkData))
+                            .unwrap();
+                        let InProcessStream { tx, .. } = chunk_stream;
+                        info!("Sending {n} bytes of chunk data to {addr:?}", n = my_buffer.len());
+                        tx.send(my_buffer).unwrap();
+                        drop(tx);
+                    })
+                })
+                .unwrap();
+        }
     }
 
     fn control_command_handler_system(world: &mut World) {
@@ -287,7 +389,7 @@ impl GameServer {
 /// Simple hardcoded registries of some game objects.
 pub fn builtin_game_registries() -> GameRegistries {
     let mut block_types = Registry::default();
-    crate::voxel::blocks::setup_basic_blocks(&mut block_types);
+    voxel::blocks::setup_basic_blocks(&mut block_types);
 
     GameRegistries { block_types }
 }

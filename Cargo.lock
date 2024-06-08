@@ -3621,6 +3621,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-util",
+ "tracing",
  "voronoice",
 ]
 
@@ -3651,6 +3652,7 @@ dependencies = [
  "thread_local",
  "tokio",
  "tokio-util",
+ "tracing",
  "uuid",
  "voronoice",
 ]

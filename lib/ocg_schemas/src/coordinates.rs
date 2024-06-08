@@ -1,5 +1,6 @@
 //! A collection of strongly typed newtype wrappers for the various coordinate formats within the game's world and related constants.
 
+use std::fmt::{Display, Formatter};
 use std::ops::{Add, Deref};
 
 use bevy_math::IVec3;
@@ -409,9 +410,21 @@ impl From<AbsBlockPos> for AbsChunkPos {
     }
 }
 
+impl Display for AbsChunkPos {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Chunk(x={}, y={}, z={})", self.x, self.y, self.z)
+    }
+}
+
 // === RelChunkPos
 impl_simple_ivec3_newtype!(RelChunkPos);
 impl_rel_abs_pair!(RelChunkPos, AbsChunkPos);
+
+impl Display for RelChunkPos {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Chunk Difference(x={}, y={}, z={})", self.x, self.y, self.z)
+    }
+}
 
 // === AbsBlockPos
 impl_simple_ivec3_newtype!(AbsBlockPos);
@@ -440,6 +453,12 @@ impl AbsBlockPos {
     }
 }
 
+impl Display for AbsBlockPos {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Block(x={}, y={}, z={})", self.x, self.y, self.z)
+    }
+}
+
 // === RelBlockPos
 impl_simple_ivec3_newtype!(RelBlockPos);
 impl_rel_abs_pair!(RelBlockPos, AbsBlockPos);
@@ -447,5 +466,11 @@ impl_rel_abs_pair!(RelBlockPos, AbsBlockPos);
 impl From<RelChunkPos> for RelBlockPos {
     fn from(value: RelChunkPos) -> Self {
         Self(value.0 * IVec3::splat(CHUNK_DIM))
+    }
+}
+
+impl Display for RelBlockPos {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Block Difference(x={}, y={}, z={})", self.x, self.y, self.z)
     }
 }

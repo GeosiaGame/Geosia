@@ -22,11 +22,14 @@ pub mod voxel;
 
 /// A trait implemented by the game server and client, specifying the concrete types to attach as extra metadata for every chunk, chunk group, entity, etc.
 /// Used to inject side-specific data into common data structures.
-pub trait OcgExtraData {
+pub trait OcgExtraData: Send + Sync + 'static {
     /// Per-chunk data
-    type ChunkData: Clone;
+    type ChunkData: Clone + Send + Sync + 'static;
     /// Per-chunk group data
-    type GroupData: Clone;
+    type GroupData: Clone + Send + Sync + 'static;
+
+    /// The associated game side.
+    fn side() -> GameSide;
 }
 
 /// The side of a network connection a game instance resides on (server or client).

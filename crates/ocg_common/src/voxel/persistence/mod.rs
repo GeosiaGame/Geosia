@@ -27,7 +27,7 @@ pub struct ChunkPersistenceLayerStats {
 /// A provider for chunk data for chunks not present in memory that need to be created/loaded, and a sink for the same data when the chunks are unloaded.
 /// Examples include a disk persistence layer, a world generator and a network protocol wrapper.
 /// Asynchronous to provide support for disk IO and networking.
-pub trait ChunkPersistenceLayer<ExtraData: OcgExtraData> {
+pub trait ChunkPersistenceLayer<ExtraData: OcgExtraData>: Send + Sync + 'static {
     /// Reliably requests the given coordinates to be loaded. The request should not be forgotten, each chunk coordinate in the request should generate a corresponding response.
     /// Duplicated coordinates or coordinates requested again before a response has been received since the last request for the same coordinate may receive only one response.
     fn request_load(&mut self, coordinates: &[AbsChunkPos]);
@@ -47,7 +47,7 @@ pub trait ChunkPersistenceLayer<ExtraData: OcgExtraData> {
 /// Composed of the [`ChunkGroup`] it manages, and the [`ChunkPersistenceLayer`] instance used for load/save operations.
 pub struct ChunkLoader<ExtraData: OcgExtraData> {
     /// The managed group of chunks, kept private to ensure the loader state can be kept internally consistent.
-    _managed_group: ChunkGroup<ExtraData>,
+    managed_group: ChunkGroup<ExtraData>,
     /// Reference to the persistence layer used for loading/saving chunks in the managed group.
     persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>,
     _live_loads: HashSet<AbsChunkPos>,
@@ -56,15 +56,33 @@ pub struct ChunkLoader<ExtraData: OcgExtraData> {
 impl<ExtraData: OcgExtraData> ChunkLoader<ExtraData> {
     /// Constructs a new loader with no chunks loaded.
     pub fn new(persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>, group_data: ExtraData::GroupData) -> Self {
-        Self {
-            _managed_group: ChunkGroup::with_data(group_data),
+        let mut loader = Self {
+            managed_group: ChunkGroup::with_data(group_data),
             persistence_layer,
             _live_loads: HashSet::with_capacity(8 * 8 * 8),
-        }
+        };
+
+        // TODO: temporary test code
+        loader.persistence_layer.request_load(&[AbsChunkPos::ZERO]);
+        let (cpos, chunk) = loader
+            .persistence_layer
+            .try_dequeue_responses(1)
+            .into_iter()
+            .next()
+            .unwrap()
+            .unwrap();
+        loader.managed_group.chunks.insert(cpos, chunk);
+
+        loader
     }
 
     /// Gets the [`ChunkPersistenceLayerStats`] statistics from the persistence layer.
     pub fn persistence_stats(&self) -> ChunkPersistenceLayerStats {
         self.persistence_layer.stats()
+    }
+
+    /// Look up a single loaded chunk, returns None if the chunk is not already loaded.
+    pub fn try_get_loaded_chunk(&self, pos: AbsChunkPos) -> Option<&Chunk<ExtraData>> {
+        self.managed_group.chunks.get(&pos)
     }
 }

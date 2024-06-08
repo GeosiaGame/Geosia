@@ -33,11 +33,15 @@ use bevy::winit::WinitPlugin;
 use ocg_common::config::{GameConfig, ServerConfig};
 use ocg_common::network::thread::NetworkThread;
 use ocg_common::prelude::*;
+use ocg_common::voxel::persistence::empty::EmptyPersistenceLayer;
+use ocg_common::voxel::persistence::memory::MemoryPersistenceLayer;
+use ocg_common::voxel::plugin::{VoxelUniverse, VoxelUniversePlugin};
 use ocg_common::{builtin_game_registries, GameBevyCommand, GameServer};
 use ocg_schemas::dependencies::smallvec::SmallVec;
 use ocg_schemas::dependencies::uuid::Uuid;
 use ocg_schemas::registries::GameRegistries;
 use ocg_schemas::schemas::SchemaUuidExt;
+use ocg_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use ocg_schemas::{GameSide, OcgExtraData};
 
 use crate::network::NetworkThreadClientState;
@@ -51,7 +55,11 @@ pub struct ClientData {
 
 impl OcgExtraData for ClientData {
     type ChunkData = voxel::ClientChunkData;
-    type GroupData = ();
+    type GroupData = voxel::ClientChunkGroupData;
+
+    fn side() -> GameSide {
+        GameSide::Client
+    }
 }
 
 /// Channel for executing commands on the client bevy App.
@@ -129,8 +137,6 @@ pub fn client_main() {
         })
         .expect("Could not send message");
 
-    // let integ_conn = integ_server
-
     let mut app = App::new();
     // Bevy Base
     app.add_plugins(TaskPoolPlugin::default())
@@ -165,8 +171,26 @@ pub fn client_main() {
         .add_plugins(AudioPlugin::default())
         .add_plugins(GilrsPlugin)
         .add_plugins(AnimationPlugin)
-        .add_plugins(GltfPlugin::default())
-        .add_plugins(debugcam::PlayerPlugin);
+        .add_plugins(GltfPlugin::default());
+
+    app.add_plugins(debugcam::PlayerPlugin)
+        .add_plugins(VoxelUniversePlugin::<ClientData>::new());
+
+    let air = client_data
+        .shared_registries
+        .block_types
+        .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
+        .unwrap()
+        .0;
+    let null_world = EmptyPersistenceLayer::new(BlockEntry::new(air, 0), voxel::ClientChunkData::default());
+    let persistence = MemoryPersistenceLayer::new(Box::new(null_world));
+
+    // TODO: fix cloning here
+    app.insert_resource(VoxelUniverse::<ClientData>::new(
+        Arc::new(client_data.shared_registries.block_types.clone()),
+        Box::new(persistence),
+        voxel::ClientChunkGroupData::default(),
+    ));
 
     app.insert_resource(client_data);
     app.insert_resource(GameClientControlCommandReceiver(SyncCell::new(control_rx)));
@@ -198,15 +222,9 @@ mod debug_window {
     use ocg_common::voxel::biomes::setup_basic_biomes;
     use ocg_common::voxel::generator::StdGenerator;
     use ocg_common::voxel::generator::WORLD_SIZE_XZ;
-    use ocg_common::voxel::generator::WORLD_SIZE_Y;
-    use ocg_schemas::coordinates::AbsChunkPos;
-    use ocg_schemas::dependencies::itertools::iproduct;
     use ocg_schemas::voxel::biome::BiomeRegistry;
-    use ocg_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 
-    use crate::voxel::meshgen::mesh_from_chunk;
-    use crate::voxel::{ClientChunk, ClientChunkGroup};
-    use crate::{voronoi_renderer, ClientData};
+    use crate::voronoi_renderer;
 
     pub struct DebugWindow;
 
@@ -216,23 +234,9 @@ mod debug_window {
         }
     }
 
-    fn debug_window_setup(
-        mut commands: Commands,
-        asset_server: Res<AssetServer>,
-        mut images: ResMut<Assets<Image>>,
-        mut meshes: ResMut<Assets<Mesh>>,
-        mut materials: ResMut<Assets<StandardMaterial>>,
-        client_data: Res<ClientData>,
-    ) {
+    fn debug_window_setup(mut commands: Commands, asset_server: Res<AssetServer>, mut images: ResMut<Assets<Image>>) {
         log::warn!("Setting up debug window");
         let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
-
-        let white_material = materials.add(StandardMaterial {
-            base_color: Color::GRAY,
-            ..default()
-        });
-        let block_reg = &client_data.shared_registries.block_types;
-        let (empty, _) = block_reg.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
 
         let mut biome_reg = BiomeRegistry::default();
         setup_basic_biomes(&mut biome_reg);
@@ -250,31 +254,6 @@ mod debug_window {
 
         let start = Instant::now();
 
-        let mut test_chunks = ClientChunkGroup::new();
-        for (cx, cy, cz) in iproduct!(
-            -WORLD_SIZE_XZ..=WORLD_SIZE_XZ,
-            -WORLD_SIZE_Y..=WORLD_SIZE_Y,
-            -WORLD_SIZE_XZ..=WORLD_SIZE_XZ
-        ) {
-            let cpos = AbsChunkPos::new(cx, cy, cz);
-            let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
-            generator.generate_chunk(cpos, &mut chunk.blocks, block_reg, &biome_reg);
-            test_chunks.chunks.insert(cpos, chunk);
-        }
-        for (pos, _) in test_chunks.chunks.iter() {
-            let chunks = &test_chunks.get_neighborhood_around(*pos).transpose_option();
-            if let Some(chunks) = chunks {
-                let chunk_mesh = mesh_from_chunk(block_reg, chunks).unwrap();
-
-                commands.spawn(PbrBundle {
-                    mesh: meshes.add(chunk_mesh),
-                    material: white_material.clone(),
-                    transform: Transform::from_xyz(0.0, 0.0, 0.0),
-                    ..default()
-                });
-            }
-        }
-
         let duration = start.elapsed();
         println!("chunk generation took {:?}", duration);
 
@@ -284,7 +263,7 @@ mod debug_window {
                 illuminance: 1000.0,
                 ..default()
             },
-            transform: Transform::from_xyz(0., 1000., 0.).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
+            transform: Transform::from_xyz(0., 1000., 0.).looking_at(Vec3::new(300.0, 0.0, 300.0), Vec3::Y),
             ..default()
         });
 

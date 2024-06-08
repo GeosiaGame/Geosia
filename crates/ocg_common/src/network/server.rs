@@ -1,10 +1,10 @@
 //! The network server protocol implementation, hosting a game for zero or more clients.
 
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 
 use bevy::log;
-use bevy::log::info;
-use bevy::prelude::Deref;
+use bevy::prelude::*;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::{pry, RpcSystem};
 use ocg_schemas::dependencies::capnp::capability::Promise;
@@ -13,8 +13,9 @@ use ocg_schemas::dependencies::kstring::KString;
 use ocg_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
 };
-use ocg_schemas::schemas::{network_capnp as rpc, SchemaUuidExt};
+use ocg_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader, SchemaUuidExt};
 use tokio::task::JoinHandle;
+use tracing::Instrument;
 use uuid::Uuid;
 
 use crate::network::thread::NetworkThreadState;
@@ -28,15 +29,52 @@ use crate::{
 /// The network thread game server state, accessible from network functions.
 #[derive(Default)]
 pub struct NetworkThreadServerState {
-    listeners: HashMap<PeerAddress, NetListener>,
     free_local_id: i32,
+    connected_clients: HashMap<PeerAddress, ConnectedNetClient>,
     bootstrapped_clients: HashMap<PeerAddress, Rc<RefCell<AuthenticatedServer2ClientEndpoint>>>,
 }
 
-struct NetListener {
+/// Network thread data for a live connected client.
+pub struct ConnectedNetClient {
     rpc_task: JoinHandle<Result<()>>,
     stream_task: JoinHandle<Result<()>>,
     stream_sender: AsyncUnboundedSender<InProcessStream>,
+}
+
+impl ConnectedNetClient {
+    /// Opens a fresh stream for sending data asynchronously to the main RPC channel.
+    pub fn open_stream(&self, header: NetworkStreamHeader) -> Result<InProcessStream> {
+        let (local, remote) = InProcessStream::new_pair(header);
+        self.stream_sender.send(remote)?;
+        Ok(local)
+    }
+}
+
+/// A reference to a connected and bootstrapped player in the ECS.
+#[derive(Component)]
+pub struct ConnectedPlayer {
+    /// The visible player nickname.
+    pub nickname: KString,
+    /// The network address the player is connected from.
+    pub address: PeerAddress,
+}
+
+/// A table entity keeping lookup information for all connected players.
+#[derive(Component, Default)]
+pub struct ConnectedPlayersTable {
+    /// Nickname-indexed players.
+    pub players_by_nickname: BTreeMap<KString, Entity>,
+    /// Address-indexed players.
+    pub players_by_address: BTreeMap<PeerAddress, Entity>,
+}
+
+/// A Bevy plugin registering the server-related entities.
+pub struct NetworkServerPlugin;
+
+impl Plugin for NetworkServerPlugin {
+    fn build(&self, app: &mut App) {
+        app.world.spawn(ConnectedPlayersTable::default());
+    }
 }
 
 impl NetworkThreadState for NetworkThreadServerState {
@@ -52,6 +90,19 @@ impl NetworkThreadServerState {
     /// Constructs the server state without starting any listeners.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Finds a connected client by address.
+    pub fn find_connected_client(&self, address: PeerAddress) -> Option<&ConnectedNetClient> {
+        self.connected_clients.get(&address)
+    }
+
+    /// Finds a bootstrapped client by address.
+    pub fn find_bootstrapped_client(
+        &self,
+        address: PeerAddress,
+    ) -> Option<&Rc<RefCell<AuthenticatedServer2ClientEndpoint>>> {
+        self.bootstrapped_clients.get(&address)
     }
 
     /// Begins listening on the configured endpoints, and starts looking for configuration changes.
@@ -72,14 +123,16 @@ impl NetworkThreadServerState {
 
         let (spipe, cpipe) = InProcessDuplex::new_pair();
         let rpc_server = create_local_rpc_server(this_ptr.clone(), Arc::clone(&engine), spipe.rpc_pipe, peer);
-        let rpc_listener = Self::local_listener_task(peer, engine, rpc_server);
-        let stream_listener = Self::local_stream_task(peer, spipe.incoming_streams);
+        let rpc_listener = Self::local_listener_task(peer, engine, rpc_server)
+            .instrument(tracing::info_span!("server-rpc", address = ?peer));
+        let stream_listener = Self::local_stream_task(peer, spipe.incoming_streams)
+            .instrument(tracing::info_span!("server-stream", address = ?peer));
 
         let rpc_task = tokio::task::spawn_local(rpc_listener);
         let stream_task = tokio::task::spawn_local(stream_listener);
-        this.listeners.insert(
+        this.connected_clients.insert(
             peer,
-            NetListener {
+            ConnectedNetClient {
                 rpc_task,
                 stream_task,
                 stream_sender: spipe.outgoing_streams,
@@ -91,17 +144,45 @@ impl NetworkThreadServerState {
         (peer, cpipe)
     }
 
-    async fn update_listeners(this: &Rc<RefCell<Self>>, _engine: &Arc<GameServer>, new_listeners: &[SocketAddr]) {
+    async fn update_listeners(this: &Rc<RefCell<Self>>, engine: &Arc<GameServer>, new_listeners: &[SocketAddr]) {
         let new_set: HashSet<SocketAddr> = HashSet::from_iter(new_listeners.iter().copied());
         let old_set: HashSet<SocketAddr> = HashSet::from_iter(
             this.borrow()
-                .listeners
+                .connected_clients
                 .keys()
                 .copied()
                 .filter_map(PeerAddress::remote_addr),
         );
         for &shutdown_addr in old_set.difference(&new_set) {
-            let listener = this.borrow_mut().listeners.remove(&PeerAddress::Remote(shutdown_addr));
+            let addr = PeerAddress::Remote(shutdown_addr);
+
+            // remove from the bevy world
+            engine.remote_bevy_invoke(move |world| {
+                let mut table = world.query::<(Entity, &ConnectedPlayersTable)>();
+                let table = table.get_single(world);
+                match table {
+                    Ok((etable, table)) => {
+                        let (pent, nick) = {
+                            let pent = table.players_by_address.get(&addr);
+                            let Some(&pent) = pent else { return };
+                            let Some(player) = world.get::<ConnectedPlayer>(pent) else {
+                                return;
+                            };
+                            (pent, player.nickname.clone())
+                        };
+                        world.despawn(pent);
+                        // we have to re-borrow here
+                        let mut table = world.get_mut::<ConnectedPlayersTable>(etable).unwrap();
+                        table.players_by_address.remove(&addr);
+                        table.players_by_nickname.remove(&nick);
+                    }
+                    Err(e) => {
+                        warn!("Could not remove player connection {addr:?}: {e}");
+                    }
+                }
+            });
+
+            let listener = this.borrow_mut().connected_clients.remove(&addr);
             let Some(listener) = listener else { continue };
             listener.rpc_task.abort();
             listener.stream_task.abort();
@@ -151,6 +232,7 @@ pub struct Server2ClientEndpoint {
     net_state: Rc<RefCell<NetworkThreadServerState>>,
     server: Arc<GameServer>,
     peer: PeerAddress,
+    auth_attempted: bool,
 }
 
 /// An authenticated RPC client<->server connection handler on the server side.
@@ -173,6 +255,7 @@ impl Server2ClientEndpoint {
             net_state,
             server,
             peer,
+            auth_attempted: false,
         }
     }
 
@@ -224,6 +307,11 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
         params: rpc::game_server::AuthenticateParams,
         mut results: rpc::game_server::AuthenticateResults,
     ) -> Promise<(), Error> {
+        if self.auth_attempted {
+            return Promise::err(Error::failed("Authentication was already attempted once".to_owned()));
+        }
+        self.auth_attempted = true;
+
         let params = pry!(params.get());
         let username = KString::from_ref(pry!(pry!(params.get_username()).to_str()));
         let connection = pry!(params.get_connection());
@@ -234,7 +322,7 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
             _net_state: self.net_state.clone(),
             server: self.server.clone(),
             peer: self.peer,
-            username,
+            username: username.clone(),
             connection,
         }));
 
@@ -247,6 +335,25 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
             .borrow_mut()
             .bootstrapped_clients
             .insert(self.peer, client);
+
+        // add to the bevy world
+        let nickname = username.clone();
+        let address = self.peer;
+        self.server.remote_bevy_invoke(move |world| {
+            let player = world
+                .spawn(ConnectedPlayer {
+                    nickname: nickname.clone(),
+                    address,
+                })
+                .id();
+            let mut table = world.query::<&mut ConnectedPlayersTable>();
+            let Ok(mut table) = table.get_single_mut(world) else {
+                warn!("Could not add player connection {address:?} due to missing player table");
+                return;
+            };
+            table.players_by_address.insert(address, player);
+            table.players_by_nickname.insert(nickname, player);
+        });
 
         Promise::ok(())
     }

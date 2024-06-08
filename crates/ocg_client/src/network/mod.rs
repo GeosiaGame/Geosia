@@ -1,7 +1,7 @@
 //! The network client thread implementation.
 
 use bevy::log::{error, info, warn};
-use bevy::prelude::World;
+use bevy::prelude::*;
 use capnp::capability::Promise;
 use capnp::message::TypedReader;
 use capnp::Error;
@@ -13,15 +13,22 @@ use ocg_common::network::thread::NetworkThreadState;
 use ocg_common::network::transport::{InProcessStream, RPC_LOCAL_READER_OPTIONS};
 use ocg_common::network::PeerAddress;
 use ocg_common::prelude::*;
+use ocg_common::voxel::plugin::VoxelUniverse;
+use ocg_schemas::coordinates::{AbsChunkPos, RelChunkPos};
+use ocg_schemas::dependencies::itertools::iproduct;
 use ocg_schemas::schemas::network_capnp as rpc;
 use ocg_schemas::schemas::network_capnp::authenticated_client_connection::{
     AddChatMessageParams, AddChatMessageResults, TerminateConnectionParams, TerminateConnectionResults,
 };
 use ocg_schemas::schemas::NetworkStreamHeader;
+use ocg_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use tokio::task::{spawn_local, JoinHandle};
 use tokio_util::bytes::Bytes;
+use tracing::Instrument;
 
-use crate::GameControlChannel;
+use crate::voxel::meshgen::mesh_from_chunk;
+use crate::voxel::{ClientChunk, ClientChunkGroup};
+use crate::{ClientData, GameControlChannel};
 
 /// Pre-authentication
 pub struct NetworkThreadClientConnectingState {
@@ -37,7 +44,7 @@ pub struct NetworkThreadClientConnectingState {
     stream_task: JoinHandle<Result<()>>,
     /// The async stream creation channel.
     // TODO: use a trait object here, so we can use sockets too.
-    stream_sender: AsyncUnboundedSender<InProcessStream>,
+    _stream_sender: AsyncUnboundedSender<InProcessStream>,
 }
 
 /// Post-authentication
@@ -148,8 +155,10 @@ impl NetworkThreadClientState {
 
         let (rpc_system, connection) = create_local_rpc_client(address, pipe.rpc_pipe);
         let rpc_disconnector = rpc_system.get_disconnector();
-        let rpc_task: JoinHandle<Result<()>> =
-            spawn_local(async move { rpc_system.await.map_err(anyhow::Error::from) });
+        let rpc_task: JoinHandle<Result<()>> = spawn_local(
+            async move { rpc_system.await.map_err(anyhow::Error::from) }
+                .instrument(tracing::info_span!("client-rpc", address = ?address)),
+        );
 
         // Authenticate
         let mut auth_request = connection.server_rpc.authenticate_request();
@@ -184,8 +193,10 @@ impl NetworkThreadClientState {
             connection.server_addr
         );
 
-        let stream_task: JoinHandle<Result<()>> =
-            spawn_local(Self::local_stream_acceptor(Rc::clone(this), pipe.incoming_streams));
+        let stream_task: JoinHandle<Result<()>> = spawn_local(
+            Self::local_stream_acceptor(Rc::clone(this), pipe.incoming_streams)
+                .instrument(tracing::info_span!("client-stream", address = ?address)),
+        );
 
         this.borrow_mut().variant =
             NetworkThreadClientStateVariant::Authenticated(NetworkThreadClientAuthenticatedState {
@@ -195,7 +206,7 @@ impl NetworkThreadClientState {
                     rpc_disconnector: Some(rpc_disconnector),
                     rpc_task,
                     stream_task,
-                    stream_sender: pipe.outgoing_streams,
+                    _stream_sender: pipe.outgoing_streams,
                 },
                 server_auth_rpc,
             });
@@ -243,11 +254,61 @@ impl NetworkThreadClientState {
         Ok(())
     }
 
-    fn handle_chunk_packet_engine(_world: &mut World, raw_packet: Bytes) -> Result<()> {
+    fn handle_chunk_packet_engine(world: &mut World, raw_packet: Bytes) -> Result<()> {
         let mut slice = &raw_packet as &[u8];
         let msg = capnp::serialize::read_message_from_flat_slice(&mut slice, RPC_LOCAL_READER_OPTIONS)?;
         let typed_reader = TypedReader::<_, rpc::chunk_data_stream_packet::Owned>::new(msg);
         let root = typed_reader.get()?;
+        let cpos_r = root.reborrow().get_position()?;
+        let pos = AbsChunkPos::new(cpos_r.get_x(), cpos_r.get_y(), cpos_r.get_z());
+        let data_r = root.reborrow().get_data()?;
+
+        {
+            let universe = world.get_resource_mut::<VoxelUniverse<ClientData>>();
+            let Some(universe) = universe else {
+                warn!("Missing voxel universe while processing chunk data packet, did the game already shut down?");
+                return Ok(());
+            };
+            // TODO: actually add the chunk to the universe chunk loader
+            let block_registry = Arc::clone(&universe.block_registry);
+            let empty = block_registry
+                .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
+                .context("no empty block")?
+                .0;
+
+            // Just add the chunk mesh directly right now for testing
+            let mut test_chunks = ClientChunkGroup::new();
+            for (cx, cy, cz) in iproduct!(-1..=1, -1..=1, -1..=1) {
+                let cpos = RelChunkPos::new(cx, cy, cz) + pos;
+                let chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
+                test_chunks.chunks.insert(cpos, chunk);
+            }
+            let mid_chunk = ClientChunk::read_full(&data_r, Default::default())?;
+            test_chunks.chunks.insert(pos, mid_chunk);
+
+            let white_material = world.resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
+                base_color: Color::GRAY,
+                ..default()
+            });
+
+            for (pos, _) in test_chunks.chunks.iter() {
+                let chunks = &test_chunks.get_neighborhood_around(*pos).transpose_option();
+                if let Some(chunks) = chunks {
+                    let chunk_mesh = mesh_from_chunk(&block_registry, chunks).unwrap();
+
+                    let mesh = world.resource_mut::<Assets<Mesh>>().add(chunk_mesh);
+
+                    world.spawn(PbrBundle {
+                        mesh,
+                        material: white_material.clone(),
+                        transform: Transform::from_xyz(0.0, 0.0, 0.0),
+                        ..default()
+                    });
+                }
+            }
+        }
+
+        info!("Received chunk packet at position {pos}");
         Ok(())
     }
 }

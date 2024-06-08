@@ -57,7 +57,7 @@ impl<State: NetworkThreadState> NetworkThread<State> {
         let tokio_thread = std::thread::Builder::new()
             .name(format!("OCG {side:?} Network Thread"))
             .stack_size(8 * 1024 * 1024)
-            .spawn(move || Self::thread_main(network_rt, net_rx, state))
+            .spawn(move || Self::thread_main(network_rt, net_rx, state, side))
             .expect("Could not create a thread for the engine");
 
         Self {
@@ -143,7 +143,9 @@ impl<State: NetworkThreadState> NetworkThread<State> {
         network_rt: tokio::runtime::Runtime,
         ctrl_rx: AsyncUnboundedReceiver<NetworkThreadCommand<State>>,
         state: impl FnOnce() -> State,
+        side: GameSide,
     ) {
+        let _span = tracing::info_span!("net-thread", ?side).entered();
         network_rt.block_on(async move {
             let local_set = LocalSet::new();
             local_set.run_until(Self::thread_localset_main(ctrl_rx, state)).await;
