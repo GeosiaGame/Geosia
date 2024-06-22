@@ -58,6 +58,8 @@ pub static GAME_VERSION_PATCH: u32 = 1;
 pub static GAME_VERSION_BUILD: &str = "todo";
 /// The prerelease SemVer field of the current build's version
 pub static GAME_VERSION_PRERELEASE: &str = "";
+/// The name of the game
+pub static GAME_BRAND_NAME: &str = "OpenCubeGame";
 
 /// Target (maximum) number of game simulation ticks in a second.
 pub const TICKS_PER_SECOND: i32 = 32;

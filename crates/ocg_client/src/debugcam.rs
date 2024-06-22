@@ -9,6 +9,8 @@ use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 
+use crate::states::{ClientAppState, InGameSystemSet};
+
 /// Keeps track of mouse motion events, pitch, and yaw
 #[derive(Resource, Default)]
 struct InputState {
@@ -85,7 +87,9 @@ fn toggle_grab_cursor(window: &mut Window) {
 /// Grabs the cursor when game first starts
 fn initial_grab_cursor(mut primary_window: Query<&mut Window, With<PrimaryWindow>>) {
     if let Ok(mut window) = primary_window.get_single_mut() {
-        toggle_grab_cursor(&mut window);
+        if window.focused {
+            toggle_grab_cursor(&mut window);
+        }
     } else {
         warn!("Primary window not found for `initial_grab_cursor`!");
     }
@@ -296,12 +300,12 @@ impl Plugin for PlayerPlugin {
         app.init_resource::<InputState>()
             .init_resource::<MovementSettings>()
             .init_resource::<KeyBindings>()
-            .add_systems(Startup, setup_player)
-            .add_systems(Startup, initial_grab_cursor)
-            .add_systems(Startup, spawn_debug_text)
-            .add_systems(Update, player_move)
-            .add_systems(Update, player_look)
-            .add_systems(Update, cursor_grab);
+            .add_systems(OnEnter(ClientAppState::InGame), setup_player)
+            .add_systems(OnEnter(ClientAppState::InGame), initial_grab_cursor)
+            .add_systems(OnEnter(ClientAppState::InGame), spawn_debug_text)
+            .add_systems(Update, player_move.in_set(InGameSystemSet))
+            .add_systems(Update, player_look.in_set(InGameSystemSet))
+            .add_systems(Update, cursor_grab.in_set(InGameSystemSet));
     }
 }
 
@@ -312,11 +316,11 @@ impl Plugin for NoCameraPlayerPlugin {
         app.init_resource::<InputState>()
             .init_resource::<MovementSettings>()
             .init_resource::<KeyBindings>()
-            .add_systems(Startup, initial_grab_cursor)
-            .add_systems(Startup, initial_grab_on_flycam_spawn)
-            .add_systems(Startup, spawn_debug_text)
-            .add_systems(Update, player_move)
-            .add_systems(Update, player_look)
-            .add_systems(Update, cursor_grab);
+            .add_systems(OnEnter(ClientAppState::InGame), initial_grab_cursor)
+            .add_systems(OnEnter(ClientAppState::InGame), initial_grab_on_flycam_spawn)
+            .add_systems(OnEnter(ClientAppState::InGame), spawn_debug_text)
+            .add_systems(Update, player_move.in_set(InGameSystemSet))
+            .add_systems(Update, player_look.in_set(InGameSystemSet))
+            .add_systems(Update, cursor_grab.in_set(InGameSystemSet));
     }
 }

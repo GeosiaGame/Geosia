@@ -56,6 +56,9 @@ tracing = "0.1.40"
 uuid = { version = "1.8.0", features = ["fast-rng", "serde", "bytemuck", "v4", "v6"] }
 voronoice = "0.2.0"
 
+# Remote, bevy plugins
+bevy_egui = "0.27.1"
+
 # Remote, testing
 criterion = { version = "0.5.1", features = ["html_reports"] }
 quickcheck = "1.0.3"

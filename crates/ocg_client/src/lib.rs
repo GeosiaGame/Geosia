@@ -9,6 +9,7 @@
 //! The clientside of OpenCubeGame
 mod debugcam;
 pub mod network;
+pub mod states;
 mod voronoi_renderer;
 pub mod voxel;
 
@@ -16,6 +17,7 @@ use bevy::a11y::AccessibilityPlugin;
 use bevy::audio::AudioPlugin;
 use bevy::core_pipeline::CorePipelinePlugin;
 use bevy::diagnostic::DiagnosticsPlugin;
+use bevy::ecs::schedule::ScheduleLabel;
 use bevy::gltf::GltfPlugin;
 use bevy::input::InputPlugin;
 use bevy::pbr::PbrPlugin;
@@ -30,19 +32,15 @@ use bevy::ui::UiPlugin;
 use bevy::utils::synccell::SyncCell;
 use bevy::window::{ExitCondition, PresentMode};
 use bevy::winit::WinitPlugin;
-use ocg_common::config::{GameConfig, ServerConfig};
+use bevy_egui::EguiPlugin;
 use ocg_common::network::thread::NetworkThread;
 use ocg_common::prelude::*;
-use ocg_common::voxel::persistence::empty::EmptyPersistenceLayer;
-use ocg_common::voxel::persistence::memory::MemoryPersistenceLayer;
-use ocg_common::voxel::plugin::{VoxelUniverse, VoxelUniversePlugin};
-use ocg_common::{builtin_game_registries, GameBevyCommand, GameServer};
+use ocg_common::voxel::plugin::VoxelUniversePlugin;
+use ocg_common::{GameBevyCommand, GAME_BRAND_NAME};
 use ocg_schemas::dependencies::smallvec::SmallVec;
-use ocg_schemas::dependencies::uuid::Uuid;
 use ocg_schemas::registries::GameRegistries;
-use ocg_schemas::schemas::SchemaUuidExt;
-use ocg_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use ocg_schemas::{GameSide, OcgExtraData};
+use states::{ClientAppState, InGameSystemSet, LoadingGameSystemSet, MainMenuSystemSet};
 
 use crate::network::NetworkThreadClientState;
 
@@ -67,75 +65,11 @@ pub type GameControlChannel = StdUnboundedSender<Box<GameBevyCommand>>;
 
 /// The entry point to the client executable
 pub fn client_main() {
-    // Unset the manifest dir to make bevy load assets from the workspace root
-    std::env::set_var("CARGO_MANIFEST_DIR", "");
-
-    let default_registries = builtin_game_registries();
-    let game_config = GameConfig {
-        server: ServerConfig {
-            server_title: String::from("Integrated server"),
-            ..Default::default()
-        },
-    };
-    let game_config = GameConfig::new_handle(game_config);
-    let integ_server = GameServer::new(game_config).expect("Could not start integrated server");
-    integ_server.set_paused(false);
-    let server_pipe = integ_server
-        .create_local_connection()
-        .expect("Could not create an integrated server connection");
-    let (control_tx, control_rx) = std_unbounded_channel();
-
-    let net_thread = NetworkThread::new(GameSide::Client, move || NetworkThreadClientState::new(control_tx));
-
-    struct IntegBootstrap {
-        registries: GameRegistries,
+    // Safety: no other threads should be running at this point.
+    unsafe {
+        // Unset the manifest dir to make bevy load assets from the workspace root
+        std::env::set_var("CARGO_MANIFEST_DIR", "");
     }
-
-    let bootstrap_data = net_thread
-        .exec_async_await(|state| {
-            Box::pin(async move {
-                let local_conn = server_pipe.await.context("integ_server.create_local_connection")?;
-                NetworkThreadClientState::connect_locally(state, local_conn)
-                    .await
-                    .context("NetworkThreadClientState::connect_locally")?;
-                let bootstrap_request = state
-                    .borrow()
-                    .server_auth_rpc()
-                    .context("Missing auth endpoint")?
-                    .bootstrap_game_data_request();
-                let bootstrap_response = bootstrap_request
-                    .send()
-                    .promise
-                    .await
-                    .context("Failed bootstrap request to the integrated server")?;
-                let bootstrap_response = bootstrap_response.get()?.get_data()?;
-                let uuid = Uuid::read_from_message(&bootstrap_response.get_universe_id()?);
-                let registries = default_registries.clone_with_serialized_ids(&bootstrap_response)?;
-                let nblocks = registries.block_types.len();
-                info!("Joining server world {uuid} with {nblocks} block types.");
-
-                anyhow::Ok(IntegBootstrap { registries })
-            })
-        })
-        .expect("Could not connect the client to the integrated server")
-        .expect("Could not connect the client to the integrated server");
-
-    let client_data = ClientData {
-        shared_registries: bootstrap_data.registries,
-    };
-
-    net_thread
-        .exec_async(|state| {
-            Box::pin(async move {
-                let auth_rpc = state.borrow().server_auth_rpc().cloned();
-                if let Some(auth_rpc) = auth_rpc {
-                    let mut rq = auth_rpc.send_chat_message_request();
-                    rq.get().set_text("Hello in-process networking!");
-                    let _ = rq.send().promise.await;
-                }
-            })
-        })
-        .expect("Could not send message");
 
     let mut app = App::new();
     // Bevy Base
@@ -149,7 +83,7 @@ pub fn client_main() {
         .add_plugins(InputPlugin)
         .add_plugins(WindowPlugin {
             primary_window: Some(Window {
-                title: "OpenCubeGame".to_string(),
+                title: GAME_BRAND_NAME.to_string(),
                 present_mode: PresentMode::AutoNoVsync,
                 ..default()
             }),
@@ -172,28 +106,32 @@ pub fn client_main() {
         .add_plugins(GilrsPlugin)
         .add_plugins(AnimationPlugin)
         .add_plugins(GltfPlugin::default());
+    // Bevy plugins
+    app.add_plugins(EguiPlugin);
+
+    app.init_state::<ClientAppState>();
+    fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {
+        app.configure_sets(
+            schedule,
+            (
+                MainMenuSystemSet.run_if(in_state(ClientAppState::MainMenu)),
+                LoadingGameSystemSet.run_if(in_state(ClientAppState::LoadingGame)),
+                InGameSystemSet.run_if(in_state(ClientAppState::InGame)),
+            ),
+        );
+    }
+    configure_sets(&mut app, PreUpdate);
+    configure_sets(&mut app, Update);
+    configure_sets(&mut app, PostUpdate);
+    configure_sets(&mut app, FixedPreUpdate);
+    configure_sets(&mut app, FixedUpdate);
+    configure_sets(&mut app, FixedPostUpdate);
 
     app.add_plugins(debugcam::PlayerPlugin)
-        .add_plugins(VoxelUniversePlugin::<ClientData>::new());
-
-    let air = client_data
-        .shared_registries
-        .block_types
-        .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
-        .unwrap()
-        .0;
-    let null_world = EmptyPersistenceLayer::new(BlockEntry::new(air, 0), voxel::ClientChunkData::default());
-    let persistence = MemoryPersistenceLayer::new(Box::new(null_world));
-
-    // TODO: fix cloning here
-    app.insert_resource(VoxelUniverse::<ClientData>::new(
-        Arc::new(client_data.shared_registries.block_types.clone()),
-        Box::new(persistence),
-        voxel::ClientChunkGroupData::default(),
-    ));
-
-    app.insert_resource(client_data);
-    app.insert_resource(GameClientControlCommandReceiver(SyncCell::new(control_rx)));
+        .add_plugins(VoxelUniversePlugin::<ClientData>::new())
+        .add_plugins(states::main_menu::MainMenuPlugin)
+        .add_plugins(states::loading_game::LoadingGamePlugin)
+        .add_plugins(states::in_game::InGamePlugin);
 
     app.add_plugins(debug_window::DebugWindow);
     app.add_systems(PostUpdate, control_command_handler_system);
@@ -204,9 +142,14 @@ pub fn client_main() {
 #[derive(Resource)]
 struct GameClientControlCommandReceiver(SyncCell<StdUnboundedReceiver<Box<GameBevyCommand>>>);
 
+#[derive(Resource)]
+struct ClientNetworkThreadHolder(NetworkThread<NetworkThreadClientState>);
+
 fn control_command_handler_system(world: &mut World) {
     let pending_cmds: SmallVec<[Box<GameBevyCommand>; 32]> = {
-        let mut ctrl_rx: Mut<GameClientControlCommandReceiver> = world.resource_mut();
+        let Some(mut ctrl_rx) = world.get_resource_mut::<GameClientControlCommandReceiver>() else {
+            return;
+        };
         SmallVec::from_iter(ctrl_rx.as_mut().0.get().try_iter())
     };
     for cmd in pending_cmds {
@@ -236,7 +179,7 @@ mod debug_window {
 
     fn debug_window_setup(mut commands: Commands, asset_server: Res<AssetServer>, mut images: ResMut<Assets<Image>>) {
         log::warn!("Setting up debug window");
-        let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
+        let _ = asset_server.load::<Font>("fonts/cascadiacode.ttf");
 
         let mut biome_reg = BiomeRegistry::default();
         setup_basic_biomes(&mut biome_reg);
@@ -245,7 +188,7 @@ mod debug_window {
         let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4);
         generator.generate_world_biomes(&biome_reg);
         let world_size_blocks = generator.size_blocks_xz() as usize;
-        let img_handle = images.add(voronoi_renderer::draw_voronoi(
+        images.add(voronoi_renderer::draw_voronoi(
             &generator,
             &biome_reg,
             world_size_blocks,
@@ -267,41 +210,6 @@ mod debug_window {
             ..default()
         });
 
-        commands
-            .spawn(NodeBundle {
-                style: Style {
-                    width: Val::Percent(25.0),
-                    height: Val::Percent(25.0),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    flex_shrink: 0.0,
-                    ..default()
-                },
-                background_color: Color::CRIMSON.into(),
-                ..default()
-            })
-            .with_children(|parent| {
-                parent.spawn(TextBundle::from_section(
-                    "Hello OCG",
-                    TextStyle {
-                        font: font.clone(),
-                        font_size: 75.0,
-                        color: Color::rgb(0.9, 0.9, 0.9),
-                    },
-                ));
-                log::warn!("Child made");
-            });
-
-        commands.spawn(ImageBundle {
-            image: UiImage::new(img_handle),
-            style: Style {
-                width: Val::Px(100.0),
-                height: Val::Px(100.0),
-                flex_shrink: 0.0,
-                ..default()
-            },
-            ..default()
-        });
         log::warn!("Setting up debug window done");
     }
 }
