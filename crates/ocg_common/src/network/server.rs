@@ -161,30 +161,39 @@ impl NetworkThreadServerState {
             let addr = PeerAddress::Remote(shutdown_addr);
 
             // remove from the bevy world
-            engine.remote_bevy_invoke(move |world| {
-                let mut table = world.query::<(Entity, &ConnectedPlayersTable)>();
-                let table = table.get_single(world);
-                match table {
-                    Ok((etable, table)) => {
-                        let (pent, nick) = {
-                            let pent = table.players_by_address.get(&addr);
-                            let Some(&pent) = pent else { return };
-                            let Some(player) = world.get::<ConnectedPlayer>(pent) else {
-                                return;
+            engine
+                .schedule_bevy(move |world| {
+                    let mut table = world.query::<(Entity, &ConnectedPlayersTable)>();
+                    let table = table.get_single(world);
+                    match table {
+                        Ok((etable, table)) => {
+                            let (pent, nick) = {
+                                let pent = table.players_by_address.get(&addr);
+                                let Some(&pent) = pent else {
+                                    bail!("Mismatched player table and bevy state for {addr:?}");
+                                };
+                                let Some(player) = world.get::<ConnectedPlayer>(pent) else {
+                                    bail!(
+                                        "Mismatched player table and bevy state for {addr:?} with entity ID {pent:?}"
+                                    );
+                                };
+                                (pent, player.nickname.clone())
                             };
-                            (pent, player.nickname.clone())
-                        };
-                        world.despawn(pent);
-                        // we have to re-borrow here
-                        let mut table = world.get_mut::<ConnectedPlayersTable>(etable).unwrap();
-                        table.players_by_address.remove(&addr);
-                        table.players_by_nickname.remove(&nick);
+                            world.despawn(pent);
+                            // we have to re-borrow here
+                            let mut table = world
+                                .get_mut::<ConnectedPlayersTable>(etable)
+                                .context("Getting ConnectedPlayersTable")?;
+                            table.players_by_address.remove(&addr);
+                            table.players_by_nickname.remove(&nick);
+                        }
+                        Err(e) => {
+                            warn!("Could not remove player connection {addr:?}: {e}");
+                        }
                     }
-                    Err(e) => {
-                        warn!("Could not remove player connection {addr:?}: {e}");
-                    }
-                }
-            });
+                    Ok(())
+                })
+                .async_log_when_fails("removing disconnected players from the ConnectedPlayersTable");
 
             let listener = this.borrow_mut().connected_clients.remove(&addr);
             let Some(listener) = listener else { continue };
@@ -343,21 +352,23 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
         // add to the bevy world
         let nickname = username.clone();
         let address = self.peer;
-        self.server.remote_bevy_invoke(move |world| {
-            let player = world
-                .spawn(ConnectedPlayer {
-                    nickname: nickname.clone(),
-                    address,
-                })
-                .id();
-            let mut table = world.query::<&mut ConnectedPlayersTable>();
-            let Ok(mut table) = table.get_single_mut(world) else {
-                warn!("Could not add player connection {address:?} due to missing player table");
-                return;
-            };
-            table.players_by_address.insert(address, player);
-            table.players_by_nickname.insert(nickname, player);
-        });
+        self.server
+            .schedule_bevy(move |world| {
+                let player = world
+                    .spawn(ConnectedPlayer {
+                        nickname: nickname.clone(),
+                        address,
+                    })
+                    .id();
+                let mut table = world.query::<&mut ConnectedPlayersTable>();
+                let Ok(mut table) = table.get_single_mut(world) else {
+                    bail!("Could not add player connection {address:?} due to missing player table");
+                };
+                table.players_by_address.insert(address, player);
+                table.players_by_nickname.insert(nickname, player);
+                Ok(())
+            })
+            .async_log_when_fails("Adding player to the connection table");
 
         Promise::ok(())
     }

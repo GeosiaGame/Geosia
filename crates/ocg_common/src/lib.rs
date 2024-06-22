@@ -202,27 +202,20 @@ impl GameServer {
     }
 
     /// Queues the given function to run with exclusive access to the bevy [`World`].
-    pub fn remote_bevy_invoke<BevyCmd: FnOnce(&mut World) + Send + 'static>(&self, cmd: BevyCmd) {
-        self.remote_bevy_invoke_boxed(Box::new(cmd))
-    }
-
-    /// Queues the given function to run with exclusive access to the bevy [`World`], returns a oneshot channel to listen for the return value.
-    pub fn remote_bevy_invoke_await<
-        Output: Send + 'static,
-        BevyCmd: (FnOnce(&mut World) -> Output) + Send + 'static,
+    pub fn schedule_bevy<
+        BevyCmd: (FnOnce(&mut World) -> Result<Output>) + Send + 'static,
+        Output: Send + Sync + 'static,
     >(
         &self,
         cmd: BevyCmd,
-    ) -> AsyncOneshotReceiver<Output> {
-        let (tx, rx) = async_oneshot_channel();
-        self.remote_bevy_invoke_boxed(Box::new(move |world| {
-            let _ = tx.send(cmd(world));
-        }));
-        rx
+    ) -> AsyncResult<Output> {
+        let (result, tx) = AsyncResult::new_pair();
+        self.schedule_bevy_boxed(Box::new(move |world| drop(tx.send(cmd(world)))));
+        result
     }
 
-    /// Non-generic version of [`Self::remote_bevy_invoke`]
-    pub fn remote_bevy_invoke_boxed(&self, cmd: Box<GameBevyCommand>) {
+    /// Non-generic version of [`Self::schedule_bevy`]
+    pub fn schedule_bevy_boxed(&self, cmd: Box<GameBevyCommand>) {
         let _ = self.control_channel.send(GameServerControlCommand::Invoke(cmd));
     }
 

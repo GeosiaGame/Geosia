@@ -263,7 +263,7 @@ fn spawn_debug_text(asset_server: Res<AssetServer>, mut commands: Commands) {
     commands.spawn((
         TextBundle::from_sections([
             TextSection::new(
-                "Current Position:",
+                "\nCurrent Position:",
                 TextStyle {
                     font: font.clone(),
                     font_size: 15.0,

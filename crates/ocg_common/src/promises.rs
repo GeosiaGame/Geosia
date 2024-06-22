@@ -4,6 +4,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use anyhow::Error;
+use tracing::error;
 
 use crate::prelude::*;
 
@@ -31,10 +32,14 @@ pub trait GenericAsyncResult {
     /// Waits for the result by awaiting the inner future, wraps the error in a generic anyhow type.
     #[must_use]
     fn async_generic_wait(self: Box<Self>) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>>;
+
+    /// Spawns a new Tokio async task waiting for the result, and logs the error out if it is a failure.
+    fn async_generic_log_when_fails(self: Box<Self>, context: &'static str);
 }
 
 /// A result holder that can await on an asynchronous operation happening in another thread or time.
 #[derive(Debug)]
+#[must_use]
 pub enum AsyncResult<OkT: Send + 'static> {
     /// Not yet queried, or queried and not completed yet.
     Unresolved(AsyncOneshotReceiver<Result<OkT>>),
@@ -108,6 +113,15 @@ impl<OkT: Send + 'static> AsyncResult<OkT> {
     async fn async_generic_wait_impl(self) -> Result<()> {
         self.async_wait().await.map(|_| ()).map_err(anyhow::Error::from)
     }
+
+    /// Spawns a new Tokio async task waiting for the result, and logs the error out if it is a failure.
+    pub fn async_log_when_fails(self, context: &'static str) {
+        tokio::spawn(async move {
+            if let Err(e) = self.async_wait().await {
+                error!("Error happened when resolving asynchronous result ({context}): {e}");
+            }
+        });
+    }
 }
 
 impl<OkT: Send + 'static> GenericAsyncResult for AsyncResult<OkT> {
@@ -133,6 +147,10 @@ impl<OkT: Send + 'static> GenericAsyncResult for AsyncResult<OkT> {
 
     fn async_generic_wait(self: Box<Self>) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>> {
         Box::pin(self.async_generic_wait_impl())
+    }
+
+    fn async_generic_log_when_fails(self: Box<Self>, context: &'static str) {
+        self.async_log_when_fails(context)
     }
 }
 
