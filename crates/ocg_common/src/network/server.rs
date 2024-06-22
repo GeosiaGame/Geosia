@@ -107,15 +107,19 @@ impl NetworkThreadServerState {
 
     /// Begins listening on the configured endpoints, and starts looking for configuration changes.
     /// Must be called within the tokio LocalSet.
-    pub async fn bootstrap(this: &Rc<RefCell<Self>>, engine: Arc<GameServer>) {
+    pub async fn bootstrap(this: &Rc<RefCell<Self>>, engine: Arc<GameServer>) -> Result<()> {
         let mut config_listener = engine.config().clone();
         let config = config_listener.borrow_and_update().server.clone();
 
         Self::update_listeners(this, &engine, &config.listen_addresses).await;
+        Ok(())
     }
 
     /// Creates a new local server->client connection and returns the client address and stream to pass into the client object.
-    pub async fn accept_local_connection(this_ptr: &Rc<RefCell<Self>>, engine: Arc<GameServer>) -> LocalConnectionPipe {
+    pub async fn accept_local_connection(
+        this_ptr: &Rc<RefCell<Self>>,
+        engine: Arc<GameServer>,
+    ) -> Result<LocalConnectionPipe> {
         let mut this = this_ptr.borrow_mut();
         let id = this.free_local_id;
         this.free_local_id += 1;
@@ -141,7 +145,7 @@ impl NetworkThreadServerState {
 
         info!("Constructed a new local connection: {peer:?}");
 
-        (peer, cpipe)
+        Ok((peer, cpipe))
     }
 
     async fn update_listeners(this: &Rc<RefCell<Self>>, engine: &Arc<GameServer>, new_listeners: &[SocketAddr]) {

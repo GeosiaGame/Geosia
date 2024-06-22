@@ -25,15 +25,13 @@ pub trait NetworkThreadState: 'static {
     fn shutdown(this: Rc<RefCell<Self>>) -> impl Future<Output = ()>;
 }
 
-type NetworkThreadFunction<State> = dyn FnOnce(&Rc<RefCell<State>>) + Send + 'static;
-
-type NetworkThreadAsyncFuture<'state, Output = ()> = Pin<Box<dyn Future<Output = Output> + 'state>>;
+/// A boxed future that can be queued on the network thread's tokio LocalSet.
+pub type NetworkThreadAsyncFuture<'state, Output = ()> = Pin<Box<dyn Future<Output = Output> + 'state>>;
 type NetworkThreadAsyncFunction<State> =
     dyn for<'state> FnOnce(&'state Rc<RefCell<State>>) -> NetworkThreadAsyncFuture<'state> + Send + 'static;
 
 enum NetworkThreadCommand<State> {
     Shutdown(AsyncOneshotSender<()>),
-    RunInLocalSet(Box<NetworkThreadFunction<State>>),
     RunAsyncInLocalSet(Box<NetworkThreadAsyncFunction<State>>),
 }
 
@@ -86,51 +84,28 @@ impl<State: NetworkThreadState> NetworkThread<State> {
         let _ = rx.blocking_recv();
     }
 
-    /// Runs the given function in the context of the network thread.
-    pub fn exec<F: FnOnce(&Rc<RefCell<State>>) + Send + 'static>(
-        &self,
-        function: F,
-    ) -> Result<(), NetworkThreadCommandError> {
-        self.exec_boxed(Box::new(function))
-    }
-
-    /// Awaits the given future in the network thread.
-    pub fn exec_async<
-        F: (for<'state> FnOnce(&'state Rc<RefCell<State>>) -> NetworkThreadAsyncFuture<'state>) + Send + 'static,
-    >(
-        &self,
-        function: F,
-    ) -> Result<(), NetworkThreadCommandError> {
-        self.exec_async_boxed(Box::new(move |state| function(state)))
-    }
-
-    /// Awaits the given future in the network thread, then awaits and returns the result of execution on the current thread.
-    pub fn exec_async_await<
+    /// Schedules a future in the network thread, the future is made using the provided factory function.
+    pub fn schedule_task<
+        F: (for<'state> FnOnce(&'state Rc<RefCell<State>>) -> NetworkThreadAsyncFuture<'state, Result<Output>>)
+            + Send
+            + 'static,
         Output: Send + 'static,
-        F: (for<'state> FnOnce(&'state Rc<RefCell<State>>) -> NetworkThreadAsyncFuture<'state, Output>) + Send + 'static,
     >(
         &self,
         function: F,
-    ) -> Result<Output, NetworkThreadCommandError> {
-        let (tx, rx) = async_oneshot_channel();
-        self.exec_async_boxed(Box::new(move |state| {
-            Box::pin(function(state).then(move |out| async move {
-                let _ = tx.send(out);
-            }))
-        }))?;
-        rx.blocking_recv()
-            .or(Err(NetworkThreadCommandError::NetworkThreadTerminated(self.side)))
+    ) -> AsyncResult<Output> {
+        let (result, tx) = AsyncResult::new_pair();
+        let queue_result = self.schedule_task_boxed(Box::new(move |state| {
+            Box::pin(function(state).then(|out| async move { drop(tx.send(out)) }))
+        }));
+        if let Err(e) = queue_result {
+            return AsyncResult::new_err(e.into());
+        }
+        result
     }
 
     /// Non-generic implementation of exec()
-    pub fn exec_boxed(&self, function: Box<NetworkThreadFunction<State>>) -> Result<(), NetworkThreadCommandError> {
-        self.channel
-            .send(NetworkThreadCommand::RunInLocalSet(function))
-            .or(Err(NetworkThreadCommandError::NetworkThreadTerminated(self.side)))
-    }
-
-    /// Non-generic implementation of exec()
-    pub fn exec_async_boxed(
+    pub fn schedule_task_boxed(
         &self,
         function: Box<NetworkThreadAsyncFunction<State>>,
     ) -> Result<(), NetworkThreadCommandError> {
@@ -164,9 +139,6 @@ impl<State: NetworkThreadState> NetworkThread<State> {
                     State::shutdown(state).await;
                     let _ = feedback.send(());
                     return;
-                }
-                NetworkThreadCommand::RunInLocalSet(lambda) => {
-                    lambda(&state);
                 }
                 NetworkThreadCommand::RunAsyncInLocalSet(lambda) => {
                     let future = lambda(&state);

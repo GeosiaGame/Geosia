@@ -3,6 +3,8 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use anyhow::Error;
+
 use crate::prelude::*;
 
 /// Encompasses the operations of [`AsyncResult`] that do not depend on the held result type.
@@ -19,6 +21,9 @@ pub trait GenericAsyncResult {
     /// Returns if the inner result is Err, or None if not ready yet.
     #[must_use]
     fn is_err(&mut self) -> Option<bool>;
+
+    /// Checks if the result is available right now, returns a type-erased reference if it is.
+    fn generic_poll(&mut self) -> Option<Result<(), &anyhow::Error>>;
 
     /// Waits for the result by blocking the current thread, wraps the error in a generic anyhow type.
     fn blocking_generic_wait(self: Box<Self>) -> Result<(), anyhow::Error>;
@@ -44,6 +49,16 @@ impl<OkT: Send + 'static> AsyncResult<OkT> {
     pub fn new_pair() -> (Self, AsyncOneshotSender<Result<OkT>>) {
         let (tx, rx) = async_oneshot_channel();
         (Self::Unresolved(rx), tx)
+    }
+
+    /// Constructs a new pre-resolved variant.
+    pub fn new_ok(val: OkT) -> Self {
+        Self::Resolved(Ok(val))
+    }
+
+    /// Constructs a new pre-resolved variant.
+    pub fn new_err(err: anyhow::Error) -> Self {
+        Self::Resolved(Err(err))
     }
 
     /// Checks if the result is available right now, returns a reference if it is.
@@ -108,6 +123,10 @@ impl<OkT: Send + 'static> GenericAsyncResult for AsyncResult<OkT> {
         self.poll().as_ref().map(Result::is_err)
     }
 
+    fn generic_poll(&mut self) -> Option<Result<(), &Error>> {
+        self.poll().as_ref().map(|v| v.map(|_| ()))
+    }
+
     fn blocking_generic_wait(self: Box<Self>) -> Result<()> {
         self.blocking_wait().map(|_| ()).map_err(anyhow::Error::from)
     }
@@ -129,6 +148,7 @@ mod test {
         let _ = rbox.is_ready();
         let _ = rbox.is_ok();
         let _ = rbox.is_err();
+        rbox.generic_poll().unwrap().unwrap();
         rbox.blocking_generic_wait().unwrap();
     }
 
@@ -136,10 +156,7 @@ mod test {
     async fn object_safe_async_test() {
         let (r, tx) = AsyncResult::new_pair();
         tx.send(Ok(1i32)).unwrap();
-        let mut rbox: Box<dyn GenericAsyncResult> = Box::new(r);
-        let _ = rbox.is_ready();
-        let _ = rbox.is_ok();
-        let _ = rbox.is_err();
+        let rbox: Box<dyn GenericAsyncResult> = Box::new(r);
         rbox.async_generic_wait().await.unwrap();
     }
 }

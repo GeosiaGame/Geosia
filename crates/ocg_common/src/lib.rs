@@ -38,9 +38,8 @@ use tokio_util::bytes::Bytes;
 
 use crate::config::{GameConfig, GameConfigHandle};
 use crate::network::server::{ConnectedPlayer, LocalConnectionPipe, NetworkServerPlugin, NetworkThreadServerState};
-use crate::network::thread::{NetworkThread, NetworkThreadCommandError};
+use crate::network::thread::NetworkThread;
 use crate::network::transport::InProcessStream;
-use crate::network::PeerAddress;
 use crate::prelude::*;
 use crate::voxel::blocks::{DIRT_BLOCK_NAME, GRASS_BLOCK_NAME};
 use crate::voxel::persistence::empty::EmptyPersistenceLayer;
@@ -228,22 +227,11 @@ impl GameServer {
     }
 
     /// Asynchronously creates a new local connection to this server's network runtime.
-    pub fn create_local_connection(
-        self: &Arc<Self>,
-    ) -> Result<AsyncOneshotReceiver<LocalConnectionPipe>, NetworkThreadCommandError> {
+    pub fn create_local_connection(self: &Arc<Self>) -> AsyncResult<LocalConnectionPipe> {
         let inner_engine = Arc::clone(self);
-        let (rtx, rrx) = async_oneshot_channel();
-        self.network_thread.exec_async(move |state| {
-            Box::pin(async move {
-                if let Err(pipe) =
-                    rtx.send(NetworkThreadServerState::accept_local_connection(state, inner_engine).await)
-                {
-                    let addr: PeerAddress = pipe.0;
-                    error!("Could not forward local connection {addr:?}");
-                }
-            })
-        })?;
-        Ok(rrx)
+        self.network_thread.schedule_task(move |state| {
+            Box::pin(NetworkThreadServerState::accept_local_connection(state, inner_engine))
+        })
     }
 
     fn engine_thread_main(
@@ -344,7 +332,8 @@ impl GameServer {
         let net_engine = Arc::clone(engine);
         engine
             .network_thread
-            .exec_async(move |state| Box::pin(NetworkThreadServerState::bootstrap(state, net_engine)))
+            .schedule_task(move |state| Box::pin(NetworkThreadServerState::bootstrap(state, net_engine)))
+            .blocking_wait()
             .unwrap();
     }
 
@@ -372,21 +361,23 @@ impl GameServer {
             let my_buffer = buffer.clone();
             engine
                 .network_thread
-                .exec_async(move |rstate| {
+                .schedule_task(move |rstate| {
                     Box::pin(async move {
                         let state = rstate.borrow();
                         let Some(peer) = state.find_connected_client(addr) else {
-                            return;
+                            bail!("Cannot find connected client {addr:?} anymore");
                         };
                         let chunk_stream = peer
                             .open_stream(NetworkStreamHeader::Standard(StandardTypes::ChunkData))
                             .unwrap();
                         let InProcessStream { tx, .. } = chunk_stream;
                         info!("Sending {n} bytes of chunk data to {addr:?}", n = my_buffer.len());
-                        tx.send(my_buffer).unwrap();
+                        tx.send(my_buffer)?;
                         drop(tx);
+                        Ok(())
                     })
                 })
+                .blocking_wait()
                 .unwrap();
         }
     }

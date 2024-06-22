@@ -25,7 +25,8 @@ pub struct LoadingGamePlugin;
 
 impl Plugin for LoadingGamePlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<LoadingTransitionParams>();
+        app.init_resource::<LoadingTransitionParams>()
+            .init_resource::<LoadingPromiseHolder>();
         app.add_systems(OnEnter(ClientAppState::LoadingGame), kickoff_game_transition)
             .add_systems(Update, (loading_game_transition_handler,).in_set(LoadingGameSystemSet));
     }
@@ -41,7 +42,16 @@ pub enum LoadingTransitionParams {
     SinglePlayer {},
 }
 
-fn kickoff_game_transition(mut next_params: ResMut<LoadingTransitionParams>, mut commands: Commands) {
+#[derive(Resource, Default)]
+struct LoadingPromiseHolder {
+    promises: Vec<Box<dyn GenericAsyncResult + Send + Sync>>,
+}
+
+fn kickoff_game_transition(
+    mut next_params: ResMut<LoadingTransitionParams>,
+    mut promises: ResMut<LoadingPromiseHolder>,
+    mut commands: Commands,
+) {
     match std::mem::take(&mut *next_params) {
         LoadingTransitionParams::NoTransition => {
             static ERR_MSG: &str = "Entered game loading transition without loading parameters!";
@@ -61,9 +71,7 @@ fn kickoff_game_transition(mut next_params: ResMut<LoadingTransitionParams>, mut
             let game_config = GameConfig::new_handle(game_config);
             let integ_server = GameServer::new(game_config).expect("Could not start integrated server");
             integ_server.set_paused(false);
-            let server_pipe = integ_server
-                .create_local_connection()
-                .expect("Could not create an integrated server connection");
+            let server_pipe = integ_server.create_local_connection();
             let (control_tx, control_rx) = std_unbounded_channel();
 
             let net_thread = NetworkThread::new(GameSide::Client, move || NetworkThreadClientState::new(control_tx));
@@ -73,9 +81,12 @@ fn kickoff_game_transition(mut next_params: ResMut<LoadingTransitionParams>, mut
             }
 
             let bootstrap_data = net_thread
-                .exec_async_await(|state| {
+                .schedule_task(|state| {
                     Box::pin(async move {
-                        let local_conn = server_pipe.await.context("integ_server.create_local_connection")?;
+                        let local_conn = server_pipe
+                            .async_wait()
+                            .await
+                            .context("integ_server.create_local_connection")?;
                         NetworkThreadClientState::connect_locally(state, local_conn)
                             .await
                             .context("NetworkThreadClientState::connect_locally")?;
@@ -98,25 +109,24 @@ fn kickoff_game_transition(mut next_params: ResMut<LoadingTransitionParams>, mut
                         anyhow::Ok(IntegBootstrap { registries })
                     })
                 })
-                .expect("Could not connect the client to the integrated server")
+                .blocking_wait()
                 .expect("Could not connect the client to the integrated server");
 
             let client_data = ClientData {
                 shared_registries: bootstrap_data.registries,
             };
 
-            net_thread
-                .exec_async(|state| {
-                    Box::pin(async move {
-                        let auth_rpc = state.borrow().server_auth_rpc().cloned();
-                        if let Some(auth_rpc) = auth_rpc {
-                            let mut rq = auth_rpc.send_chat_message_request();
-                            rq.get().set_text("Hello in-process networking!");
-                            let _ = rq.send().promise.await;
-                        }
-                    })
+            promises.promises.push(Box::new(net_thread.schedule_task(|state| {
+                Box::pin(async move {
+                    let auth_rpc = state.borrow().server_auth_rpc().cloned();
+                    if let Some(auth_rpc) = auth_rpc {
+                        let mut rq = auth_rpc.send_chat_message_request();
+                        rq.get().set_text("Hello in-process networking!");
+                        let _ = rq.send().promise.await;
+                    }
+                    Ok(())
                 })
-                .expect("Could not send message");
+            })));
 
             let air = client_data
                 .shared_registries
@@ -141,6 +151,25 @@ fn kickoff_game_transition(mut next_params: ResMut<LoadingTransitionParams>, mut
     }
 }
 
-fn loading_game_transition_handler(mut next_state: ResMut<NextState<ClientAppState>>) {
-    next_state.set(ClientAppState::InGame);
+fn loading_game_transition_handler(
+    mut next_state: ResMut<NextState<ClientAppState>>,
+    mut promises: ResMut<LoadingPromiseHolder>,
+) {
+    let mut remaining_promises = Vec::new();
+    for mut promise in promises.promises.drain(..) {
+        match promise.generic_poll() {
+            None => {
+                remaining_promises.push(promise);
+            }
+            Some(Err(e)) => {
+                error!("Error during loading phase: {e}");
+            }
+            Some(Ok(_)) => {}
+        }
+    }
+    if remaining_promises.is_empty() {
+        next_state.set(ClientAppState::InGame);
+    } else {
+        promises.promises.extend(remaining_promises);
+    }
 }
