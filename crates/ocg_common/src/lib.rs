@@ -11,6 +11,7 @@
 pub mod config;
 pub mod network;
 pub mod prelude;
+pub mod promises;
 pub mod voxel;
 
 use std::thread::JoinHandle;
