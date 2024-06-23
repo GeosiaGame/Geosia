@@ -55,6 +55,7 @@ tokio-util = { version = "0.7.9", features = ["compat", "io-util"] }
 tracing = "0.1.40"
 uuid = { version = "1.8.0", features = ["fast-rng", "serde", "bytemuck", "v4", "v6"] }
 voronoice = "0.2.0"
+zorder = "0.2.2"
 
 # Remote, bevy plugins
 bevy_egui = "0.27.1"

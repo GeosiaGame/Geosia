@@ -3935,6 +3935,7 @@ dependencies = [
  "smallvec",
  "thiserror",
  "uuid",
+ "zorder",
 ]
 
 [[package]]
@@ -6453,6 +6454,15 @@ name = "zeroize"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
+
+[[package]]
+name = "zorder"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ea8734a87d9de83816351d459ad98e276a9f60adc993f524504606cc126fb01"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "zune-inflate"

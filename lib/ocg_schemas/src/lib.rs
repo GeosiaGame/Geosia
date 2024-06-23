@@ -54,12 +54,16 @@ pub mod dependencies {
     pub use hashbrown;
     pub use itertools;
     pub use kstring;
+    pub use noise;
     pub use once_cell;
+    pub use rand;
+    pub use rand_xoshiro;
     pub use rgb;
     pub use serde;
     pub use smallvec;
     pub use thiserror;
     pub use uuid;
+    pub use zorder;
 }
 
 /// A simple wrapper type that's either a slice borrow, or an owned SmallVec.

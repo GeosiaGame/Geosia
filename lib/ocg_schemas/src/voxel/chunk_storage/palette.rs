@@ -380,9 +380,6 @@ impl<DataType: ChunkDataType + Copy> ChunkStorage<DataType> for PaletteStorage<D
     }
 
     fn fill(&mut self, range: InChunkRange, new_value: DataType) {
-        if range.is_empty() {
-            return;
-        }
         let palette_pos = self.palette_get_or_insert(new_value, range.min());
 
         let min = range.min();
