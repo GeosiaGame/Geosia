@@ -3,6 +3,7 @@
 use hashbrown::HashMap;
 
 use crate::coordinates::AbsChunkPos;
+use crate::mutwatcher::MutWatcher;
 use crate::voxel::chunk::Chunk;
 use crate::voxel::neighborhood::OptionalChunkRefNeighborhood;
 use crate::OcgExtraData;
@@ -11,7 +12,7 @@ use crate::OcgExtraData;
 #[derive(Clone)]
 pub struct ChunkGroup<ExtraData: OcgExtraData> {
     /// Chunk storage
-    pub chunks: HashMap<AbsChunkPos, Chunk<ExtraData>>,
+    pub chunks: HashMap<AbsChunkPos, MutWatcher<Chunk<ExtraData>>>,
     /// Extra data as needed by the user API
     pub extra_data: ExtraData::GroupData,
 }

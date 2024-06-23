@@ -1,8 +1,11 @@
 //! Managing chunk persistence and presence in memory.
 
+use std::ops::Deref;
+
 use anyhow::Result;
 use hashbrown::HashSet;
 use ocg_schemas::coordinates::AbsChunkPos;
+use ocg_schemas::mutwatcher::MutWatcher;
 use ocg_schemas::voxel::chunk::Chunk;
 use ocg_schemas::voxel::chunk_group::ChunkGroup;
 use ocg_schemas::OcgExtraData;
@@ -71,7 +74,7 @@ impl<ExtraData: OcgExtraData> ChunkLoader<ExtraData> {
             .next()
             .unwrap()
             .unwrap();
-        loader.managed_group.chunks.insert(cpos, chunk);
+        loader.managed_group.chunks.insert(cpos, MutWatcher::new(chunk));
 
         loader
     }
@@ -83,6 +86,6 @@ impl<ExtraData: OcgExtraData> ChunkLoader<ExtraData> {
 
     /// Look up a single loaded chunk, returns None if the chunk is not already loaded.
     pub fn try_get_loaded_chunk(&self, pos: AbsChunkPos) -> Option<&Chunk<ExtraData>> {
-        self.managed_group.chunks.get(&pos)
+        self.managed_group.chunks.get(&pos).map(MutWatcher::deref)
     }
 }

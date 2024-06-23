@@ -16,6 +16,7 @@ use ocg_common::prelude::*;
 use ocg_common::voxel::plugin::VoxelUniverse;
 use ocg_schemas::coordinates::{AbsChunkPos, RelChunkPos};
 use ocg_schemas::dependencies::itertools::iproduct;
+use ocg_schemas::mutwatcher::MutWatcher;
 use ocg_schemas::schemas::network_capnp as rpc;
 use ocg_schemas::schemas::network_capnp::authenticated_client_connection::{
     AddChatMessageParams, AddChatMessageResults, TerminateConnectionParams, TerminateConnectionResults,
@@ -281,10 +282,10 @@ impl NetworkThreadClientState {
             for (cx, cy, cz) in iproduct!(-1..=1, -1..=1, -1..=1) {
                 let cpos = RelChunkPos::new(cx, cy, cz) + pos;
                 let chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
-                test_chunks.chunks.insert(cpos, chunk);
+                test_chunks.chunks.insert(cpos, MutWatcher::new(chunk));
             }
             let mid_chunk = ClientChunk::read_full(&data_r, Default::default())?;
-            test_chunks.chunks.insert(pos, mid_chunk);
+            test_chunks.chunks.insert(pos, MutWatcher::new(mid_chunk));
 
             let white_material = world.resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
                 base_color: Color::GRAY,
