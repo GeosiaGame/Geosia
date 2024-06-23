@@ -99,6 +99,10 @@ opt-level = 1
 debug-assertions = true
 debug = 2
 
+# Set the settings for build scripts and proc-macros.
+[profile.dev.build-override]
+opt-level = 3
+
 [profile.dev.package."*"]
 opt-level = 3
 
