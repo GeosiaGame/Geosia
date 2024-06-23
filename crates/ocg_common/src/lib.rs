@@ -282,13 +282,14 @@ impl GameServer {
         let null_world = EmptyPersistenceLayer::new(BlockEntry::new(air, 0), ());
         let mut persistence = MemoryPersistenceLayer::new(Box::new(null_world));
         persistence.request_load(&[AbsChunkPos::ZERO]);
-        let mut chunk0 = persistence
+        let mut chunk0_s = persistence
             .try_dequeue_responses(1)
             .into_iter()
             .next()
             .unwrap()
             .unwrap()
             .1;
+        let chunk0 = chunk0_s.mutate_stored();
         chunk0.blocks.fill(InChunkRange::WHOLE_CHUNK, BlockEntry::new(dirt, 0));
         chunk0.blocks.fill(
             InChunkRange::from_corners(
@@ -305,7 +306,7 @@ impl GameServer {
                     .put(InChunkPos::try_new(x, 29, y).unwrap(), BlockEntry::new(grass, 0));
             }
         }
-        persistence.request_save(Box::new([(AbsChunkPos::ZERO, chunk0)]));
+        persistence.request_save(Box::new([(AbsChunkPos::ZERO, chunk0_s)]));
 
         app.insert_resource(VoxelUniverse::<ServerData>::new(
             Arc::clone(&engine.server_data.shared_registries.block_types),

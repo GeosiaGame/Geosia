@@ -113,6 +113,11 @@ impl<T> MutWatcher<T> {
         }
     }
 
+    /// Allows mutation access to the inner value without creating a new revision, use only for mutations that preserve the actual contents of the data (but for example optimize the layout in memory).
+    pub fn mutate_without_revision(&mut self) -> &mut T {
+        &mut self.inner
+    }
+
     /// For client usage. Allows mutating the current value if the remote revision is newer than the current revision.
     /// When predicting revisions, updates if all our locally predicted mutations or more have resolved on the server.
     /// Returns a mutable reference if the mutation should happen, or None if it shouldn't.

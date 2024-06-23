@@ -14,7 +14,7 @@ pub mod empty;
 pub mod memory;
 
 /// A single response to a chunk loading request, generated some time after calling [`ChunkPersistenceLayer::request_load`].
-pub type ChunkProviderResult<ExtraData> = Result<(AbsChunkPos, Chunk<ExtraData>)>;
+pub type ChunkProviderResult<ExtraData> = Result<(AbsChunkPos, MutWatcher<Chunk<ExtraData>>)>;
 
 /// Diagnostic statistics from a [`ChunkPersistenceLayer`]
 #[derive(Copy, Clone, Default, Debug, Hash)]
@@ -39,7 +39,7 @@ pub trait ChunkPersistenceLayer<ExtraData: OcgExtraData>: Send + Sync + 'static 
     /// Reliably requests the saving of the given chunk data. Data submitted in later requests, or with a higher index in the array takes precedence over older data.
     /// While data is queued for saving in a buffer, if appropriate (i.e. storage is disk and not a network connection), that data should be returned upon request instead of freshly generated data.
     /// Chunk generation layers implementing this interface or non-persistent storage layers can elect to ignore save requests completely.
-    fn request_save(&mut self, chunks: Box<[(AbsChunkPos, Chunk<ExtraData>)]>);
+    fn request_save(&mut self, chunks: Box<[(AbsChunkPos, MutWatcher<Chunk<ExtraData>>)]>);
     /// Provides up to `max_count` resolved chunk loading responses.
     fn try_dequeue_responses(&mut self, max_count: usize) -> Vec<ChunkProviderResult<ExtraData>>;
     /// Get current diagnostic statistics.
@@ -74,7 +74,7 @@ impl<ExtraData: OcgExtraData> ChunkLoader<ExtraData> {
             .next()
             .unwrap()
             .unwrap();
-        loader.managed_group.chunks.insert(cpos, MutWatcher::new(chunk));
+        loader.managed_group.chunks.insert(cpos, chunk);
 
         loader
     }
