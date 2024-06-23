@@ -26,6 +26,4 @@ pub struct MainMenuSystemSet;
 #[derive(SystemSet, Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct LoadingGameSystemSet;
 
-/// The tag for systems that should run while in game.
-#[derive(SystemSet, Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub struct InGameSystemSet;
+pub use ocg_common::InGameSystemSet;

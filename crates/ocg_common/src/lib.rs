@@ -19,6 +19,7 @@ use std::time::Duration;
 
 use bevy::app::{AppExit, ScheduleRunnerPlugin};
 use bevy::diagnostic::DiagnosticsPlugin;
+use bevy::ecs::schedule::ScheduleLabel;
 use bevy::prelude::*;
 use bevy::time::TimePlugin;
 use bevy::utils::smallvec::SmallVec;
@@ -78,6 +79,10 @@ pub const TICK: Duration = Duration::from_micros(MICROSECONDS_PER_TICK as u64);
 
 // Ensure `MICROSECONDS_PER_TICK` is perfectly accurate.
 static_assertions::const_assert_eq!(1_000_000i64 / MICROSECONDS_PER_TICK, TICKS_PER_SECOND as i64);
+
+/// The tag for systems that should run while in game.
+#[derive(SystemSet, Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct InGameSystemSet;
 
 /// An [`OcgExtraData`] implementation containing server-side data for the game engine.
 /// The struct holds server state, the trait points to per chunk/group/etc. data.
@@ -307,6 +312,16 @@ impl GameServer {
             Box::new(persistence),
             (),
         ));
+
+        fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {
+            app.configure_sets(schedule, InGameSystemSet);
+        }
+        configure_sets(&mut app, PreUpdate);
+        configure_sets(&mut app, Update);
+        configure_sets(&mut app, PostUpdate);
+        configure_sets(&mut app, FixedPreUpdate);
+        configure_sets(&mut app, FixedUpdate);
+        configure_sets(&mut app, FixedPostUpdate);
 
         app.insert_resource(Time::<Fixed>::from_duration(TICK));
         app.insert_resource(GameServerControlCommandReceiver(SyncCell::new(ctrl_rx)));

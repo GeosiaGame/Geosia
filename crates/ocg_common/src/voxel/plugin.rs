@@ -8,6 +8,7 @@ use ocg_schemas::voxel::voxeltypes::BlockRegistry;
 use ocg_schemas::OcgExtraData;
 
 use crate::voxel::persistence::{ChunkLoader, ChunkPersistenceLayer};
+use crate::InGameSystemSet;
 
 /// Initializes the settings related to the voxel universe.
 #[derive(Default)]
@@ -17,7 +18,10 @@ pub struct VoxelUniversePlugin<ExtraData: OcgExtraData> {
 
 impl<ExtraData: OcgExtraData> Plugin for VoxelUniversePlugin<ExtraData> {
     fn build(&self, app: &mut App) {
-        app.add_systems(PreUpdate, system_process_chunk_loading::<ExtraData>);
+        app.add_systems(
+            PreUpdate,
+            (system_process_chunk_loading::<ExtraData>).in_set(InGameSystemSet),
+        );
     }
 
     fn name(&self) -> &str {
@@ -61,8 +65,7 @@ impl<ExtraData: OcgExtraData> VoxelUniverse<ExtraData> {
     }
 }
 
-fn system_process_chunk_loading<ExtraData: OcgExtraData>(voxels: Option<ResMut<VoxelUniverse<ExtraData>>>) {
-    let Some(mut voxels) = voxels else { return };
+fn system_process_chunk_loading<ExtraData: OcgExtraData>(mut voxels: ResMut<VoxelUniverse<ExtraData>>) {
     let _voxels: &mut VoxelUniverse<_> = &mut voxels;
     // TODO: actually load chunks
 }
