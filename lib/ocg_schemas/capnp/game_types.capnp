@@ -1,7 +1,7 @@
 # Common game data types exchanged over the wire.
 @0xa5e994c4ed48b34c;
 
-using Rust = import "/rust.capnp";
+using Rust = import "rust.capnp";
 $Rust.parentModule("schemas");
 
 struct Option @0x8ba1c86d2c77fb36 (T) {

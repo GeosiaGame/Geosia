@@ -1,10 +1,10 @@
 # The network protocol.
 @0xb89146b09fd226cb;
 
-using Rust = import "/rust.capnp";
+using Rust = import "rust.capnp";
 $Rust.parentModule("schemas");
 
-using GameTypes = import "/game_types.capnp";
+using GameTypes = import "game_types.capnp";
 
 # The main RPC entrypoint for the game server, (Anonymous client)->Server RPC.
 interface GameServer @0xf0320743e0d6201d {
