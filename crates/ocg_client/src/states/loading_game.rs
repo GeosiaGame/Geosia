@@ -38,6 +38,8 @@ pub enum LoadingTransitionParams {
     /// No queued transition.
     #[default]
     NoTransition,
+    /// Unload the game and go to the main menu
+    GoToMainMenu,
     /// Begin a singleplayer game.
     SinglePlayer {},
 }
@@ -57,6 +59,10 @@ fn kickoff_game_transition(
             static ERR_MSG: &str = "Entered game loading transition without loading parameters!";
             error!(ERR_MSG);
             panic!("{}", ERR_MSG);
+        }
+        LoadingTransitionParams::GoToMainMenu => {
+            info!("Shutting down the currently running game");
+            //
         }
         LoadingTransitionParams::SinglePlayer {} => {
             info!("Starting a new single player game");
@@ -106,7 +112,7 @@ fn kickoff_game_transition(
                         let nblocks = registries.block_types.len();
                         info!("Joining server world {uuid} with {nblocks} block types.");
 
-                        anyhow::Ok(IntegBootstrap { registries })
+                        Ok(IntegBootstrap { registries })
                     })
                 })
                 .blocking_wait()
@@ -137,9 +143,8 @@ fn kickoff_game_transition(
             let null_world = EmptyPersistenceLayer::new(BlockEntry::new(air, 0), voxel::ClientChunkData::default());
             let persistence = MemoryPersistenceLayer::new(Box::new(null_world));
 
-            // TODO: fix cloning here
             commands.insert_resource(VoxelUniverse::<ClientData>::new(
-                Arc::new(client_data.shared_registries.block_types.clone()),
+                Arc::clone(&client_data.shared_registries.block_types),
                 Box::new(persistence),
                 voxel::ClientChunkGroupData::default(),
             ));

@@ -302,9 +302,8 @@ impl GameServer {
         }
         persistence.request_save(Box::new([(AbsChunkPos::ZERO, chunk0)]));
 
-        // TODO: fix cloning here
         app.insert_resource(VoxelUniverse::<ServerData>::new(
-            Arc::new(engine.server_data.shared_registries.block_types.clone()),
+            Arc::clone(&engine.server_data.shared_registries.block_types),
             Box::new(persistence),
             (),
         ));
@@ -402,5 +401,7 @@ pub fn builtin_game_registries() -> GameRegistries {
     let mut block_types = Registry::default();
     voxel::blocks::setup_basic_blocks(&mut block_types);
 
-    GameRegistries { block_types }
+    GameRegistries {
+        block_types: Arc::new(block_types),
+    }
 }

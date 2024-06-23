@@ -1,6 +1,8 @@
 //! A collection of all the shared registries that need to match up between server and client.
 //! Server-only and client-only registries are stored in the respective implementations.
 
+use std::sync::Arc;
+
 use crate::registry::RegistryDeserializationError;
 use crate::voxel::voxeltypes::BlockRegistry;
 
@@ -8,7 +10,7 @@ use crate::voxel::voxeltypes::BlockRegistry;
 #[derive(Clone)]
 pub struct GameRegistries {
     /// Block (voxel) type definitions.
-    pub block_types: BlockRegistry,
+    pub block_types: Arc<BlockRegistry>,
 }
 
 impl GameRegistries {
@@ -26,6 +28,8 @@ impl GameRegistries {
         let block_types = self
             .block_types
             .clone_with_serialized_ids(&bundle.get_block_registry()?)?;
-        Ok(Self { block_types })
+        Ok(Self {
+            block_types: Arc::new(block_types),
+        })
     }
 }
