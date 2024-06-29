@@ -6,19 +6,17 @@ use ocg_common::config::{GameConfig, ServerConfig};
 use ocg_common::network::thread::NetworkThread;
 use ocg_common::prelude::std_unbounded_channel;
 use ocg_common::prelude::*;
-use ocg_common::voxel::persistence::empty::EmptyPersistenceLayer;
-use ocg_common::voxel::persistence::memory::MemoryPersistenceLayer;
-use ocg_common::voxel::plugin::VoxelUniverse;
+use ocg_common::voxel::plugin::VoxelUniverseBuilder;
 use ocg_common::{builtin_game_registries, GameServer};
 use ocg_schemas::dependencies::uuid::Uuid;
 use ocg_schemas::registries::GameRegistries;
 use ocg_schemas::schemas::SchemaUuidExt;
-use ocg_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use ocg_schemas::GameSide;
 
 use crate::network::NetworkThreadClientState;
 use crate::states::{ClientAppState, LoadingGameSystemSet};
-use crate::{voxel, ClientData, ClientNetworkThreadHolder, GameClientControlCommandReceiver};
+use crate::voxel::ClientVoxelUniverseBuilder;
+use crate::{ClientData, ClientNetworkThreadHolder, GameClientControlCommandReceiver};
 
 /// The "plugin" implementing the load transition for the game.
 pub struct LoadingGamePlugin;
@@ -49,12 +47,9 @@ struct LoadingPromiseHolder {
     promises: Vec<Box<dyn GenericAsyncResult + Send + Sync>>,
 }
 
-fn kickoff_game_transition(
-    mut next_params: ResMut<LoadingTransitionParams>,
-    mut promises: ResMut<LoadingPromiseHolder>,
-    mut commands: Commands,
-) {
-    match std::mem::take(&mut *next_params) {
+fn kickoff_game_transition(world: &mut World) {
+    let next_params = std::mem::take(&mut *world.resource_mut::<LoadingTransitionParams>());
+    match next_params {
         LoadingTransitionParams::NoTransition => {
             static ERR_MSG: &str = "Entered game loading transition without loading parameters!";
             error!(ERR_MSG);
@@ -81,11 +76,13 @@ fn kickoff_game_transition(
             let (control_tx, control_rx) = std_unbounded_channel();
 
             let net_thread = NetworkThread::new(GameSide::Client, move || NetworkThreadClientState::new(control_tx));
+            let net_thread = Arc::new(net_thread);
 
             struct IntegBootstrap {
                 registries: GameRegistries,
             }
 
+            let net_thread2 = Arc::clone(&net_thread);
             let bootstrap_data = net_thread
                 .schedule_task(|state| {
                     Box::pin(async move {
@@ -93,7 +90,7 @@ fn kickoff_game_transition(
                             .async_wait()
                             .await
                             .context("integ_server.create_local_connection")?;
-                        NetworkThreadClientState::connect_locally(state, local_conn)
+                        NetworkThreadClientState::connect_locally(state, net_thread2, local_conn)
                             .await
                             .context("NetworkThreadClientState::connect_locally")?;
                         let bootstrap_request = state
@@ -122,6 +119,7 @@ fn kickoff_game_transition(
                 shared_registries: bootstrap_data.registries,
             };
 
+            let mut promises = world.resource_mut::<LoadingPromiseHolder>();
             promises.promises.push(Box::new(net_thread.schedule_task(|state| {
                 Box::pin(async move {
                     let auth_rpc = state.borrow().server_auth_rpc().cloned();
@@ -134,24 +132,26 @@ fn kickoff_game_transition(
                 })
             })));
 
-            let air = client_data
-                .shared_registries
-                .block_types
-                .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
+            let block_registry = Arc::clone(&client_data.shared_registries.block_types);
+
+            world.insert_resource(client_data);
+            world.insert_resource(ClientNetworkThreadHolder(Arc::clone(&net_thread)));
+            world.insert_resource(GameClientControlCommandReceiver(SyncCell::new(control_rx)));
+
+            VoxelUniverseBuilder::<ClientData>::new(world, block_registry)
                 .unwrap()
-                .0;
-            let null_world = EmptyPersistenceLayer::new(BlockEntry::new(air, 0), voxel::ClientChunkData::default());
-            let persistence = MemoryPersistenceLayer::new(Box::new(null_world));
+                .with_network_client(&net_thread)
+                .unwrap()
+                .with_client_chunk_system()
+                .build();
 
-            commands.insert_resource(VoxelUniverse::<ClientData>::new(
-                Arc::clone(&client_data.shared_registries.block_types),
-                Box::new(persistence),
-                voxel::ClientChunkGroupData::default(),
-            ));
-
-            commands.insert_resource(client_data);
-            commands.insert_resource(ClientNetworkThreadHolder(net_thread));
-            commands.insert_resource(GameClientControlCommandReceiver(SyncCell::new(control_rx)));
+            let mut promises = world.resource_mut::<LoadingPromiseHolder>();
+            promises.promises.push(Box::new(net_thread.schedule_task(|state| {
+                Box::pin(async move {
+                    NetworkThreadClientState::allow_streams(state).await;
+                    Ok(())
+                })
+            })));
         }
     }
 }

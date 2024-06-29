@@ -14,6 +14,7 @@ use ocg_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
 };
 use ocg_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader, SchemaUuidExt};
+use tokio::sync::Barrier;
 use tokio::task::JoinHandle;
 use tracing::Instrument;
 use uuid::Uuid;
@@ -27,8 +28,8 @@ use crate::{
 };
 
 /// The network thread game server state, accessible from network functions.
-#[derive(Default)]
 pub struct NetworkThreadServerState {
+    ready_to_accept_streams: Option<Arc<Barrier>>,
     free_local_id: i32,
     connected_clients: HashMap<PeerAddress, ConnectedNetClient>,
     bootstrapped_clients: HashMap<PeerAddress, Rc<RefCell<AuthenticatedServer2ClientEndpoint>>>,
@@ -86,6 +87,17 @@ impl NetworkThreadState for NetworkThreadServerState {
 /// The type to connect two local network runtimes together via an in-memory virtual "connection".
 pub type LocalConnectionPipe = (PeerAddress, InProcessDuplex);
 
+impl Default for NetworkThreadServerState {
+    fn default() -> Self {
+        Self {
+            ready_to_accept_streams: Some(Arc::new(Barrier::new(2))),
+            free_local_id: Default::default(),
+            connected_clients: Default::default(),
+            bootstrapped_clients: Default::default(),
+        }
+    }
+}
+
 impl NetworkThreadServerState {
     /// Constructs the server state without starting any listeners.
     pub fn new() -> Self {
@@ -103,6 +115,14 @@ impl NetworkThreadServerState {
         address: PeerAddress,
     ) -> Option<&Rc<RefCell<AuthenticatedServer2ClientEndpoint>>> {
         self.bootstrapped_clients.get(&address)
+    }
+
+    /// Unblocks stream processing, call after all the handlers are registered.
+    pub async fn allow_streams(this: &Rc<RefCell<Self>>) {
+        let barrier = &this.borrow().ready_to_accept_streams.as_ref().map(Arc::clone);
+        if let Some(barrier) = barrier {
+            barrier.wait().await;
+        }
     }
 
     /// Begins listening on the configured endpoints, and starts looking for configuration changes.
@@ -127,10 +147,11 @@ impl NetworkThreadServerState {
 
         let (spipe, cpipe) = InProcessDuplex::new_pair();
         let rpc_server = create_local_rpc_server(this_ptr.clone(), Arc::clone(&engine), spipe.rpc_pipe, peer);
-        let rpc_listener = Self::local_listener_task(peer, engine, rpc_server)
+        let rpc_listener = Self::local_listener_task(peer, Arc::clone(&engine), rpc_server)
             .instrument(tracing::info_span!("server-rpc", address = ?peer));
-        let stream_listener = Self::local_stream_task(peer, spipe.incoming_streams)
-            .instrument(tracing::info_span!("server-stream", address = ?peer));
+        let stream_listener =
+            Self::local_stream_task(Rc::clone(this_ptr), Arc::clone(&engine), peer, spipe.incoming_streams)
+                .instrument(tracing::info_span!("server-stream", address = ?peer));
 
         let rpc_task = tokio::task::spawn_local(rpc_listener);
         let stream_task = tokio::task::spawn_local(stream_listener);
@@ -229,12 +250,27 @@ impl NetworkThreadServerState {
     }
 
     async fn local_stream_task(
+        this: Rc<RefCell<Self>>,
+        engine: Arc<GameServer>,
         _addr: PeerAddress,
         mut incoming_streams: AsyncUnboundedReceiver<InProcessStream>,
     ) -> Result<()> {
+        let barrier = Arc::clone(this.borrow().ready_to_accept_streams.as_ref().unwrap());
+        barrier.wait().await;
+        this.borrow_mut().ready_to_accept_streams = None;
         while let Some(stream) = incoming_streams.recv().await {
-            // Currently we have no client->server streams to handle.
-            drop(stream);
+            let handler = engine.network_thread.create_stream_handler(Rc::clone(&this), stream);
+            match handler {
+                Ok(handler) => {
+                    tokio::task::spawn_local(handler);
+                }
+                Err(stream) => {
+                    error!(
+                        "No stream handler found for incoming client stream of type {:?}",
+                        stream.header
+                    );
+                }
+            }
         }
         Ok(())
     }

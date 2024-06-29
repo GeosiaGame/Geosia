@@ -5,10 +5,13 @@ use std::pin::Pin;
 use std::thread::JoinHandle;
 
 use futures::FutureExt;
+use hashbrown::HashMap;
+use ocg_schemas::schemas::NetworkStreamHeader;
 use ocg_schemas::GameSide;
 use thiserror::Error;
 use tokio::task::LocalSet;
 
+use super::transport::InProcessStream;
 use crate::prelude::*;
 
 /// A wrapper for a tokio runtime, allowing for easy scheduling of tasks to run within the context of the network thread.
@@ -17,6 +20,7 @@ pub struct NetworkThread<State> {
     side: GameSide,
     tokio_thread: JoinHandle<()>,
     channel: AsyncUnboundedSender<NetworkThreadCommand<State>>,
+    new_stream_handler: Mutex<HashMap<NetworkStreamHeader, Box<NetworkThreadStreamHandler<State>>>>,
 }
 
 /// Trait that needs to be implemented for the state object of the network thread.
@@ -27,8 +31,12 @@ pub trait NetworkThreadState: 'static {
 
 /// A boxed future that can be queued on the network thread's tokio LocalSet.
 pub type NetworkThreadAsyncFuture<'state, Output = ()> = Pin<Box<dyn Future<Output = Output> + 'state>>;
-type NetworkThreadAsyncFunction<State> =
+/// A future factory function used for network thread tasks.
+pub type NetworkThreadAsyncFunction<State> =
     dyn for<'state> FnOnce(&'state Rc<RefCell<State>>) -> NetworkThreadAsyncFuture<'state> + Send + 'static;
+/// Handler for newly opened async streams.
+pub type NetworkThreadStreamHandler<State> =
+    dyn FnMut(Rc<RefCell<State>>, InProcessStream) -> NetworkThreadAsyncFuture<'static> + Send + 'static;
 
 enum NetworkThreadCommand<State> {
     Shutdown(AsyncOneshotSender<()>),
@@ -62,6 +70,7 @@ impl<State: NetworkThreadState> NetworkThread<State> {
             side,
             tokio_thread,
             channel: net_tx,
+            new_stream_handler: Mutex::new(HashMap::with_capacity(32)),
         }
     }
 
@@ -112,6 +121,26 @@ impl<State: NetworkThreadState> NetworkThread<State> {
         self.channel
             .send(NetworkThreadCommand::RunAsyncInLocalSet(function))
             .or(Err(NetworkThreadCommandError::NetworkThreadTerminated(self.side)))
+    }
+
+    /// Registers a new stream type handler for the given header, overwrites any previous handler with the same header.
+    pub fn insert_stream_handler(&self, header: NetworkStreamHeader, function: Box<NetworkThreadStreamHandler<State>>) {
+        let mut map = self.new_stream_handler.lock().unwrap();
+        map.insert(header, function);
+    }
+
+    /// Creates a stream handler future by looking up the matching factory function, or returns Err if none were registered for this header.
+    pub fn create_stream_handler(
+        &self,
+        state: Rc<RefCell<State>>,
+        stream: InProcessStream,
+    ) -> Result<NetworkThreadAsyncFuture<'static>, InProcessStream> {
+        let mut factory = self.new_stream_handler.lock().unwrap();
+        let factory = factory.get_mut(&stream.header);
+        match factory {
+            Some(factory) => Ok(factory(state, stream)),
+            None => Err(stream),
+        }
     }
 
     fn thread_main(

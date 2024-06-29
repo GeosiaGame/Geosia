@@ -25,9 +25,9 @@ pub mod voxel;
 /// Used to inject side-specific data into common data structures.
 pub trait OcgExtraData: Send + Sync + 'static {
     /// Per-chunk data
-    type ChunkData: Clone + Send + Sync + 'static;
+    type ChunkData: Default + Clone + Send + Sync + 'static;
     /// Per-chunk group data
-    type GroupData: Clone + Send + Sync + 'static;
+    type GroupData: Default + Clone + Send + Sync + 'static;
 
     /// The associated game side.
     fn side() -> GameSide;

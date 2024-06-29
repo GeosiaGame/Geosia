@@ -36,6 +36,7 @@ use ocg_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use ocg_schemas::{GameSide, OcgExtraData};
 use rand::{Rng, SeedableRng};
 use tokio_util::bytes::Bytes;
+use voxel::plugin::VoxelUniverseBuilder;
 
 use crate::config::{GameConfig, GameConfigHandle};
 use crate::network::server::{ConnectedPlayer, LocalConnectionPipe, NetworkServerPlugin, NetworkThreadServerState};
@@ -279,7 +280,7 @@ impl GameServer {
             .lookup_name_to_object(GRASS_BLOCK_NAME.as_ref())
             .unwrap()
             .0;
-        let null_world = EmptyPersistenceLayer::new(BlockEntry::new(air, 0), ());
+        let null_world = EmptyPersistenceLayer::<ServerData>::new(BlockEntry::new(air, 0), ());
         let mut persistence = MemoryPersistenceLayer::new(Box::new(null_world));
         persistence.request_load(&[AbsChunkPos::ZERO]);
         let mut chunk0_s = persistence
@@ -307,12 +308,7 @@ impl GameServer {
             }
         }
         persistence.request_save(Box::new([(AbsChunkPos::ZERO, chunk0_s)]));
-
-        app.insert_resource(VoxelUniverse::<ServerData>::new(
-            Arc::clone(&engine.server_data.shared_registries.block_types),
-            Box::new(persistence),
-            (),
-        ));
+        let block_registry = Arc::clone(&engine.server_data.shared_registries.block_types);
 
         fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {
             app.configure_sets(schedule, InGameSystemSet);
@@ -328,6 +324,12 @@ impl GameServer {
         app.insert_resource(GameServerControlCommandReceiver(SyncCell::new(ctrl_rx)));
         app.insert_resource(GameServerResource(engine));
 
+        VoxelUniverseBuilder::<ServerData>::new(&mut app.world, block_registry)
+            .unwrap()
+            .with_persistent_storage(Box::new(persistence))
+            .unwrap()
+            .build();
+
         app.add_systems(Startup, Self::network_startup_system);
         app.add_systems(FixedPostUpdate, Self::control_command_handler_system);
         app.add_systems(FixedUpdate, Self::send_new_players_chunks_system);
@@ -340,7 +342,13 @@ impl GameServer {
         let net_engine = Arc::clone(engine);
         engine
             .network_thread
-            .schedule_task(move |state| Box::pin(NetworkThreadServerState::bootstrap(state, net_engine)))
+            .schedule_task(move |state| {
+                Box::pin(async move {
+                    NetworkThreadServerState::bootstrap(state, net_engine).await?;
+                    NetworkThreadServerState::allow_streams(state).await;
+                    Ok(())
+                })
+            })
             .blocking_wait()
             .unwrap();
     }
@@ -348,11 +356,12 @@ impl GameServer {
     // temporary testing stuff to send some chunk data to the client
     fn send_new_players_chunks_system(
         engine: Res<GameServerResource>,
-        voxels: Res<VoxelUniverse<ServerData>>,
+        voxels: Query<&VoxelUniverse<ServerData>>,
         new_players: Query<&ConnectedPlayer, Added<ConnectedPlayer>>,
     ) {
         let engine = &engine.into_inner().0;
-        let chunk0 = voxels.chunk_loader.try_get_loaded_chunk(AbsChunkPos::ZERO).unwrap();
+        let Ok(voxels) = voxels.get_single() else { return };
+        let chunk0 = voxels.loaded_chunks().get_chunk(AbsChunkPos::ZERO).unwrap();
         let mut builder = TypedBuilder::<rpc::chunk_data_stream_packet::Owned>::new_default();
         let mut root = builder.init_root();
         let mut position = root.reborrow().init_position();

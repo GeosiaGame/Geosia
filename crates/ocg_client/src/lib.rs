@@ -143,7 +143,7 @@ pub fn client_main() {
 struct GameClientControlCommandReceiver(SyncCell<StdUnboundedReceiver<Box<GameBevyCommand>>>);
 
 #[derive(Resource)]
-struct ClientNetworkThreadHolder(NetworkThread<NetworkThreadClientState>);
+struct ClientNetworkThreadHolder(Arc<NetworkThread<NetworkThreadClientState>>);
 
 fn control_command_handler_system(world: &mut World) {
     let pending_cmds: SmallVec<[Box<GameBevyCommand>; 32]> = {

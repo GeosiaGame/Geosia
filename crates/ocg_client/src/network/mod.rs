@@ -1,35 +1,25 @@
 //! The network client thread implementation.
 
-use bevy::log::{error, info, warn};
-use bevy::prelude::*;
+use bevy::log::*;
 use capnp::capability::Promise;
-use capnp::message::TypedReader;
 use capnp::Error;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::{VatId, VatNetwork};
 use capnp_rpc::{pry, Disconnector, RpcSystem};
 use ocg_common::network::server::LocalConnectionPipe;
-use ocg_common::network::thread::NetworkThreadState;
+use ocg_common::network::thread::{NetworkThread, NetworkThreadState};
 use ocg_common::network::transport::{InProcessStream, RPC_LOCAL_READER_OPTIONS};
 use ocg_common::network::PeerAddress;
 use ocg_common::prelude::*;
-use ocg_common::voxel::plugin::VoxelUniverse;
-use ocg_schemas::coordinates::{AbsChunkPos, RelChunkPos};
-use ocg_schemas::dependencies::itertools::iproduct;
-use ocg_schemas::mutwatcher::MutWatcher;
 use ocg_schemas::schemas::network_capnp as rpc;
 use ocg_schemas::schemas::network_capnp::authenticated_client_connection::{
     AddChatMessageParams, AddChatMessageResults, TerminateConnectionParams, TerminateConnectionResults,
 };
-use ocg_schemas::schemas::NetworkStreamHeader;
-use ocg_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
+use tokio::sync::Barrier;
 use tokio::task::{spawn_local, JoinHandle};
-use tokio_util::bytes::Bytes;
 use tracing::Instrument;
 
-use crate::voxel::meshgen::mesh_from_chunk;
-use crate::voxel::{ClientChunk, ClientChunkGroup};
-use crate::{ClientData, GameControlChannel};
+use crate::GameControlChannel;
 
 /// Pre-authentication
 pub struct NetworkThreadClientConnectingState {
@@ -71,9 +61,10 @@ pub enum NetworkThreadClientStateVariant {
 /// The network thread game client state, accessible from network functions.
 pub struct NetworkThreadClientState {
     /// Channel for communicating with the client bevy instance
-    game_control: GameControlChannel,
+    _game_control: GameControlChannel,
     /// The current variant storage.
     variant: NetworkThreadClientStateVariant,
+    ready_to_accept_streams: Option<Arc<Barrier>>,
 }
 
 impl NetworkThreadState for NetworkThreadClientState {
@@ -98,8 +89,17 @@ impl NetworkThreadClientState {
     /// Constructor.
     pub fn new(game_control: GameControlChannel) -> Self {
         Self {
-            game_control,
+            _game_control: game_control,
             variant: Default::default(),
+            ready_to_accept_streams: Some(Arc::new(Barrier::new(2))),
+        }
+    }
+
+    /// Unblocks stream processing, call after all the handlers are registered.
+    pub async fn allow_streams(this: &Rc<RefCell<Self>>) {
+        let barrier = &this.borrow().ready_to_accept_streams.as_ref().map(Arc::clone);
+        if let Some(barrier) = barrier {
+            barrier.wait().await;
         }
     }
 
@@ -149,7 +149,11 @@ impl NetworkThreadClientState {
     }
 
     /// Initiates a new local connection on the given pipe.
-    pub async fn connect_locally(this: &Rc<RefCell<Self>>, (address, pipe): LocalConnectionPipe) -> Result<()> {
+    pub async fn connect_locally(
+        this: &Rc<RefCell<Self>>,
+        net_thread: Arc<NetworkThread<NetworkThreadClientState>>,
+        (address, pipe): LocalConnectionPipe,
+    ) -> Result<()> {
         if let Some(existing_connection) = this.borrow().peer_address() {
             return Err(anyhow!("Already connected to {existing_connection:?}"));
         }
@@ -195,7 +199,7 @@ impl NetworkThreadClientState {
         );
 
         let stream_task: JoinHandle<Result<()>> = spawn_local(
-            Self::local_stream_acceptor(Rc::clone(this), pipe.incoming_streams)
+            Self::local_stream_acceptor(Rc::clone(this), Arc::clone(&net_thread), pipe.incoming_streams)
                 .instrument(tracing::info_span!("client-stream", address = ?address)),
         );
 
@@ -217,99 +221,27 @@ impl NetworkThreadClientState {
 
     async fn local_stream_acceptor(
         this: Rc<RefCell<Self>>,
+        net_thread: Arc<NetworkThread<NetworkThreadClientState>>,
         mut incoming_streams: AsyncUnboundedReceiver<InProcessStream>,
     ) -> Result<()> {
+        let barrier = Arc::clone(this.borrow().ready_to_accept_streams.as_ref().unwrap());
+        barrier.wait().await;
+        this.borrow_mut().ready_to_accept_streams = None;
+
         while let Some(stream) = incoming_streams.recv().await {
-            use rpc::stream_header::StandardTypes;
-            match stream.header {
-                NetworkStreamHeader::Standard(StandardTypes::ChunkData) => {
-                    spawn_local(Self::chunk_data_handler(Rc::clone(&this), stream));
+            let handler = net_thread.create_stream_handler(Rc::clone(&this), stream);
+            match handler {
+                Ok(handler) => {
+                    spawn_local(handler);
                 }
-                unknown => {
-                    warn!("Unrecognized network stream type {unknown:?}");
-                }
-            }
-        }
-        Ok(())
-    }
-
-    async fn chunk_data_handler(this: Rc<RefCell<Self>>, stream: InProcessStream) {
-        let InProcessStream { mut rx, .. } = stream;
-        while let Some(raw_packet) = rx.recv().await {
-            if let Err(e) = this.borrow().handle_chunk_packet_net(raw_packet) {
-                error!("Error while processing chunk data packet: {e:?}");
-            }
-        }
-    }
-
-    fn handle_chunk_packet_net(&self, raw_packet: Bytes) -> Result<()> {
-        self.game_control
-            .send(Box::new(move |world| {
-                if let Err(e) = Self::handle_chunk_packet_engine(world, raw_packet) {
-                    error!("Could not handle chunk packet: {e:?}");
-                }
-            }))
-            .ok()
-            .context("Game control socket closed")?;
-
-        Ok(())
-    }
-
-    fn handle_chunk_packet_engine(world: &mut World, raw_packet: Bytes) -> Result<()> {
-        let mut slice = &raw_packet as &[u8];
-        let msg = capnp::serialize::read_message_from_flat_slice(&mut slice, RPC_LOCAL_READER_OPTIONS)?;
-        let typed_reader = TypedReader::<_, rpc::chunk_data_stream_packet::Owned>::new(msg);
-        let root = typed_reader.get()?;
-        let cpos_r = root.reborrow().get_position()?;
-        let pos = AbsChunkPos::new(cpos_r.get_x(), cpos_r.get_y(), cpos_r.get_z());
-        let data_r = root.reborrow().get_data()?;
-
-        {
-            let universe = world.get_resource_mut::<VoxelUniverse<ClientData>>();
-            let Some(universe) = universe else {
-                warn!("Missing voxel universe while processing chunk data packet, did the game already shut down?");
-                return Ok(());
-            };
-            // TODO: actually add the chunk to the universe chunk loader
-            let block_registry = Arc::clone(&universe.block_registry);
-            let empty = block_registry
-                .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
-                .context("no empty block")?
-                .0;
-
-            // Just add the chunk mesh directly right now for testing
-            let mut test_chunks = ClientChunkGroup::new();
-            for (cx, cy, cz) in iproduct!(-1..=1, -1..=1, -1..=1) {
-                let cpos = RelChunkPos::new(cx, cy, cz) + pos;
-                let chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
-                test_chunks.chunks.insert(cpos, MutWatcher::new(chunk));
-            }
-            let mid_chunk = ClientChunk::read_full(&data_r, Default::default())?;
-            test_chunks.chunks.insert(pos, MutWatcher::new(mid_chunk));
-
-            let white_material = world.resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
-                base_color: Color::GRAY,
-                ..default()
-            });
-
-            for (pos, _) in test_chunks.chunks.iter() {
-                let chunks = &test_chunks.get_neighborhood_around(*pos).transpose_option();
-                if let Some(chunks) = chunks {
-                    let chunk_mesh = mesh_from_chunk(&block_registry, chunks).unwrap();
-
-                    let mesh = world.resource_mut::<Assets<Mesh>>().add(chunk_mesh);
-
-                    world.spawn(PbrBundle {
-                        mesh,
-                        material: white_material.clone(),
-                        transform: Transform::from_xyz(0.0, 0.0, 0.0),
-                        ..default()
-                    });
+                Err(stream) => {
+                    error!(
+                        "No stream handler found for incoming server stream of type {:?}",
+                        stream.header
+                    );
                 }
             }
         }
-
-        info!("Received chunk packet at position {pos}");
         Ok(())
     }
 }

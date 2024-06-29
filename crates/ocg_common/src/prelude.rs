@@ -13,7 +13,7 @@ pub use std::sync::mpsc::{
 };
 pub use tokio::sync::mpsc::{
     channel as async_bounded_channel, unbounded_channel as async_unbounded_channel, Receiver as AsyncBoundedReceiver,
-    Sender as AsyncBoundedServer, UnboundedReceiver as AsyncUnboundedReceiver, UnboundedSender as AsyncUnboundedSender,
+    Sender as AsyncBoundedSender, UnboundedReceiver as AsyncUnboundedReceiver, UnboundedSender as AsyncUnboundedSender,
 };
 pub use tokio::sync::broadcast::{
     channel as async_broadcast_channel, Receiver as AsyncBroadcastReceiver, Sender as AsyncBroadcastSender,

@@ -2,6 +2,8 @@
 //!
 //! Based on capnproto: https://capnproto.org/language.html, https://docs.rs/capnp/latest/capnp/
 
+use std::hash::Hash;
+
 use uuid::Uuid;
 
 use crate::registry::RegistryName;
@@ -59,6 +61,20 @@ pub enum NetworkStreamHeader {
     Standard(network_capnp::stream_header::StandardTypes),
     /// A custom (modded) stream type.
     Custom(RegistryName),
+}
+
+impl Hash for NetworkStreamHeader {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+        match self {
+            Self::Standard(ty) => {
+                core::mem::discriminant(ty).hash(state);
+            }
+            Self::Custom(nm) => {
+                nm.hash(state);
+            }
+        }
+    }
 }
 
 /// Helpers for (de)serializing stream headers.
