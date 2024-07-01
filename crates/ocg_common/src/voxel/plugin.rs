@@ -67,7 +67,7 @@ pub struct VoxelUniverse<ExtraData: OcgExtraData> {
 /// Persistent storage for chunks, exists alongside VoxelUniverse on servers.
 #[derive(Component)]
 pub struct PersistentVoxelStorage<ExtraData: OcgExtraData> {
-    persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>,
+    _persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>,
 }
 
 /// Network chunk streaming client, exists alongside VoxelUniverse on clients.
@@ -128,7 +128,9 @@ impl<'world, ED: OcgExtraData> VoxelUniverseBuilder<'world, ED> {
             .unwrap();
         universe.loaded_chunks.chunks.insert(resp.0, resp.1);
 
-        self.bundle.insert(PersistentVoxelStorage::<ED> { persistence_layer });
+        self.bundle.insert(PersistentVoxelStorage::<ED> {
+            _persistence_layer: persistence_layer,
+        });
         Ok(self)
     }
 
