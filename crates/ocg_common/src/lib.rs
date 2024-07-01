@@ -335,6 +335,7 @@ impl GameServer {
         app.add_systems(Startup, Self::network_startup_system);
         app.add_systems(FixedPostUpdate, Self::control_command_handler_system);
         app.add_systems(FixedUpdate, Self::send_new_players_chunks_system);
+        info!("Engine thread starting");
         app.run();
         info!("Engine thread terminating");
     }
@@ -342,6 +343,7 @@ impl GameServer {
     fn network_startup_system(engine: Res<GameServerResource>) {
         let engine = &engine.into_inner().0;
         let net_engine = Arc::clone(engine);
+        info!("Bootstrapping network");
         engine
             .network_thread
             .schedule_task(move |state| {
@@ -353,6 +355,7 @@ impl GameServer {
             })
             .blocking_wait()
             .unwrap();
+        info!("Bootstrapping network done");
     }
 
     // temporary testing stuff to send some chunk data to the client
@@ -409,6 +412,7 @@ impl GameServer {
         for cmd in pending_cmds {
             match cmd {
                 GameServerControlCommand::Shutdown(notif) => {
+                    info!("Engine thread shutdown command received");
                     let engine: &GameServerResource = world.resource();
                     let engine = &engine.0;
                     engine.network_thread.sync_shutdown();

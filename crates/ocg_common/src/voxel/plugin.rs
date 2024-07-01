@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use bevy::render::extract_resource::ExtractResource;
 use ocg_schemas::coordinates::AbsChunkPos;
 use ocg_schemas::schemas::network_capnp::stream_header::StandardTypes;
 use ocg_schemas::schemas::NetworkStreamHeader;
@@ -79,7 +78,7 @@ pub struct NetworkVoxelClient<ExtraData: OcgExtraData> {
 }
 
 /// The bevy [`Resource`] for shared voxel registry access from systems.
-#[derive(Resource, ExtractResource, Clone, Deref)]
+#[derive(Resource, Clone, Deref)]
 pub struct BlockRegistryHolder(pub Arc<BlockRegistry>);
 
 /// Builder for voxel universe initialization

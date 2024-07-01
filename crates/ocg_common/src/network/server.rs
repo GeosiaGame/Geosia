@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
+use std::sync::Condvar;
 
 use bevy::log;
 use bevy::prelude::*;
@@ -14,7 +15,6 @@ use ocg_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
 };
 use ocg_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader, SchemaUuidExt};
-use tokio::sync::Barrier;
 use tokio::task::JoinHandle;
 use tracing::Instrument;
 use uuid::Uuid;
@@ -29,7 +29,7 @@ use crate::{
 
 /// The network thread game server state, accessible from network functions.
 pub struct NetworkThreadServerState {
-    ready_to_accept_streams: Option<Arc<Barrier>>,
+    ready_to_accept_streams: Arc<(Mutex<bool>, Condvar)>,
     free_local_id: i32,
     connected_clients: HashMap<PeerAddress, ConnectedNetClient>,
     bootstrapped_clients: HashMap<PeerAddress, Rc<RefCell<AuthenticatedServer2ClientEndpoint>>>,
@@ -90,7 +90,7 @@ pub type LocalConnectionPipe = (PeerAddress, InProcessDuplex);
 impl Default for NetworkThreadServerState {
     fn default() -> Self {
         Self {
-            ready_to_accept_streams: Some(Arc::new(Barrier::new(2))),
+            ready_to_accept_streams: Arc::new((Mutex::new(false), Condvar::new())),
             free_local_id: Default::default(),
             connected_clients: Default::default(),
             bootstrapped_clients: Default::default(),
@@ -119,10 +119,9 @@ impl NetworkThreadServerState {
 
     /// Unblocks stream processing, call after all the handlers are registered.
     pub async fn allow_streams(this: &Rc<RefCell<Self>>) {
-        let barrier = &this.borrow().ready_to_accept_streams.as_ref().map(Arc::clone);
-        if let Some(barrier) = barrier {
-            barrier.wait().await;
-        }
+        let flag = Arc::clone(&this.borrow().ready_to_accept_streams);
+        *flag.0.lock().unwrap() = true;
+        flag.1.notify_all();
     }
 
     /// Begins listening on the configured endpoints, and starts looking for configuration changes.
@@ -255,9 +254,8 @@ impl NetworkThreadServerState {
         _addr: PeerAddress,
         mut incoming_streams: AsyncUnboundedReceiver<InProcessStream>,
     ) -> Result<()> {
-        let barrier = Arc::clone(this.borrow().ready_to_accept_streams.as_ref().unwrap());
-        barrier.wait().await;
-        this.borrow_mut().ready_to_accept_streams = None;
+        let flag = Arc::clone(&this.borrow().ready_to_accept_streams);
+        drop(flag.1.wait_while(flag.0.lock().unwrap(), |allowed| !*allowed).unwrap());
         while let Some(stream) = incoming_streams.recv().await {
             let handler = engine.network_thread.create_stream_handler(Rc::clone(&this), stream);
             match handler {
