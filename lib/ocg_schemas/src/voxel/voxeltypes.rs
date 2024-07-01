@@ -33,6 +33,20 @@ impl BlockEntry {
     pub fn lookup(self, registry: &BlockRegistry) -> Option<&BlockDefinition> {
         registry.lookup_id_to_object(self.id)
     }
+
+    /// Packs the block entry into a single u64 for serialization.
+    pub fn as_packed(self) -> u64 {
+        let id = self.id.0.get() as u64;
+        let meta = self.metadata as u64;
+        (id << 32) | meta
+    }
+
+    /// Unpacks a block entry from a serialized u64. Returns None when the ID is an invalid zero.
+    pub fn from_packed(packed: u64) -> Option<Self> {
+        let id = ((packed >> 32) & 0xFFFF_FFFF) as u32;
+        let meta = (packed & 0xFFFF_FFFF) as u32;
+        Some(Self::new(RegistryId::try_from(id).ok()?, meta))
+    }
 }
 
 impl Debug for BlockEntry {

@@ -30,9 +30,9 @@ use voronoice::*;
 use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME, RIVER_BIOME_NAME};
 
 /// World size of the +X & +Z axis, in chunks.
-pub const WORLD_SIZE_XZ: i32 = 8;
+pub const WORLD_SIZE_XZ: i32 = 1;
 /// World size of the +Y axis, in chunks.
-pub const WORLD_SIZE_Y: i32 = 4;
+pub const WORLD_SIZE_Y: i32 = 1;
 
 const TRIANGLE_VERTICES: [(usize, usize); 3] = [(0, 1), (1, 2), (2, 0)];
 const LAKE_TRESHOLD: f64 = 0.3;
@@ -100,9 +100,9 @@ impl StdGenerator {
     pub fn generate_world_biomes(&mut self, biome_registry: &BiomeRegistry) {
         // initialize generatable biomes
         let mut biomes: Vec<(RegistryId, BiomeDefinition)> = Vec::new();
-        for def in biome_registry.get_objects_ids().iter() {
-            if def.1.can_generate {
-                biomes.push((*def.0, def.1.to_owned()));
+        for (id, _name, def) in biome_registry.iter() {
+            if def.can_generate {
+                biomes.push((id, def.to_owned()));
             }
         }
         self.biome_map.generatable_biomes = biomes;
@@ -189,8 +189,8 @@ impl StdGenerator {
             biomes.sort_by(|a, b| {
                 a.1.partial_cmp(&b.1).unwrap_or_else(|| {
                     biome_registry
-                        .lookup_object_to_id(a.0)
-                        .cmp(&biome_registry.lookup_object_to_id(b.0))
+                        .search_object_to_id(a.0)
+                        .cmp(&biome_registry.search_object_to_id(b.0))
                 })
             });
 

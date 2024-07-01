@@ -1,10 +1,15 @@
 #![warn(missing_docs)]
-#![deny(clippy::disallowed_types)]
+#![deny(
+    clippy::disallowed_types,
+    clippy::await_holding_refcell_ref,
+    clippy::await_holding_lock
+)]
 #![allow(clippy::type_complexity)]
 
 //! The clientside of OpenCubeGame
 mod debugcam;
 pub mod network;
+pub mod states;
 mod voronoi_renderer;
 pub mod voxel;
 
@@ -12,6 +17,7 @@ use bevy::a11y::AccessibilityPlugin;
 use bevy::audio::AudioPlugin;
 use bevy::core_pipeline::CorePipelinePlugin;
 use bevy::diagnostic::DiagnosticsPlugin;
+use bevy::ecs::schedule::ScheduleLabel;
 use bevy::gltf::GltfPlugin;
 use bevy::input::InputPlugin;
 use bevy::pbr::PbrPlugin;
@@ -20,79 +26,57 @@ use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::RenderPlugin;
 use bevy::scene::ScenePlugin;
 use bevy::sprite::SpritePlugin;
+use bevy::state::app::StatesPlugin;
 use bevy::text::TextPlugin;
 use bevy::time::TimePlugin;
 use bevy::ui::UiPlugin;
+use bevy::utils::synccell::SyncCell;
 use bevy::window::{ExitCondition, PresentMode};
 use bevy::winit::WinitPlugin;
-use ocg_common::config::{GameConfig, ServerConfig};
+use bevy_egui::EguiPlugin;
 use ocg_common::network::thread::NetworkThread;
 use ocg_common::prelude::*;
-use ocg_common::GameServer;
+use ocg_common::voxel::plugin::VoxelUniversePlugin;
+use ocg_common::{GameBevyCommand, GAME_BRAND_NAME};
+use ocg_schemas::dependencies::smallvec::SmallVec;
+use ocg_schemas::registries::GameRegistries;
 use ocg_schemas::{GameSide, OcgExtraData};
+use states::{ClientAppState, InGameSystemSet, LoadingGameSystemSet, MainMenuSystemSet};
 
 use crate::network::NetworkThreadClientState;
 
 /// An [`OcgExtraData`] implementation containing the client-side data for the game engine.
-pub struct ClientData;
+#[derive(Resource)]
+pub struct ClientData {
+    /// Shared client/server registries.
+    pub shared_registries: GameRegistries,
+}
 
 impl OcgExtraData for ClientData {
     type ChunkData = voxel::ClientChunkData;
-    type GroupData = ();
+    type GroupData = voxel::ClientChunkGroupData;
+
+    fn side() -> GameSide {
+        GameSide::Client
+    }
 }
+
+/// Channel for executing commands on the client bevy App.
+pub type GameControlChannel = StdUnboundedSender<Box<GameBevyCommand>>;
 
 /// The entry point to the client executable
 pub fn client_main() {
-    // Unset the manifest dir to make bevy load assets from the workspace root
-    std::env::set_var("CARGO_MANIFEST_DIR", "");
-
-    let game_config = GameConfig {
-        server: ServerConfig {
-            server_title: String::from("Integrated server"),
-            ..Default::default()
-        },
-    };
-    let game_config = GameConfig::new_handle(game_config);
-    let integ_server = GameServer::new(game_config).expect("Could not start integrated server");
-    integ_server.set_paused(false);
-    let server_pipe = integ_server
-        .create_local_connection()
-        .expect("Could not create an integrated server connection");
-
-    let net_thread = NetworkThread::new(GameSide::Client, NetworkThreadClientState::default);
-    net_thread
-        .exec_async_await(|state| {
-            Box::pin(async move {
-                NetworkThreadClientState::connect_locally(
-                    state,
-                    server_pipe.await.context("integ_server.create_local_connection")?,
-                )
-                .await
-                .context("NetworkThreadClientState::connect_locally")
-            })
-        })
-        .expect("Could not connect the client to the integrated server")
-        .expect("Could not connect the client to the integrated server");
-
-    net_thread
-        .exec_async(|state| {
-            Box::pin(async move {
-                let auth_rpc = state.borrow().server_auth_rpc().cloned();
-                if let Some(auth_rpc) = auth_rpc {
-                    let mut rq = auth_rpc.send_chat_message_request();
-                    rq.get().set_text("Hello in-process networking!");
-                    let _ = rq.send().promise.await;
-                }
-            })
-        })
-        .expect("Could not send message");
-
-    // let integ_conn = integ_server
+    // Safety: no other threads should be running at this point.
+    unsafe {
+        // Unset the manifest dir to make bevy load assets from the workspace root
+        std::env::set_var("CARGO_MANIFEST_DIR", "");
+    }
 
     let mut app = App::new();
     // Bevy Base
     app.add_plugins(TaskPoolPlugin::default())
         .add_plugins(TypeRegistrationPlugin)
+        .add_plugins(StatesPlugin)
         .add_plugins(FrameCountPlugin)
         .add_plugins(TimePlugin)
         .add_plugins(TransformPlugin)
@@ -101,7 +85,7 @@ pub fn client_main() {
         .add_plugins(InputPlugin)
         .add_plugins(WindowPlugin {
             primary_window: Some(Window {
-                title: "OpenCubeGame".to_string(),
+                title: GAME_BRAND_NAME.to_string(),
                 present_mode: PresentMode::AutoNoVsync,
                 ..default()
             }),
@@ -111,7 +95,7 @@ pub fn client_main() {
         .add_plugins(AccessibilityPlugin)
         .add_plugins(AssetPlugin::default())
         .add_plugins(ScenePlugin)
-        .add_plugins(WinitPlugin::default())
+        .add_plugins(WinitPlugin::<bevy::winit::WakeUp>::default())
         .add_plugins(RenderPlugin::default())
         .add_plugins(ImagePlugin::default())
         .add_plugins(PipelinedRenderingPlugin)
@@ -123,12 +107,56 @@ pub fn client_main() {
         .add_plugins(AudioPlugin::default())
         .add_plugins(GilrsPlugin)
         .add_plugins(AnimationPlugin)
-        .add_plugins(GltfPlugin::default())
-        .add_plugins(debugcam::PlayerPlugin);
+        .add_plugins(GltfPlugin::default());
+    // Bevy plugins
+    app.add_plugins(EguiPlugin);
+
+    app.init_state::<ClientAppState>();
+    fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {
+        app.configure_sets(
+            schedule,
+            (
+                MainMenuSystemSet.run_if(in_state(ClientAppState::MainMenu)),
+                LoadingGameSystemSet.run_if(in_state(ClientAppState::LoadingGame)),
+                InGameSystemSet.run_if(in_state(ClientAppState::InGame)),
+            ),
+        );
+    }
+    configure_sets(&mut app, PreUpdate);
+    configure_sets(&mut app, Update);
+    configure_sets(&mut app, PostUpdate);
+    configure_sets(&mut app, FixedPreUpdate);
+    configure_sets(&mut app, FixedUpdate);
+    configure_sets(&mut app, FixedPostUpdate);
+
+    app.add_plugins(debugcam::PlayerPlugin)
+        .add_plugins(VoxelUniversePlugin::<ClientData>::new())
+        .add_plugins(states::main_menu::MainMenuPlugin)
+        .add_plugins(states::loading_game::LoadingGamePlugin)
+        .add_plugins(states::in_game::InGamePlugin);
 
     app.add_plugins(debug_window::DebugWindow);
+    app.add_systems(PostUpdate, control_command_handler_system);
 
     app.run();
+}
+
+#[derive(Resource)]
+struct GameClientControlCommandReceiver(SyncCell<StdUnboundedReceiver<Box<GameBevyCommand>>>);
+
+#[derive(Resource)]
+struct ClientNetworkThreadHolder(Arc<NetworkThread<NetworkThreadClientState>>);
+
+fn control_command_handler_system(world: &mut World) {
+    let pending_cmds: SmallVec<[Box<GameBevyCommand>; 32]> = {
+        let Some(mut ctrl_rx) = world.get_resource_mut::<GameClientControlCommandReceiver>() else {
+            return;
+        };
+        SmallVec::from_iter(ctrl_rx.as_mut().0.get().try_iter())
+    };
+    for cmd in pending_cmds {
+        cmd(world);
+    }
 }
 
 mod debug_window {
@@ -137,18 +165,11 @@ mod debug_window {
     use bevy::log;
     use bevy::prelude::*;
     use ocg_common::voxel::biomes::setup_basic_biomes;
-    use ocg_common::voxel::blocks::setup_basic_blocks;
     use ocg_common::voxel::generator::StdGenerator;
     use ocg_common::voxel::generator::WORLD_SIZE_XZ;
-    use ocg_common::voxel::generator::WORLD_SIZE_Y;
-    use ocg_schemas::coordinates::AbsChunkPos;
-    use ocg_schemas::dependencies::itertools::iproduct;
     use ocg_schemas::voxel::biome::BiomeRegistry;
-    use ocg_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME};
 
     use crate::voronoi_renderer;
-    use crate::voxel::meshgen::mesh_from_chunk;
-    use crate::voxel::{ClientChunk, ClientChunkGroup};
 
     pub struct DebugWindow;
 
@@ -158,25 +179,9 @@ mod debug_window {
         }
     }
 
-    fn debug_window_setup(
-        mut commands: Commands,
-        asset_server: Res<AssetServer>,
-        mut images: ResMut<Assets<Image>>,
-        mut meshes: ResMut<Assets<Mesh>>,
-        mut materials: ResMut<Assets<StandardMaterial>>,
-    ) {
+    fn debug_window_setup(mut commands: Commands, asset_server: Res<AssetServer>, mut images: ResMut<Assets<Image>>) {
         log::warn!("Setting up debug window");
-        let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
-
-        let white_material = materials.add(StandardMaterial {
-            base_color: Color::GRAY,
-            ..default()
-        });
-
-        let mut block_reg = BlockRegistry::default();
-        setup_basic_blocks(&mut block_reg);
-        let block_reg = block_reg;
-        let (empty, _) = block_reg.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
+        let _ = asset_server.load::<Font>("fonts/cascadiacode.ttf");
 
         let mut biome_reg = BiomeRegistry::default();
         setup_basic_biomes(&mut biome_reg);
@@ -185,7 +190,7 @@ mod debug_window {
         let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4);
         generator.generate_world_biomes(&biome_reg);
         let world_size_blocks = generator.size_blocks_xz() as usize;
-        let img_handle = images.add(voronoi_renderer::draw_voronoi(
+        images.add(voronoi_renderer::draw_voronoi(
             &generator,
             &biome_reg,
             world_size_blocks,
@@ -193,31 +198,6 @@ mod debug_window {
         ));
 
         let start = Instant::now();
-
-        let mut test_chunks = ClientChunkGroup::new();
-        for (cx, cy, cz) in iproduct!(
-            -WORLD_SIZE_XZ..=WORLD_SIZE_XZ,
-            -WORLD_SIZE_Y..=WORLD_SIZE_Y,
-            -WORLD_SIZE_XZ..=WORLD_SIZE_XZ
-        ) {
-            let cpos = AbsChunkPos::new(cx, cy, cz);
-            let mut chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
-            generator.generate_chunk(cpos, &mut chunk.blocks, &block_reg, &biome_reg);
-            test_chunks.chunks.insert(cpos, chunk);
-        }
-        for (pos, _) in test_chunks.chunks.iter() {
-            let chunks = &test_chunks.get_neighborhood_around(*pos).transpose_option();
-            if let Some(chunks) = chunks {
-                let chunk_mesh = mesh_from_chunk(&block_reg, chunks).unwrap();
-
-                commands.spawn(PbrBundle {
-                    mesh: meshes.add(chunk_mesh),
-                    material: white_material.clone(),
-                    transform: Transform::from_xyz(0.0, 0.0, 0.0),
-                    ..default()
-                });
-            }
-        }
 
         let duration = start.elapsed();
         println!("chunk generation took {:?}", duration);
@@ -228,45 +208,10 @@ mod debug_window {
                 illuminance: 1000.0,
                 ..default()
             },
-            transform: Transform::from_xyz(0., 1000., 0.).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
+            transform: Transform::from_xyz(0., 1000., 0.).looking_at(Vec3::new(300.0, 0.0, 300.0), Vec3::Y),
             ..default()
         });
 
-        commands
-            .spawn(NodeBundle {
-                style: Style {
-                    width: Val::Percent(25.0),
-                    height: Val::Percent(25.0),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    flex_shrink: 0.0,
-                    ..default()
-                },
-                background_color: Color::CRIMSON.into(),
-                ..default()
-            })
-            .with_children(|parent| {
-                parent.spawn(TextBundle::from_section(
-                    "Hello OCG",
-                    TextStyle {
-                        font: font.clone(),
-                        font_size: 75.0,
-                        color: Color::rgb(0.9, 0.9, 0.9),
-                    },
-                ));
-                log::warn!("Child made");
-            });
-
-        commands.spawn(ImageBundle {
-            image: UiImage::new(img_handle),
-            style: Style {
-                width: Val::Px(100.0),
-                height: Val::Px(100.0),
-                flex_shrink: 0.0,
-                ..default()
-            },
-            ..default()
-        });
         log::warn!("Setting up debug window done");
     }
 }

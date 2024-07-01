@@ -1,5 +1,9 @@
 #![warn(missing_docs)]
-#![deny(clippy::disallowed_types)]
+#![deny(
+    clippy::disallowed_types,
+    clippy::await_holding_refcell_ref,
+    clippy::await_holding_lock
+)]
 #![allow(clippy::type_complexity)]
 
 //! The common client&server code for OpenCubeGame
@@ -7,25 +11,44 @@
 pub mod config;
 pub mod network;
 pub mod prelude;
+pub mod promises;
 pub mod voxel;
 
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use bevy::app::AppExit;
+use bevy::app::{AppExit, ScheduleRunnerPlugin};
 use bevy::diagnostic::DiagnosticsPlugin;
+use bevy::ecs::schedule::ScheduleLabel;
 use bevy::prelude::*;
+use bevy::state::app::StatesPlugin;
 use bevy::time::TimePlugin;
-use bevy::utils::smallvec::SmallVec;
 use bevy::utils::synccell::SyncCell;
-use ocg_schemas::voxel::voxeltypes::BlockRegistry;
+use capnp::message::TypedBuilder;
+use ocg_schemas::coordinates::{AbsChunkPos, InChunkPos, InChunkRange};
+use ocg_schemas::dependencies::itertools::iproduct;
+use ocg_schemas::registries::GameRegistries;
+use ocg_schemas::registry::Registry;
+use ocg_schemas::schemas::network_capnp::stream_header::StandardTypes;
+use ocg_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader};
+use ocg_schemas::voxel::chunk_storage::ChunkStorage;
+use ocg_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use ocg_schemas::{GameSide, OcgExtraData};
+use rand::{Rng, SeedableRng};
+use smallvec::SmallVec;
+use tokio_util::bytes::Bytes;
+use voxel::plugin::VoxelUniverseBuilder;
 
 use crate::config::{GameConfig, GameConfigHandle};
-use crate::network::server::{LocalConnectionPipe, NetworkThreadServerState};
-use crate::network::thread::{NetworkThread, NetworkThreadCommandError};
-use crate::network::PeerAddress;
+use crate::network::server::{ConnectedPlayer, LocalConnectionPipe, NetworkServerPlugin, NetworkThreadServerState};
+use crate::network::thread::NetworkThread;
+use crate::network::transport::InProcessStream;
 use crate::prelude::*;
+use crate::voxel::blocks::{DIRT_BLOCK_NAME, GRASS_BLOCK_NAME};
+use crate::voxel::persistence::empty::EmptyPersistenceLayer;
+use crate::voxel::persistence::memory::MemoryPersistenceLayer;
+use crate::voxel::persistence::ChunkPersistenceLayer;
+use crate::voxel::plugin::{VoxelUniverse, VoxelUniversePlugin};
 
 // TODO: Populate these from build/git info
 /// The major SemVer field of the current build's version
@@ -38,6 +61,8 @@ pub static GAME_VERSION_PATCH: u32 = 1;
 pub static GAME_VERSION_BUILD: &str = "todo";
 /// The prerelease SemVer field of the current build's version
 pub static GAME_VERSION_PRERELEASE: &str = "";
+/// The name of the game
+pub static GAME_BRAND_NAME: &str = "OpenCubeGame";
 
 /// Target (maximum) number of game simulation ticks in a second.
 pub const TICKS_PER_SECOND: i32 = 32;
@@ -54,40 +79,45 @@ pub const MICROSECONDS_PER_TICK: i64 = 1_000_000i64 / TICKS_PER_SECOND as i64;
 /// One game tick as a [`Duration`]
 pub const TICK: Duration = Duration::from_micros(MICROSECONDS_PER_TICK as u64);
 
-/// Size in bytes of the internal client-server "socket" buffer.
-const INPROCESS_SOCKET_BUFFER_SIZE: usize = 1024 * 1024;
-
 // Ensure `MICROSECONDS_PER_TICK` is perfectly accurate.
 static_assertions::const_assert_eq!(1_000_000i64 / MICROSECONDS_PER_TICK, TICKS_PER_SECOND as i64);
 
+/// The tag for systems that should run while in game.
+#[derive(SystemSet, Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct InGameSystemSet;
+
 /// An [`OcgExtraData`] implementation containing server-side data for the game engine.
 /// The struct holds server state, the trait points to per chunk/group/etc. data.
-#[derive(Clone)]
 pub struct ServerData {
-    /// A full registry of block types currently in game.
-    pub block_registry: Arc<BlockRegistry>,
+    /// Shared client/server registries.
+    pub shared_registries: GameRegistries,
 }
 
 impl OcgExtraData for ServerData {
     type ChunkData = ();
     type GroupData = ();
+
+    fn side() -> GameSide {
+        GameSide::Server
+    }
 }
 
 /// A command that can be remotely executed on the bevy world.
-pub type GameServerBevyCommand<Output = ()> = dyn (FnOnce(&mut World) -> Output) + Send + 'static;
+pub type GameBevyCommand<Output = ()> = dyn (FnOnce(&mut World) -> Output) + Send + 'static;
 
 /// Control commands for the server, for in-process communication.
 pub enum GameServerControlCommand {
     /// Gracefully shuts down the server, notifies on the given channel when done.
     Shutdown(AsyncOneshotSender<()>),
     /// Queues the given command to run in an exclusive system with full World access.
-    Invoke(Box<GameServerBevyCommand>),
+    Invoke(Box<GameBevyCommand>),
 }
 
 /// A struct to communicate with the "server"-side engine that runs the game simulation.
 /// It has its own bevy App with a very limited set of plugins enabled to be able to run without a graphical user interface.
 pub struct GameServer {
     config: GameConfigHandle,
+    server_data: ServerData,
     engine_thread: JoinHandle<()>,
     network_thread: NetworkThread<NetworkThreadServerState>,
     pause: AtomicBool,
@@ -116,8 +146,13 @@ impl GameServer {
             .spawn(move || GameServer::engine_thread_main(rx, ctrl_rx))
             .expect("Could not create a thread for the engine");
 
+        let server_data = ServerData {
+            shared_registries: builtin_game_registries(),
+        };
+
         let server = Self {
             config,
+            server_data,
             engine_thread,
             network_thread,
             pause: AtomicBool::new(true),
@@ -174,47 +209,29 @@ impl GameServer {
     }
 
     /// Queues the given function to run with exclusive access to the bevy [`World`].
-    pub fn remote_bevy_invoke<BevyCmd: FnOnce(&mut World) + Send + 'static>(&self, cmd: BevyCmd) {
-        self.remote_bevy_invoke_boxed(Box::new(cmd))
-    }
-
-    /// Queues the given function to run with exclusive access to the bevy [`World`], returns a oneshot channel to listen for the return value.
-    pub fn remote_bevy_invoke_await<
-        Output: Send + 'static,
-        BevyCmd: (FnOnce(&mut World) -> Output) + Send + 'static,
+    pub fn schedule_bevy<
+        BevyCmd: (FnOnce(&mut World) -> Result<Output>) + Send + 'static,
+        Output: Send + Sync + 'static,
     >(
         &self,
         cmd: BevyCmd,
-    ) -> AsyncOneshotReceiver<Output> {
-        let (tx, rx) = async_oneshot_channel();
-        self.remote_bevy_invoke_boxed(Box::new(move |world| {
-            let _ = tx.send(cmd(world));
-        }));
-        rx
+    ) -> AsyncResult<Output> {
+        let (result, tx) = AsyncResult::new_pair();
+        self.schedule_bevy_boxed(Box::new(move |world| drop(tx.send(cmd(world)))));
+        result
     }
 
-    /// Non-generic version of [`Self::remote_bevy_invoke`]
-    pub fn remote_bevy_invoke_boxed(&self, cmd: Box<GameServerBevyCommand>) {
+    /// Non-generic version of [`Self::schedule_bevy`]
+    pub fn schedule_bevy_boxed(&self, cmd: Box<GameBevyCommand>) {
         let _ = self.control_channel.send(GameServerControlCommand::Invoke(cmd));
     }
 
     /// Asynchronously creates a new local connection to this server's network runtime.
-    pub fn create_local_connection(
-        self: &Arc<Self>,
-    ) -> Result<AsyncOneshotReceiver<LocalConnectionPipe>, NetworkThreadCommandError> {
+    pub fn create_local_connection(self: &Arc<Self>) -> AsyncResult<LocalConnectionPipe> {
         let inner_engine = Arc::clone(self);
-        let (rtx, rrx) = async_oneshot_channel();
-        self.network_thread.exec_async(move |state| {
-            Box::pin(async move {
-                if let Err(pipe) =
-                    rtx.send(NetworkThreadServerState::accept_local_connection(state, inner_engine).await)
-                {
-                    let addr: PeerAddress = pipe.0;
-                    error!("Could not forward local connection {addr:?}");
-                }
-            })
-        })?;
-        Ok(rrx)
+        self.network_thread.schedule_task(move |state| {
+            Box::pin(NetworkThreadServerState::accept_local_connection(state, inner_engine))
+        })
     }
 
     fn engine_thread_main(
@@ -231,28 +248,160 @@ impl GameServer {
         let mut app = App::new();
         app.add_plugins(TaskPoolPlugin::default())
             .add_plugins(TypeRegistrationPlugin)
+            .add_plugins(StatesPlugin)
             .add_plugins(FrameCountPlugin)
             .add_plugins(TimePlugin)
             .add_plugins(TransformPlugin)
             .add_plugins(HierarchyPlugin)
             .add_plugins(DiagnosticsPlugin)
             .add_plugins(AssetPlugin::default())
-            .add_plugins(AnimationPlugin);
-        app.insert_resource(GameServerResource(engine));
+            .add_plugins(AnimationPlugin)
+            .add_plugins(ScheduleRunnerPlugin::run_loop(TICK));
+
+        app.add_plugins(VoxelUniversePlugin::<ServerData>::new())
+            .add_plugins(NetworkServerPlugin);
+
+        let air = engine
+            .server_data
+            .shared_registries
+            .block_types
+            .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
+            .unwrap()
+            .0;
+        let dirt = engine
+            .server_data
+            .shared_registries
+            .block_types
+            .lookup_name_to_object(DIRT_BLOCK_NAME.as_ref())
+            .unwrap()
+            .0;
+        let grass = engine
+            .server_data
+            .shared_registries
+            .block_types
+            .lookup_name_to_object(GRASS_BLOCK_NAME.as_ref())
+            .unwrap()
+            .0;
+        let null_world = EmptyPersistenceLayer::<ServerData>::new(BlockEntry::new(air, 0), ());
+        let mut persistence = MemoryPersistenceLayer::new(Box::new(null_world));
+        persistence.request_load(&[AbsChunkPos::ZERO]);
+        let mut chunk0_s = persistence
+            .try_dequeue_responses(1)
+            .into_iter()
+            .next()
+            .unwrap()
+            .unwrap()
+            .1;
+        let chunk0 = chunk0_s.mutate_stored();
+        chunk0.blocks.fill(InChunkRange::WHOLE_CHUNK, BlockEntry::new(dirt, 0));
+        chunk0.blocks.fill(
+            InChunkRange::from_corners(
+                InChunkPos::try_new(0, 30, 0).unwrap(),
+                InChunkPos::try_new(31, 31, 31).unwrap(),
+            ),
+            BlockEntry::new(grass, 0),
+        );
+        let mut rng = rand_xoshiro::Xoshiro256StarStar::from_entropy();
+        for (x, y) in iproduct!(0..32, 0..32) {
+            if rng.gen_bool(0.67) {
+                chunk0
+                    .blocks
+                    .put(InChunkPos::try_new(x, 29, y).unwrap(), BlockEntry::new(grass, 0));
+            }
+        }
+        persistence.request_save(Box::new([(AbsChunkPos::ZERO, chunk0_s)]));
+        let block_registry = Arc::clone(&engine.server_data.shared_registries.block_types);
+
+        fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {
+            app.configure_sets(schedule, InGameSystemSet);
+        }
+        configure_sets(&mut app, PreUpdate);
+        configure_sets(&mut app, Update);
+        configure_sets(&mut app, PostUpdate);
+        configure_sets(&mut app, FixedPreUpdate);
+        configure_sets(&mut app, FixedUpdate);
+        configure_sets(&mut app, FixedPostUpdate);
+
         app.insert_resource(Time::<Fixed>::from_duration(TICK));
         app.insert_resource(GameServerControlCommandReceiver(SyncCell::new(ctrl_rx)));
+        app.insert_resource(GameServerResource(engine));
+
+        VoxelUniverseBuilder::<ServerData>::new(app.world_mut(), block_registry)
+            .unwrap()
+            .with_persistent_storage(Box::new(persistence))
+            .unwrap()
+            .build();
+
         app.add_systems(Startup, Self::network_startup_system);
-        app.add_systems(PostUpdate, Self::control_command_handler_system);
+        app.add_systems(FixedPostUpdate, Self::control_command_handler_system);
+        app.add_systems(FixedUpdate, Self::send_new_players_chunks_system);
+        info!("Engine thread starting");
         app.run();
+        info!("Engine thread terminating");
     }
 
     fn network_startup_system(engine: Res<GameServerResource>) {
         let engine = &engine.into_inner().0;
         let net_engine = Arc::clone(engine);
+        info!("Bootstrapping network");
         engine
             .network_thread
-            .exec_async(move |state| Box::pin(NetworkThreadServerState::bootstrap(state, net_engine)))
+            .schedule_task(move |state| {
+                Box::pin(async move {
+                    NetworkThreadServerState::bootstrap(state, net_engine).await?;
+                    NetworkThreadServerState::allow_streams(state).await;
+                    Ok(())
+                })
+            })
+            .blocking_wait()
             .unwrap();
+        info!("Bootstrapping network done");
+    }
+
+    // temporary testing stuff to send some chunk data to the client
+    fn send_new_players_chunks_system(
+        engine: Res<GameServerResource>,
+        voxels: Query<&VoxelUniverse<ServerData>>,
+        new_players: Query<&ConnectedPlayer, Added<ConnectedPlayer>>,
+    ) {
+        let engine = &engine.into_inner().0;
+        let Ok(voxels) = voxels.get_single() else { return };
+        let chunk0 = voxels.loaded_chunks().get_chunk(AbsChunkPos::ZERO).unwrap();
+        let mut builder = TypedBuilder::<rpc::chunk_data_stream_packet::Owned>::new_default();
+        let mut root = builder.init_root();
+        let mut position = root.reborrow().init_position();
+        position.set_x(0);
+        position.set_y(0);
+        position.set_z(0);
+        chunk0.write_full(&mut root.reborrow().init_data());
+        let mut buffer = Vec::new();
+        capnp::serialize::write_message(&mut buffer, builder.borrow_inner()).unwrap();
+        let buffer = Bytes::from(buffer);
+
+        for player in new_players.into_iter() {
+            let addr = player.address;
+            let my_buffer = buffer.clone();
+            engine
+                .network_thread
+                .schedule_task(move |rstate| {
+                    Box::pin(async move {
+                        let state = rstate.borrow();
+                        let Some(peer) = state.find_connected_client(addr) else {
+                            bail!("Cannot find connected client {addr:?} anymore");
+                        };
+                        let chunk_stream = peer
+                            .open_stream(NetworkStreamHeader::Standard(StandardTypes::ChunkData))
+                            .unwrap();
+                        let InProcessStream { tx, .. } = chunk_stream;
+                        info!("Sending {n} bytes of chunk data to {addr:?}", n = my_buffer.len());
+                        tx.send(my_buffer)?;
+                        drop(tx);
+                        Ok(())
+                    })
+                })
+                .blocking_wait()
+                .unwrap();
+        }
     }
 
     fn control_command_handler_system(world: &mut World) {
@@ -263,10 +412,11 @@ impl GameServer {
         for cmd in pending_cmds {
             match cmd {
                 GameServerControlCommand::Shutdown(notif) => {
+                    info!("Engine thread shutdown command received");
                     let engine: &GameServerResource = world.resource();
                     let engine = &engine.0;
                     engine.network_thread.sync_shutdown();
-                    world.send_event(AppExit);
+                    world.send_event(AppExit::Success);
                     let _ = notif.send(());
                 }
                 GameServerControlCommand::Invoke(cmd) => {
@@ -274,5 +424,15 @@ impl GameServer {
                 }
             }
         }
+    }
+}
+
+/// Simple hardcoded registries of some game objects.
+pub fn builtin_game_registries() -> GameRegistries {
+    let mut block_types = Registry::default();
+    voxel::blocks::setup_basic_blocks(&mut block_types);
+
+    GameRegistries {
+        block_types: Arc::new(block_types),
     }
 }

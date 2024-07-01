@@ -1,8 +1,9 @@
 //! A collection of strongly typed newtype wrappers for the various coordinate formats within the game's world and related constants.
 
+use std::fmt::{Display, Formatter};
 use std::ops::{Add, Deref};
 
-use bevy_math::IVec3;
+use bevy_math::{IVec3, UVec3};
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -24,6 +25,27 @@ pub const CHUNK_DIM3: i32 = CHUNK_DIM * CHUNK_DIM * CHUNK_DIM;
 pub const CHUNK_DIM3Z: usize = (CHUNK_DIM * CHUNK_DIM * CHUNK_DIM) as usize;
 /// Chunk dimensions in blocks as a [IVec3] for convenience
 pub const CHUNK_DIM3V: IVec3 = IVec3::splat(CHUNK_DIM);
+/// Maximum block position allowed, +-2^30 or 1 billion blocks to have a safe margin to avoid integer overflows.
+pub const MAX_BLOCK_POS: i32 = 1 << 30;
+/// [`MAX_BLOCK_POS`] converted to the unit of chunks.
+pub const MAX_CHUNK_POS: i32 = MAX_BLOCK_POS / CHUNK_DIM;
+
+/// Converts a 3d vector of ints to a YZX Z-order curve packed 128-bit integer by interleaving the bits.
+/// Provides spatial locality for sorted coordinates.
+/// See [Z-order curves](https://en.wikipedia.org/wiki/Z-order_curve).
+#[inline]
+pub fn zpack_3d(vec: IVec3) -> u128 {
+    let uvec = vec.as_uvec3();
+    zorder::index_of([uvec.y, uvec.z, uvec.x])
+}
+
+/// Restores a 3d vector of ints from a YZX Z-order curve packed 128-bit integer by interleaving the bits.
+/// See [`zpack_3d`].
+#[inline]
+pub fn zunpack_3d(idx: u128) -> IVec3 {
+    let [y, z, x] = zorder::coord_of(idx);
+    UVec3::new(x, y, z).as_ivec3()
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Error)]
 #[error("Given coordinates were outside of chunk boundaries: {0}")]
@@ -92,32 +114,38 @@ macro_rules! impl_simple_ivec3_newtype {
             pub const Z: Self = Self(IVec3::Z);
 
             /// Const-friendly `from<IVec3>`
+            #[inline]
             pub const fn from_ivec3(value: IVec3) -> Self {
                 Self(value)
             }
 
             /// Const-friendly `into<IVec3>`
+            #[inline]
             pub const fn into_ivec3(self) -> IVec3 {
                 self.0
             }
 
             /// Constructs a new [`Self`] from the given coordinates.
+            #[inline]
             pub const fn new(x: i32, y: i32, z: i32) -> Self {
                 Self(IVec3::new(x, y, z))
             }
 
             /// Constructs a new [`Self`] from a given coordinate copied to all dimensions.
+            #[inline]
             pub const fn splat(v: i32) -> Self {
                 Self(IVec3::splat(v))
             }
         }
 
         impl From<IVec3> for $T {
+            #[inline]
             fn from(value: IVec3) -> Self {
                 Self::from_ivec3(value)
             }
         }
         impl From<$T> for IVec3 {
+            #[inline]
             fn from(value: $T) -> IVec3 {
                 value.into_ivec3()
             }
@@ -125,6 +153,7 @@ macro_rules! impl_simple_ivec3_newtype {
         impl std::ops::Deref for $T {
             type Target = IVec3;
 
+            #[inline]
             fn deref(&self) -> &Self::Target {
                 &self.0
             }
@@ -136,18 +165,21 @@ macro_rules! impl_rel_abs_pair {
     ($Rel:ident, $Abs:ident) => {
         impl std::ops::Add<$Rel> for $Rel {
             type Output = $Rel;
+            #[inline]
             fn add(self, rhs: Self) -> Self::Output {
                 $Rel(self.0 + rhs.0)
             }
         }
         impl std::ops::Add<$Abs> for $Rel {
             type Output = $Abs;
+            #[inline]
             fn add(self, rhs: $Abs) -> Self::Output {
                 $Abs(self.0 + rhs.0)
             }
         }
         impl std::ops::Add<$Rel> for $Abs {
             type Output = $Abs;
+            #[inline]
             fn add(self, rhs: $Rel) -> Self::Output {
                 $Abs(self.0 + rhs.0)
             }
@@ -155,18 +187,21 @@ macro_rules! impl_rel_abs_pair {
 
         impl std::ops::Sub<$Rel> for $Rel {
             type Output = $Rel;
+            #[inline]
             fn sub(self, rhs: Self) -> Self::Output {
                 $Rel(self.0 - rhs.0)
             }
         }
         impl std::ops::Sub<$Abs> for $Rel {
             type Output = $Abs;
+            #[inline]
             fn sub(self, rhs: $Abs) -> Self::Output {
                 $Abs(self.0 - rhs.0)
             }
         }
         impl std::ops::Sub<$Rel> for $Abs {
             type Output = $Abs;
+            #[inline]
             fn sub(self, rhs: $Rel) -> Self::Output {
                 $Abs(self.0 - rhs.0)
             }
@@ -216,6 +251,7 @@ impl InChunkPos {
     pub const MAX: Self = Self(IVec3::splat(CHUNK_DIM - 1));
 
     /// Const-friendly `try_from<IVec3>`
+    #[inline]
     pub const fn try_from_ivec3(v: IVec3) -> Result<Self, InChunkVecError> {
         let IVec3 { x, y, z } = v;
         if (x < 0) || (x >= CHUNK_DIM) || (y < 0) || (y >= CHUNK_DIM) || (z < 0) || (z >= CHUNK_DIM) {
@@ -227,16 +263,19 @@ impl InChunkPos {
 
     /// Constructs a new in-chunk position from the given coordinates, or returns an error if it's
     /// outside of chunk bounds.
+    #[inline]
     pub const fn try_new(x: i32, y: i32, z: i32) -> Result<Self, InChunkVecError> {
         Self::try_from_ivec3(IVec3::new(x, y, z))
     }
 
     /// Same as `try_new(v, v, v)`
+    #[inline]
     pub const fn try_splat(v: i32) -> Result<Self, InChunkVecError> {
         Self::try_from_ivec3(IVec3::splat(v))
     }
 
     /// Convert a XZY-strided index into a chunk storage array into the coordinates
+    #[inline]
     pub const fn try_from_index(idx: usize) -> Result<Self, InChunkIndexError> {
         if idx >= CHUNK_DIM3Z {
             return Err(InChunkIndexError(idx));
@@ -250,6 +289,7 @@ impl InChunkPos {
     }
 
     /// Converts the coordinates into an XZY-strided index into the chunk storage array
+    #[inline]
     pub const fn as_index(self) -> usize {
         (self.0.x + (CHUNK_DIM * self.0.z) + (CHUNK_DIM2 * self.0.y)) as usize
     }
@@ -265,10 +305,8 @@ impl Add<InChunkPos> for InChunkPos {
 
 // === InChunkRange
 impl InChunkRange {
-    /// Empty range containing no blocks, originating at (0, 0, 0).
-    pub const ZERO: Self = Self::from_corners(InChunkPos::ZERO, InChunkPos::ZERO);
-    /// A single block at (0, 0, 0).
-    pub const BLOCK_AT_ZERO: Self = Self::from_corners(InChunkPos::ZERO, InChunkPos::ONE);
+    /// One block range containing the block at (0,0,0).
+    pub const BLOCK_AT_ZERO: Self = Self::from_corners(InChunkPos::ZERO, InChunkPos::ZERO);
     /// The whole chunk `[(0, 0, 0), (31, 31, 31)]`.
     pub const WHOLE_CHUNK: Self = Self::from_corners(InChunkPos::ZERO, InChunkPos::MAX);
 
@@ -295,27 +333,25 @@ impl InChunkRange {
         Self { min, max }
     }
 
-    /// Checks if the range has any blocks, false if one or more of the dimensions are zero.
-    pub const fn is_empty(self) -> bool {
-        (self.min.0.x == self.max.0.x) || (self.min.0.y == self.max.0.y) || (self.min.0.z == self.max.0.z)
-    }
-
     /// Checks if the range covers the entire chunk
+    #[inline]
     pub const fn is_everything(self) -> bool {
         self.min.0.x == 0
             && self.min.0.y == 0
             && self.min.0.z == 0
-            && self.max.0.x == (CHUNK_DIM - 1)
-            && self.max.0.y == (CHUNK_DIM - 1)
-            && self.max.0.z == (CHUNK_DIM - 1)
+            && self.max.0.x == InChunkPos::MAX.0.x
+            && self.max.0.y == InChunkPos::MAX.0.y
+            && self.max.0.z == InChunkPos::MAX.0.z
     }
 
     /// Returns the corner with the smallest coordinates.
+    #[inline]
     pub const fn min(self) -> InChunkPos {
         self.min
     }
 
     /// Returns the corner with the largest coordinates.
+    #[inline]
     pub const fn max(self) -> InChunkPos {
         self.max
     }
@@ -332,10 +368,8 @@ impl InChunkRange {
 }
 
 impl AbsChunkRange {
-    /// Empty range containing no chunks, originating at (0, 0, 0).
-    pub const ZERO: Self = Self::from_corners(AbsChunkPos::ZERO, AbsChunkPos::ZERO);
     /// A single chunk at (0, 0, 0).
-    pub const BLOCK_AT_ZERO: Self = Self::from_corners(AbsChunkPos::ZERO, AbsChunkPos::ONE);
+    pub const BLOCK_AT_ZERO: Self = Self::from_corners(AbsChunkPos::ZERO, AbsChunkPos::ZERO);
 
     /// Constructs a new range from two (inclusive) corner positions.
     pub const fn from_corners(a: AbsChunkPos, b: AbsChunkPos) -> Self {
@@ -358,21 +392,6 @@ impl AbsChunkRange {
         let min = AbsChunkPos(IVec3::new(min_x, min_y, min_z));
         let max = AbsChunkPos(IVec3::new(max_x, max_y, max_z));
         Self { min, max }
-    }
-
-    /// Checks if the range has any blocks, false if one or more of the dimensions are zero.
-    pub const fn is_empty(self) -> bool {
-        (self.min.0.x == self.max.0.x) || (self.min.0.y == self.max.0.y) || (self.min.0.z == self.max.0.z)
-    }
-
-    /// Checks if the range covers the entire chunk
-    pub const fn is_everything(self) -> bool {
-        self.min.0.x == 0
-            && self.min.0.y == 0
-            && self.min.0.z == 0
-            && self.max.0.x == (CHUNK_DIM - 1)
-            && self.max.0.y == (CHUNK_DIM - 1)
-            && self.max.0.z == (CHUNK_DIM - 1)
     }
 
     /// Returns the corner with the smallest coordinates.
@@ -409,9 +428,63 @@ impl From<AbsBlockPos> for AbsChunkPos {
     }
 }
 
+impl AbsChunkPos {
+    /// Converts the chunk position to a Z-curve index. See [`zpack_3d`].
+    #[inline]
+    pub fn as_zpack(self) -> u128 {
+        zpack_3d(self.0)
+    }
+
+    /// Converts the chunk position from a Z-curve index. See [`zunpack_3d`].
+    #[inline]
+    pub fn from_zpack(idx: u128) -> Self {
+        Self(zunpack_3d(idx))
+    }
+}
+
+impl Display for AbsChunkPos {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Chunk(x={}, y={}, z={})", self.x, self.y, self.z)
+    }
+}
+
+impl PartialOrd for AbsChunkPos {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+
+    fn lt(&self, other: &Self) -> bool {
+        self.as_zpack() < other.as_zpack()
+    }
+
+    fn le(&self, other: &Self) -> bool {
+        self.as_zpack() <= other.as_zpack()
+    }
+
+    fn gt(&self, other: &Self) -> bool {
+        self.as_zpack() > other.as_zpack()
+    }
+
+    fn ge(&self, other: &Self) -> bool {
+        self.as_zpack() >= other.as_zpack()
+    }
+}
+
+impl Ord for AbsChunkPos {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_zpack().cmp(&other.as_zpack())
+    }
+}
+
 // === RelChunkPos
 impl_simple_ivec3_newtype!(RelChunkPos);
 impl_rel_abs_pair!(RelChunkPos, AbsChunkPos);
+
+impl Display for RelChunkPos {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Chunk Difference(x={}, y={}, z={})", self.x, self.y, self.z)
+    }
+}
 
 // === AbsBlockPos
 impl_simple_ivec3_newtype!(AbsBlockPos);
@@ -438,6 +511,24 @@ impl AbsBlockPos {
             )),
         )
     }
+
+    /// Converts the block position to a Z-curve index. See [`zpack_3d`].
+    #[inline]
+    pub fn as_zpack(self) -> u128 {
+        zpack_3d(self.0)
+    }
+
+    /// Converts the block position from a Z-curve index. See [`zunpack_3d`].
+    #[inline]
+    pub fn from_zpack(idx: u128) -> Self {
+        Self(zunpack_3d(idx))
+    }
+}
+
+impl Display for AbsBlockPos {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Block(x={}, y={}, z={})", self.x, self.y, self.z)
+    }
 }
 
 // === RelBlockPos
@@ -447,5 +538,11 @@ impl_rel_abs_pair!(RelBlockPos, AbsBlockPos);
 impl From<RelChunkPos> for RelBlockPos {
     fn from(value: RelChunkPos) -> Self {
         Self(value.0 * IVec3::splat(CHUNK_DIM))
+    }
+}
+
+impl Display for RelBlockPos {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Block Difference(x={}, y={}, z={})", self.x, self.y, self.z)
     }
 }

@@ -2,9 +2,12 @@
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use std::num::{NonZeroU32, TryFromIntError};
+use std::str::Utf8Error;
+use std::sync::Arc;
 
 use bytemuck::{PodInOption, TransparentWrapper, ZeroableInOption};
 use hashbrown::{Equivalent, HashMap};
+use itertools::Itertools;
 use kstring::{KString, KStringRef};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -15,6 +18,27 @@ pub const OCG_REGISTRY_DOMAIN_CONST: &str = "ocg";
 pub static OCG_REGISTRY_DOMAIN: &str = OCG_REGISTRY_DOMAIN_CONST;
 /// Default namespace for the OpenCubeGame's objects, as a [`KString`] for convenience
 pub static OCG_REGISTRY_DOMAIN_KS: KString = KString::from_static(OCG_REGISTRY_DOMAIN);
+
+/// Checks if the given name is a valid registry name (`[a-z0-9_]+`).
+pub const fn is_valid_registry_name(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    let bytes = name.as_bytes();
+    // const-fn safe for loop
+    let mut i = 0;
+    while i < bytes.len() {
+        let byte = bytes[i];
+        match byte {
+            b'0'..=b'9' => {}
+            b'a'..=b'z' => {}
+            b'_' => {}
+            _ => return false,
+        }
+        i += 1;
+    }
+    true
+}
 
 /// Simple namespaced registry object name
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Default, Hash, Serialize, Deserialize)]
@@ -35,15 +59,15 @@ pub struct RegistryNameRef<'n> {
 }
 
 impl RegistryName {
-    /// Constructs a `ocg:`-namespaced name
-    pub fn ocg(key: impl Into<KString>) -> Self {
+    /// Constructs a `ocg:`-namespaced name.
+    pub fn ocg(key: &str) -> Self {
         Self {
             ns: OCG_REGISTRY_DOMAIN_KS.clone(),
-            key: key.into(),
+            key: KString::from_ref(key),
         }
     }
 
-    /// A compiletime constructor for `ocg:`-namespaced names
+    /// A compile time constructor for `ocg:`-namespaced names.
     pub const fn ocg_const(key: &'static str) -> Self {
         Self {
             ns: KString::from_static(OCG_REGISTRY_DOMAIN_CONST),
@@ -51,7 +75,23 @@ impl RegistryName {
         }
     }
 
-    /// Converts the name to a reference struct
+    /// Constructs a name out of the given namespace and key.
+    pub fn new(ns: &str, key: &str) -> Self {
+        Self {
+            ns: KString::from_ref(ns),
+            key: KString::from_ref(key),
+        }
+    }
+
+    /// Constructs a name out of the given namespace and key, at compile time.
+    pub const fn new_const(ns: &'static str, key: &'static str) -> Self {
+        Self {
+            ns: KString::from_static(ns),
+            key: KString::from_static(key),
+        }
+    }
+
+    /// Converts the name to a reference struct.
     pub fn as_ref(&self) -> RegistryNameRef {
         self.into()
     }
@@ -146,8 +186,14 @@ pub trait RegistryObject: PartialEq + Hash {
     fn registry_name(&self) -> RegistryNameRef;
 }
 
+impl<O: RegistryObject> RegistryObject for Arc<O> {
+    fn registry_name(&self) -> RegistryNameRef {
+        O::registry_name(self)
+    }
+}
+
 /// A data structure for keeping track of a stable mapping between: namespaced strings, numerical IDs and objects.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Registry<Object: RegistryObject> {
     next_free_id: NonZeroU32,
     id_to_obj: Vec<Option<Object>>,
@@ -165,8 +211,14 @@ impl<Object: RegistryObject> Default for Registry<Object> {
 }
 
 /// Possible errors from Registry operations
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum RegistryError {
+    /// The name given is not a made of legal registry keys.
+    #[error("Name {name} is not a legal registry name (made of `[a-z0-9_]+` namespace and key)")]
+    IllegalName {
+        /// The name that contains an invalid registry key.
+        name: RegistryName,
+    },
     /// A numeric ID that is already present in the registry was prevented from being overwritten.
     #[error("Id {id} already exists when trying to register {name}")]
     IdAlreadyExists {
@@ -186,6 +238,29 @@ pub enum RegistryError {
     NoFreeSpace,
 }
 
+/// Error type describing what went wrong during registry deserialization.
+#[derive(Error, Debug)]
+pub enum RegistryDeserializationError {
+    /// Error from the capnp message readers.
+    #[error("Serialized data could not be read: {0}")]
+    CapnpReadError(#[from] capnp::Error),
+    /// Invalid UTF8 in message.
+    #[error("Invalid UTF8 found: {0}")]
+    InvalidUtf8(#[from] Utf8Error),
+    /// One or more of the array lenghts is different from the rest.
+    #[error("The ID/NS/Key arrays are of unequal lengths")]
+    MismatchedArrayLengths,
+    /// Found an illegal value for a registry ID.
+    #[error("An illegal ID was present in the registry bundle")]
+    IllegalID,
+    /// Some entries from the remote registry are missing in our registry.
+    #[error("The local registry was missing the following names: {0:?}")]
+    MissingEntries(Vec<RegistryName>),
+    /// Error when inserting entries to the new registry.
+    #[error("Error during object insertion: {0}")]
+    InsertionError(#[from] RegistryError),
+}
+
 /// A registry of up to 2^32-2 named objects.
 impl<Object: RegistryObject> Registry<Object> {
     /// Low-level: Allocate the next free ID in the registry
@@ -199,6 +274,9 @@ impl<Object: RegistryObject> Registry<Object> {
     /// On failure, no ID is allocated and a precise error is returned.
     pub fn push_object(&mut self, object: Object) -> Result<RegistryId, RegistryError> {
         let name = object.registry_name().to_owned();
+        if !is_valid_registry_name(&name.ns) || !is_valid_registry_name(&name.key) {
+            return Err(RegistryError::IllegalName { name });
+        }
         if self.name_to_id.contains_key(&name) {
             return Err(RegistryError::NameAlreadyExists { name });
         }
@@ -233,6 +311,9 @@ impl<Object: RegistryObject> Registry<Object> {
             });
         }
         let name = object.registry_name().to_owned();
+        if !is_valid_registry_name(&name.ns) || !is_valid_registry_name(&name.key) {
+            return Err(RegistryError::IllegalName { name });
+        }
         if self.name_to_id.contains_key(&name) {
             return Err(RegistryError::NameAlreadyExists { name });
         }
@@ -257,23 +338,101 @@ impl<Object: RegistryObject> Registry<Object> {
     }
 
     /// Given a registry object, find look up its ID, or return `None` if it's not found.
-    pub fn lookup_object_to_id(&self, object: &Object) -> Option<RegistryId> {
+    pub fn search_object_to_id(&self, object: &Object) -> Option<RegistryId> {
         self.id_to_obj
             .iter()
             .position(|r| r.as_ref().is_some_and(|o| o == object))
             .map(|i| RegistryId(NonZeroU32::new(i as u32).unwrap()))
     }
 
-    /// Gets a `Vec` of all the ID -> Object mappings in this registry.
-    pub fn get_objects_ids(&self) -> Vec<(&RegistryId, &Object)> {
-        let mut result = Vec::new();
-        for id in self.name_to_id.values() {
-            let obj = self.lookup_id_to_object(*id);
-            if let Some(o) = obj {
-                result.push((id, o));
+    /// Iterates over all the registry objects.
+    pub fn iter(&self) -> impl Iterator<Item = (RegistryId, RegistryNameRef, &Object)> {
+        self.name_to_id.iter().filter_map(|(name, &id)| {
+            self.id_to_obj
+                .get(id.0.get() as usize)
+                .and_then(Option::as_ref)
+                .map(|obj| (id, name.as_ref(), obj))
+        })
+    }
+
+    /// Returns the number of registered mappings.
+    pub fn len(&self) -> usize {
+        self.name_to_id.len()
+    }
+
+    /// Returns if the registry has no mappings.
+    pub fn is_empty(&self) -> bool {
+        self.name_to_id.is_empty()
+    }
+
+    /// Serializes the ID-name mappings to a schema bundle message.
+    pub fn serialize_ids(&self, builder: &mut crate::schemas::game_types_capnp::registry_id_mapping_bundle::Builder) {
+        let mut mappings = self.iter().map(|(id, name, _obj)| (id, name)).collect_vec();
+        mappings.sort_by_key(|(id, _name)| *id);
+        let len_u32: u32 = mappings.len().try_into().unwrap();
+        {
+            let mut ids = builder.reborrow().init_ids(len_u32);
+            let ids = ids.as_slice().unwrap();
+            debug_assert_eq!(mappings.len(), ids.len());
+            for (idx, (id, _name)) in mappings.iter().enumerate() {
+                ids[idx] = id.0.get();
             }
         }
-        result
+        {
+            let mut namespaces = builder.reborrow().init_nss(len_u32);
+            for (idx, (_id, name)) in mappings.iter().enumerate() {
+                namespaces.set(idx as u32, name.ns);
+            }
+        }
+        {
+            let mut keys = builder.reborrow().init_keys(len_u32);
+            for (idx, (_id, name)) in mappings.iter().enumerate() {
+                keys.set(idx as u32, name.key);
+            }
+        }
+    }
+
+    /// Constructs a new registry by cloning the entries from this registry that have ID mappings available in the given mapping bundle.
+    pub fn clone_with_serialized_ids(
+        &self,
+        bundle: &crate::schemas::game_types_capnp::registry_id_mapping_bundle::Reader,
+    ) -> Result<Self, RegistryDeserializationError>
+    where
+        Object: Clone,
+    {
+        let mut out = Self::default();
+
+        let ids = bundle.reborrow().get_ids()?;
+        let nss = bundle.reborrow().get_nss()?;
+        let keys = bundle.reborrow().get_keys()?;
+
+        if ids.len() != nss.len() || keys.len() != nss.len() {
+            return Err(RegistryDeserializationError::MismatchedArrayLengths);
+        }
+
+        let mut missing_entries = Vec::new();
+        out.name_to_id.reserve(ids.len() as usize);
+        out.id_to_obj.reserve(ids.len() as usize);
+        for idx in 0..ids.len() {
+            let new_id = ids.get(idx);
+            let new_id = RegistryId::try_from(new_id).or(Err(RegistryDeserializationError::IllegalID))?;
+            let ns = nss.get(idx)?.to_str()?;
+            let key = keys.get(idx)?.to_str()?;
+            let name = RegistryName::new(ns, key);
+
+            let old_obj = self.lookup_name_to_object(name.as_ref());
+            if let Some((_old_id, old_obj)) = old_obj {
+                out.insert_object_with_id(new_id, old_obj.clone())?;
+            } else {
+                missing_entries.push(name);
+            }
+        }
+
+        if !missing_entries.is_empty() {
+            return Err(RegistryDeserializationError::MissingEntries(missing_entries));
+        }
+
+        Ok(out)
     }
 }
 
@@ -330,6 +489,105 @@ mod test {
             reg.lookup_name_to_object(RegistryNameRef::ocg(&dyn_c))
                 .map(|(id, o)| (id, o.0.key.as_str())),
             None
+        );
+    }
+
+    #[test]
+    pub fn serialize_registry() {
+        let mut original: Registry<DummyObject> = Registry::default();
+
+        let o_a = original.push_object(DummyObject(RegistryName::ocg_const("a"))).unwrap();
+        let o_b = original.push_object(DummyObject(RegistryName::ocg_const("b"))).unwrap();
+        let o_c = original.push_object(DummyObject(RegistryName::ocg_const("c"))).unwrap();
+
+        let mut original_rev: Registry<DummyObject> = Registry::default();
+
+        let _or_c = original_rev
+            .push_object(DummyObject(RegistryName::ocg_const("c")))
+            .unwrap();
+        let _or_b = original_rev
+            .push_object(DummyObject(RegistryName::ocg_const("b")))
+            .unwrap();
+        let _or_a = original_rev
+            .push_object(DummyObject(RegistryName::ocg_const("a")))
+            .unwrap();
+
+        let mut missing: Registry<DummyObject> = Registry::default();
+
+        let _m_a = missing.push_object(DummyObject(RegistryName::ocg_const("a"))).unwrap();
+        let _m_b = missing.push_object(DummyObject(RegistryName::ocg_const("b"))).unwrap();
+
+        let mut original_message = capnp::message::Builder::default();
+        let mut original_bundle =
+            original_message.init_root::<crate::schemas::game_types_capnp::registry_id_mapping_bundle::Builder>();
+        original.serialize_ids(&mut original_bundle);
+        let original_bytes = capnp::serialize::write_message_to_words(&original_message);
+
+        let reader = capnp::serialize::read_message_from_flat_slice(
+            &mut &*original_bytes,
+            capnp::message::DEFAULT_READER_OPTIONS,
+        )
+        .unwrap();
+        let bundle_reader: crate::schemas::game_types_capnp::registry_id_mapping_bundle::Reader =
+            reader.get_root().unwrap();
+
+        let missing_result = missing.clone_with_serialized_ids(&bundle_reader);
+        match missing_result {
+            Err(RegistryDeserializationError::MissingEntries(me)) => {
+                assert_eq!(me, vec![RegistryName::ocg_const("c")]);
+            }
+            Err(e) => {
+                panic!("Registry did not return missing entries error: {e}");
+            }
+            Ok(_) => {
+                panic!("Registry did not return error");
+            }
+        }
+
+        let original_result = original.clone_with_serialized_ids(&bundle_reader).unwrap();
+        assert_eq!(
+            original_result
+                .lookup_name_to_object(RegistryNameRef::ocg("a"))
+                .unwrap()
+                .0,
+            o_a
+        );
+        assert_eq!(
+            original_result
+                .lookup_name_to_object(RegistryNameRef::ocg("b"))
+                .unwrap()
+                .0,
+            o_b
+        );
+        assert_eq!(
+            original_result
+                .lookup_name_to_object(RegistryNameRef::ocg("c"))
+                .unwrap()
+                .0,
+            o_c
+        );
+
+        let original_rev_result = original_rev.clone_with_serialized_ids(&bundle_reader).unwrap();
+        assert_eq!(
+            original_rev_result
+                .lookup_name_to_object(RegistryNameRef::ocg("a"))
+                .unwrap()
+                .0,
+            o_a
+        );
+        assert_eq!(
+            original_rev_result
+                .lookup_name_to_object(RegistryNameRef::ocg("b"))
+                .unwrap()
+                .0,
+            o_b
+        );
+        assert_eq!(
+            original_rev_result
+                .lookup_name_to_object(RegistryNameRef::ocg("c"))
+                .unwrap()
+                .0,
+            o_c
         );
     }
 }

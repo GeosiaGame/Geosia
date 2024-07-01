@@ -5,6 +5,7 @@ use itertools::iproduct;
 use smallvec::SmallVec;
 
 use crate::coordinates::AbsChunkPos;
+use crate::mutwatcher::MutWatcher;
 use crate::voxel::chunk::Chunk;
 
 /// A reference to a 3³ cube of `Object`, useful for access to a chunk and its neighbors.
@@ -110,11 +111,12 @@ impl<Object, CoordType: From<IVec3> + Into<IVec3> + Copy> Neighborhood<Option<Ob
 
 /// A neighborhood of optionally loaded chunks.
 pub type OptionalChunkRefNeighborhood<'c, ExtraChunkData> =
-    Neighborhood<Option<&'c Chunk<ExtraChunkData>>, AbsChunkPos>;
+    Neighborhood<Option<&'c MutWatcher<Chunk<ExtraChunkData>>>, AbsChunkPos>;
 /// A mutable neighborhood of optionally loaded chunks.
 pub type OptionalChunkRefMutNeighborhood<'c, ExtraChunkData> =
-    Neighborhood<Option<&'c mut Chunk<ExtraChunkData>>, AbsChunkPos>;
+    Neighborhood<Option<&'c mut MutWatcher<Chunk<ExtraChunkData>>>, AbsChunkPos>;
 /// A neighborhood of loaded chunks.
-pub type ChunkRefNeighborhood<'c, ExtraChunkData> = Neighborhood<&'c Chunk<ExtraChunkData>, AbsChunkPos>;
+pub type ChunkRefNeighborhood<'c, ExtraChunkData> = Neighborhood<&'c MutWatcher<Chunk<ExtraChunkData>>, AbsChunkPos>;
 /// A mutable neighborhood of loaded chunks.
-pub type ChunkRefMutNeighborhood<'c, ExtraChunkData> = Neighborhood<&'c mut Chunk<ExtraChunkData>, AbsChunkPos>;
+pub type ChunkRefMutNeighborhood<'c, ExtraChunkData> =
+    Neighborhood<&'c mut MutWatcher<Chunk<ExtraChunkData>>, AbsChunkPos>;

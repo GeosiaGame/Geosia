@@ -1,10 +1,10 @@
 # Voxel mesh serialization format for resource packs.
 @0xd51eb866f746ae4e;
 
-using Rust = import "/rust.capnp";
+using Rust = import "rust.capnp";
 $Rust.parentModule("schemas");
 
-using GameTypes = import "/game_types.capnp";
+using GameTypes = import "game_types.capnp";
 
 # Encoding for "simple" voxel meshes that are used for the majority of blocks.
 

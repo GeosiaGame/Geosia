@@ -2,10 +2,10 @@
 
 use std::collections::VecDeque;
 
-use ocg_schemas::coordinates::AbsChunkPos;
 use ocg_schemas::voxel::chunk::Chunk;
 use ocg_schemas::voxel::voxeltypes::BlockEntry;
 use ocg_schemas::OcgExtraData;
+use ocg_schemas::{coordinates::AbsChunkPos, mutwatcher::MutWatcher};
 
 use crate::voxel::persistence::{ChunkPersistenceLayer, ChunkPersistenceLayerStats, ChunkProviderResult};
 
@@ -30,7 +30,7 @@ impl<ExtraData: OcgExtraData> EmptyPersistenceLayer<ExtraData> {
 impl<ExtraData: OcgExtraData> ChunkPersistenceLayer<ExtraData> for EmptyPersistenceLayer<ExtraData> {
     fn request_load(&mut self, coordinates: &[AbsChunkPos]) {
         for pos in coordinates {
-            let chunk = Chunk::new(self.fill_block, self.extra_data.clone());
+            let chunk = MutWatcher::new(Chunk::new(self.fill_block, self.extra_data.clone()));
             self.queue.push_back(Ok((*pos, chunk)));
         }
     }
@@ -39,7 +39,7 @@ impl<ExtraData: OcgExtraData> ChunkPersistenceLayer<ExtraData> for EmptyPersiste
         // no-op
     }
 
-    fn request_save(&mut self, _chunks: Box<[(AbsChunkPos, Chunk<ExtraData>)]>) {
+    fn request_save(&mut self, _chunks: Box<[(AbsChunkPos, MutWatcher<Chunk<ExtraData>>)]>) {
         // no-op
     }
 

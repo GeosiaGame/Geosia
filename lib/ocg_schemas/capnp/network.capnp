@@ -1,10 +1,10 @@
 # The network protocol.
 @0xb89146b09fd226cb;
 
-using Rust = import "/rust.capnp";
+using Rust = import "rust.capnp";
 $Rust.parentModule("schemas");
 
-using GameTypes = import "/game_types.capnp";
+using GameTypes = import "game_types.capnp";
 
 # The main RPC entrypoint for the game server, (Anonymous client)->Server RPC.
 interface GameServer @0xf0320743e0d6201d {
@@ -37,6 +37,21 @@ struct AuthenticationError @0x9ed4d9765d345c1e {
     message @1 :Text;
 }
 
+# A stream startup message, determining the type of the stream.
+# Sent as a LEB128-encoded data length + the encoded data array on a fresh QUIC stream.
+# A single packet on an asynchronous stream is sent as a LEB128-encoded data length + the encoded data array.
+# The data arrays are compressed on network sockets, and the capnp unpacked encoding is used.
+struct StreamHeader {
+    enum StandardTypes {
+        chunkData @0;
+    }
+    # The stream type, used to determine the handler used for the packets afterwards.
+    union {
+        standardType @0 :StandardTypes;
+        customType @1 :GameTypes.RegistryName;
+    }
+}
+
 # Server->Client RPC interface
 interface AuthenticatedClientConnection @0xddd4c8ca33d42019 {
     # Graceful connection shutdown.
@@ -61,4 +76,13 @@ interface AuthenticatedServerConnection @0xcc65c2f3643e6ae0 {
     bootstrapGameData @0 () -> (data: GameTypes.GameBootstrapData);
     # Sends a chat message to the server.
     sendChatMessage @1 (text: Text) -> ();
+}
+
+struct ChunkDataStreamPacket {
+    # Game tick on which this chunk was updated.
+    tick @0 :UInt64;
+    # AbsChunkPos of the chunk.
+    position @1 :GameTypes.IVec3;
+    # Serialized chunk data.
+    data @2 :GameTypes.FullChunkData;
 }

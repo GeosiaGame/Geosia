@@ -1,22 +1,25 @@
 //! The network client thread implementation.
-#![deny(clippy::await_holding_refcell_ref, clippy::await_holding_lock)]
 
-use bevy::log::{error, info};
+use bevy::log::*;
 use capnp::capability::Promise;
 use capnp::Error;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::{VatId, VatNetwork};
 use capnp_rpc::{pry, Disconnector, RpcSystem};
 use ocg_common::network::server::LocalConnectionPipe;
-use ocg_common::network::thread::NetworkThreadState;
-use ocg_common::network::transport::RPC_LOCAL_READER_OPTIONS;
+use ocg_common::network::thread::{NetworkThread, NetworkThreadState};
+use ocg_common::network::transport::{InProcessStream, RPC_LOCAL_READER_OPTIONS};
 use ocg_common::network::PeerAddress;
 use ocg_common::prelude::*;
 use ocg_schemas::schemas::network_capnp as rpc;
 use ocg_schemas::schemas::network_capnp::authenticated_client_connection::{
     AddChatMessageParams, AddChatMessageResults, TerminateConnectionParams, TerminateConnectionResults,
 };
+use tokio::sync::Barrier;
 use tokio::task::{spawn_local, JoinHandle};
+use tracing::Instrument;
+
+use crate::GameControlChannel;
 
 /// Pre-authentication
 pub struct NetworkThreadClientConnectingState {
@@ -28,6 +31,11 @@ pub struct NetworkThreadClientConnectingState {
     rpc_disconnector: Option<Disconnector<Side>>,
     /// The RPC system task.
     rpc_task: JoinHandle<Result<()>>,
+    /// The async stream system task.
+    stream_task: JoinHandle<Result<()>>,
+    /// The async stream creation channel.
+    // TODO: use a trait object here, so we can use sockets too.
+    _stream_sender: AsyncUnboundedSender<InProcessStream>,
 }
 
 /// Post-authentication
@@ -38,9 +46,9 @@ pub struct NetworkThreadClientAuthenticatedState {
     server_auth_rpc: rpc::authenticated_server_connection::Client,
 }
 
-/// The network thread game client state, accessible from network functions.
+/// The state machine for [`NetworkThreadClientState`].
 #[derive(Default)]
-pub enum NetworkThreadClientState {
+pub enum NetworkThreadClientStateVariant {
     /// No peer connected
     #[default]
     Disconnected,
@@ -48,6 +56,15 @@ pub enum NetworkThreadClientState {
     Connecting(NetworkThreadClientConnectingState),
     /// Post-authentication
     Authenticated(NetworkThreadClientAuthenticatedState),
+}
+
+/// The network thread game client state, accessible from network functions.
+pub struct NetworkThreadClientState {
+    /// Channel for communicating with the client bevy instance
+    _game_control: GameControlChannel,
+    /// The current variant storage.
+    variant: NetworkThreadClientStateVariant,
+    ready_to_accept_streams: Option<Arc<Barrier>>,
 }
 
 impl NetworkThreadState for NetworkThreadClientState {
@@ -58,21 +75,39 @@ impl NetworkThreadState for NetworkThreadClientState {
             .and_then(|s| s.rpc_disconnector.take());
         if let Some(disconnector) = disconnector {
             if let Err(e) = disconnector.await {
-                error!("Error on client RPC shutdown: {e}");
+                error!("Error on client RPC disconnect: {e}");
             }
         }
         if let Some(s) = this.borrow_mut().connecting_state() {
             s.rpc_task.abort();
+            s.stream_task.abort();
         }
     }
 }
 
 impl NetworkThreadClientState {
+    /// Constructor.
+    pub fn new(game_control: GameControlChannel) -> Self {
+        Self {
+            _game_control: game_control,
+            variant: Default::default(),
+            ready_to_accept_streams: Some(Arc::new(Barrier::new(2))),
+        }
+    }
+
+    /// Unblocks stream processing, call after all the handlers are registered.
+    pub async fn allow_streams(this: &Rc<RefCell<Self>>) {
+        let barrier = &this.borrow().ready_to_accept_streams.as_ref().map(Arc::clone);
+        if let Some(barrier) = barrier {
+            barrier.wait().await;
+        }
+    }
+
     fn connecting_state(&self) -> Option<&NetworkThreadClientConnectingState> {
-        match self {
-            NetworkThreadClientState::Disconnected => None,
-            NetworkThreadClientState::Connecting(state) => Some(state),
-            NetworkThreadClientState::Authenticated(NetworkThreadClientAuthenticatedState {
+        match &self.variant {
+            NetworkThreadClientStateVariant::Disconnected => None,
+            NetworkThreadClientStateVariant::Connecting(state) => Some(state),
+            NetworkThreadClientStateVariant::Authenticated(NetworkThreadClientAuthenticatedState {
                 connection: state,
                 ..
             }) => Some(state),
@@ -80,10 +115,10 @@ impl NetworkThreadClientState {
     }
 
     fn connecting_state_mut(&mut self) -> Option<&mut NetworkThreadClientConnectingState> {
-        match self {
-            NetworkThreadClientState::Disconnected => None,
-            NetworkThreadClientState::Connecting(state) => Some(state),
-            NetworkThreadClientState::Authenticated(NetworkThreadClientAuthenticatedState {
+        match &mut self.variant {
+            NetworkThreadClientStateVariant::Disconnected => None,
+            NetworkThreadClientStateVariant::Connecting(state) => Some(state),
+            NetworkThreadClientStateVariant::Authenticated(NetworkThreadClientAuthenticatedState {
                 connection: state,
                 ..
             }) => Some(state),
@@ -91,10 +126,10 @@ impl NetworkThreadClientState {
     }
 
     fn authenticated_state(&self) -> Option<&NetworkThreadClientAuthenticatedState> {
-        match self {
-            NetworkThreadClientState::Disconnected => None,
-            NetworkThreadClientState::Connecting(_) => None,
-            NetworkThreadClientState::Authenticated(state) => Some(state),
+        match &self.variant {
+            NetworkThreadClientStateVariant::Disconnected => None,
+            NetworkThreadClientStateVariant::Connecting(_) => None,
+            NetworkThreadClientStateVariant::Authenticated(state) => Some(state),
         }
     }
 
@@ -114,15 +149,21 @@ impl NetworkThreadClientState {
     }
 
     /// Initiates a new local connection on the given pipe.
-    pub async fn connect_locally(this: &Rc<RefCell<Self>>, pipe: LocalConnectionPipe) -> Result<()> {
+    pub async fn connect_locally(
+        this: &Rc<RefCell<Self>>,
+        net_thread: Arc<NetworkThread<NetworkThreadClientState>>,
+        (address, pipe): LocalConnectionPipe,
+    ) -> Result<()> {
         if let Some(existing_connection) = this.borrow().peer_address() {
             return Err(anyhow!("Already connected to {existing_connection:?}"));
         }
 
-        let (rpc_system, connection) = create_local_rpc_client(pipe);
+        let (rpc_system, connection) = create_local_rpc_client(address, pipe.rpc_pipe);
         let rpc_disconnector = rpc_system.get_disconnector();
-        let rpc_task: JoinHandle<Result<()>> =
-            spawn_local(async move { rpc_system.await.map_err(anyhow::Error::from) });
+        let rpc_task: JoinHandle<Result<()>> = spawn_local(
+            async move { rpc_system.await.map_err(anyhow::Error::from) }
+                .instrument(tracing::info_span!("client-rpc", address = ?address)),
+        );
 
         // Authenticate
         let mut auth_request = connection.server_rpc.authenticate_request();
@@ -157,16 +198,50 @@ impl NetworkThreadClientState {
             connection.server_addr
         );
 
-        *this.borrow_mut() = Self::Authenticated(NetworkThreadClientAuthenticatedState {
-            connection: NetworkThreadClientConnectingState {
-                server_address: connection.server_addr,
-                server_rpc: connection,
-                rpc_disconnector: Some(rpc_disconnector),
-                rpc_task,
-            },
-            server_auth_rpc,
-        });
+        let stream_task: JoinHandle<Result<()>> = spawn_local(
+            Self::local_stream_acceptor(Rc::clone(this), Arc::clone(&net_thread), pipe.incoming_streams)
+                .instrument(tracing::info_span!("client-stream", address = ?address)),
+        );
 
+        this.borrow_mut().variant =
+            NetworkThreadClientStateVariant::Authenticated(NetworkThreadClientAuthenticatedState {
+                connection: NetworkThreadClientConnectingState {
+                    server_address: connection.server_addr,
+                    server_rpc: connection,
+                    rpc_disconnector: Some(rpc_disconnector),
+                    rpc_task,
+                    stream_task,
+                    _stream_sender: pipe.outgoing_streams,
+                },
+                server_auth_rpc,
+            });
+
+        Ok(())
+    }
+
+    async fn local_stream_acceptor(
+        this: Rc<RefCell<Self>>,
+        net_thread: Arc<NetworkThread<NetworkThreadClientState>>,
+        mut incoming_streams: AsyncUnboundedReceiver<InProcessStream>,
+    ) -> Result<()> {
+        let barrier = Arc::clone(this.borrow().ready_to_accept_streams.as_ref().unwrap());
+        barrier.wait().await;
+        this.borrow_mut().ready_to_accept_streams = None;
+
+        while let Some(stream) = incoming_streams.recv().await {
+            let handler = net_thread.create_stream_handler(Rc::clone(&this), stream);
+            match handler {
+                Ok(handler) => {
+                    spawn_local(handler);
+                }
+                Err(stream) => {
+                    error!(
+                        "No stream handler found for incoming server stream of type {:?}",
+                        stream.header
+                    );
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -221,7 +296,10 @@ impl ocg_schemas::schemas::network_capnp::authenticated_client_connection::Serve
 }
 
 /// Create a Future that will handle in-memory messages coming from a [`Server2ClientEndpoint`] and any child RPC objects on the given `server`&`id`.
-pub fn create_local_rpc_client((id, pipe): LocalConnectionPipe) -> (RpcSystem<Side>, Client2ServerConnection) {
+pub fn create_local_rpc_client(
+    id: PeerAddress,
+    pipe: tokio::io::DuplexStream,
+) -> (RpcSystem<Side>, Client2ServerConnection) {
     let (read, write) = pipe.compat().split();
     let network = VatNetwork::new(read, write, Side::Client, RPC_LOCAL_READER_OPTIONS);
     let mut rpc_system = RpcSystem::new(Box::new(network), None);

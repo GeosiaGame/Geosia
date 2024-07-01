@@ -3,9 +3,9 @@
 use std::collections::VecDeque;
 
 use hashbrown::HashMap;
-use ocg_schemas::coordinates::AbsChunkPos;
 use ocg_schemas::voxel::chunk::Chunk;
 use ocg_schemas::OcgExtraData;
+use ocg_schemas::{coordinates::AbsChunkPos, mutwatcher::MutWatcher};
 
 use crate::voxel::persistence::{ChunkPersistenceLayer, ChunkPersistenceLayerStats, ChunkProviderResult};
 
@@ -15,7 +15,7 @@ use crate::voxel::persistence::{ChunkPersistenceLayer, ChunkPersistenceLayerStat
 pub struct MemoryPersistenceLayer<ExtraData: OcgExtraData> {
     underlying_provider: Box<dyn ChunkPersistenceLayer<ExtraData>>,
     queue: VecDeque<ChunkProviderResult<ExtraData>>,
-    storage: HashMap<AbsChunkPos, Chunk<ExtraData>>,
+    storage: HashMap<AbsChunkPos, MutWatcher<Chunk<ExtraData>>>,
 }
 
 impl<ExtraData: OcgExtraData> MemoryPersistenceLayer<ExtraData> {
@@ -51,9 +51,9 @@ impl<ExtraData: OcgExtraData> ChunkPersistenceLayer<ExtraData> for MemoryPersist
         self.underlying_provider.cancel_load(coordinates);
     }
 
-    fn request_save(&mut self, chunks: Box<[(AbsChunkPos, Chunk<ExtraData>)]>) {
+    fn request_save(&mut self, chunks: Box<[(AbsChunkPos, MutWatcher<Chunk<ExtraData>>)]>) {
         for (pos, mut chunk) in chunks.into_vec().into_iter() {
-            chunk.blocks.optimize();
+            chunk.mutate_without_revision().blocks.optimize();
             self.storage.insert(pos, chunk);
         }
     }

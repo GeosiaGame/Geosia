@@ -33,9 +33,11 @@ rgb.workspace = true
 serde.workspace = true
 smallvec.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
 rand.workspace = true
 rand_xoshiro.workspace = true
 noise.workspace = true
+zorder.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
