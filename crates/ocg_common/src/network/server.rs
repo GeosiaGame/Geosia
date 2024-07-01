@@ -74,7 +74,7 @@ pub struct NetworkServerPlugin;
 
 impl Plugin for NetworkServerPlugin {
     fn build(&self, app: &mut App) {
-        app.world.spawn(ConnectedPlayersTable::default());
+        app.world_mut().spawn(ConnectedPlayersTable::default());
     }
 }
 

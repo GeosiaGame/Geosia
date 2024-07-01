@@ -31,9 +31,9 @@ capnpc = "0.19.0"
 clap = { version = "4.3.19", features = ["derive"] }
 either = "1.8.1"
 futures = "0.3.28"
-glam = { version = "0.25.0", features = ["bytemuck", "serde"] } # Keep in sync with bevy
+glam = { version = "0.27.0", features = ["bytemuck", "serde"] } # Keep in sync with bevy
 hashbrown = { version = "0.14", features = ["serde"] }
-image = "0.24.9" # Keep in sync with bevy
+image = "0.25" # Keep in sync with bevy
 itertools = "0.13.0"
 kstring = { version = "2.0.0", features = ["serde"] }
 lru = "0.12.3"
@@ -58,7 +58,7 @@ voronoice = "0.2.0"
 zorder = "0.2.2"
 
 # Remote, bevy plugins
-bevy_egui = "0.27.1"
+bevy_egui = "0.27.0"
 
 # Remote, testing
 criterion = { version = "0.5.1", features = ["html_reports"] }
@@ -66,7 +66,7 @@ quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
 [workspace.dependencies.bevy]
-version = "0.13.2"
+version = "0.14.0-rc.4"
 default-features = false
 # Extra features are used in ocg_client on top of these common ones
 features = [
@@ -74,7 +74,7 @@ features = [
     "bevy_asset",         # Assets management
     "animation",          # Animation support
     "android_shared_stdcxx", # For Android builds, use shared C++ library
-    "multi-threaded",
+    "multi_threaded",
 
     # Extra Bevy functionality:
     "serialize",            # Support for `serde` Serialize/Deserialize
@@ -89,7 +89,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_math]
-version = "0.13.2"
+version = "0.14.0-rc.4"
 default-features = false
 features = [
     "serialize",            # Support for `serde` Serialize/Deserialize
@@ -114,3 +114,5 @@ codegen-units = 1
 lto = "thin"
 incremental = false
 
+[patch.crates-io]
+bevy_egui = { git = "https://github.com/Friz64/bevy_egui.git", rev = "b25bf5bdf1ea88a21a1ddb93f13234d1fdee40f8" }

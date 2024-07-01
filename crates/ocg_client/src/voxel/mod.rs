@@ -1,8 +1,8 @@
 //! Client-side voxel world rendering
 
+use bevy::color::palettes::tailwind;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::prelude::*;
-use bevy::utils::smallvec::SmallVec;
 use capnp::message::TypedReader;
 use meshgen::mesh_from_chunk;
 use ocg_common::network::transport::RPC_LOCAL_READER_OPTIONS;
@@ -18,6 +18,7 @@ use ocg_schemas::schemas::network_capnp as rpc;
 use ocg_schemas::voxel::chunk::Chunk;
 use ocg_schemas::voxel::chunk_group::ChunkGroup;
 use ocg_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
+use smallvec::SmallVec;
 use tokio_util::bytes::Bytes;
 
 use crate::ClientData;
@@ -113,7 +114,7 @@ fn handle_chunk_packet(raw_packet: Bytes, world: &mut World) -> Result<()> {
         test_chunks.chunks.insert(pos, MutWatcher::new(mid_chunk));
 
         let white_material = world.resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
-            base_color: Color::GRAY,
+            base_color: tailwind::GRAY_500.into(),
             ..default()
         });
 

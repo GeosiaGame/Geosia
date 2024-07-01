@@ -38,7 +38,7 @@ fn main_menu_ui(
                 }
                 ui.add_space(8.0);
                 if ui.button("Quit").clicked() {
-                    quit.send(AppExit);
+                    quit.send(AppExit::Success);
                 }
                 ui.add_space(16.0);
             });

@@ -21,8 +21,8 @@ use bevy::app::{AppExit, ScheduleRunnerPlugin};
 use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::prelude::*;
+use bevy::state::app::StatesPlugin;
 use bevy::time::TimePlugin;
-use bevy::utils::smallvec::SmallVec;
 use bevy::utils::synccell::SyncCell;
 use capnp::message::TypedBuilder;
 use ocg_schemas::coordinates::{AbsChunkPos, InChunkPos, InChunkRange};
@@ -35,6 +35,7 @@ use ocg_schemas::voxel::chunk_storage::ChunkStorage;
 use ocg_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use ocg_schemas::{GameSide, OcgExtraData};
 use rand::{Rng, SeedableRng};
+use smallvec::SmallVec;
 use tokio_util::bytes::Bytes;
 use voxel::plugin::VoxelUniverseBuilder;
 
@@ -247,6 +248,7 @@ impl GameServer {
         let mut app = App::new();
         app.add_plugins(TaskPoolPlugin::default())
             .add_plugins(TypeRegistrationPlugin)
+            .add_plugins(StatesPlugin)
             .add_plugins(FrameCountPlugin)
             .add_plugins(TimePlugin)
             .add_plugins(TransformPlugin)
@@ -324,7 +326,7 @@ impl GameServer {
         app.insert_resource(GameServerControlCommandReceiver(SyncCell::new(ctrl_rx)));
         app.insert_resource(GameServerResource(engine));
 
-        VoxelUniverseBuilder::<ServerData>::new(&mut app.world, block_registry)
+        VoxelUniverseBuilder::<ServerData>::new(app.world_mut(), block_registry)
             .unwrap()
             .with_persistent_storage(Box::new(persistence))
             .unwrap()
@@ -410,7 +412,7 @@ impl GameServer {
                     let engine: &GameServerResource = world.resource();
                     let engine = &engine.0;
                     engine.network_thread.sync_shutdown();
-                    world.send_event(AppExit);
+                    world.send_event(AppExit::Success);
                     let _ = notif.send(());
                 }
                 GameServerControlCommand::Invoke(cmd) => {

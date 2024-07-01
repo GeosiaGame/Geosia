@@ -26,6 +26,7 @@ use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::RenderPlugin;
 use bevy::scene::ScenePlugin;
 use bevy::sprite::SpritePlugin;
+use bevy::state::app::StatesPlugin;
 use bevy::text::TextPlugin;
 use bevy::time::TimePlugin;
 use bevy::ui::UiPlugin;
@@ -75,6 +76,7 @@ pub fn client_main() {
     // Bevy Base
     app.add_plugins(TaskPoolPlugin::default())
         .add_plugins(TypeRegistrationPlugin)
+        .add_plugins(StatesPlugin)
         .add_plugins(FrameCountPlugin)
         .add_plugins(TimePlugin)
         .add_plugins(TransformPlugin)
@@ -93,7 +95,7 @@ pub fn client_main() {
         .add_plugins(AccessibilityPlugin)
         .add_plugins(AssetPlugin::default())
         .add_plugins(ScenePlugin)
-        .add_plugins(WinitPlugin::default())
+        .add_plugins(WinitPlugin::<bevy::winit::WakeUp>::default())
         .add_plugins(RenderPlugin::default())
         .add_plugins(ImagePlugin::default())
         .add_plugins(PipelinedRenderingPlugin)

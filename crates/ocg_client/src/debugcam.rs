@@ -249,13 +249,13 @@ fn spawn_debug_text(asset_server: Res<AssetServer>, mut commands: Commands) {
                 TextStyle {
                     font: font.clone(),
                     font_size: 15.0,
-                    color: Color::rgb(0.9, 0.9, 0.9),
+                    color: Color::srgb(0.9, 0.9, 0.9),
                 },
             ),
             TextSection::from_style(TextStyle {
                 font: font.clone(),
                 font_size: 15.0,
-                color: Color::rgb(0.9, 0.9, 0.9),
+                color: Color::srgb(0.9, 0.9, 0.9),
             }),
         ]),
         BiomeText,
@@ -267,26 +267,26 @@ fn spawn_debug_text(asset_server: Res<AssetServer>, mut commands: Commands) {
                 TextStyle {
                     font: font.clone(),
                     font_size: 15.0,
-                    color: Color::rgb(0.9, 0.9, 0.9),
+                    color: Color::srgb(0.9, 0.9, 0.9),
                 },
             ),
             TextSection::from_style(TextStyle {
                 font: font.clone(),
                 font_size: 15.0,
-                color: Color::rgb(0.9, 0.9, 0.9),
+                color: Color::srgb(0.9, 0.9, 0.9),
             }),
             TextSection::new(
                 "\nCurrent Rotation:",
                 TextStyle {
                     font: font.clone(),
                     font_size: 15.0,
-                    color: Color::rgb(0.9, 0.9, 0.9),
+                    color: Color::srgb(0.9, 0.9, 0.9),
                 },
             ),
             TextSection::from_style(TextStyle {
                 font: font.clone(),
                 font_size: 15.0,
-                color: Color::rgb(0.9, 0.9, 0.9),
+                color: Color::srgb(0.9, 0.9, 0.9),
             }),
         ]),
         PositionText,

@@ -21,6 +21,7 @@ capnp.workspace = true
 hashbrown.workspace = true
 image.workspace = true
 quinn.workspace = true
+smallvec.workspace = true
 thiserror.workspace = true
 tokio-util.workspace = true
 tokio.workspace = true
@@ -45,6 +46,8 @@ features = [
     "bevy_gltf",          # GLTF 3D assets format support
     "bevy_text",          # Text/font rendering
     "bevy_ui",            # UI toolkit
+    "bevy_state",         # Game state management
+    "bevy_color",         # Color space types
     "tonemapping_luts",   # Support different camera Tonemapping modes (embeds extra data)
     "x11",                # Linux: Support X11 windowing system
 

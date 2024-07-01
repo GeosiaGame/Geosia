@@ -28,6 +28,7 @@ quinn.workspace = true
 rand.workspace = true
 rand_xoshiro.workspace = true
 serde.workspace = true
+smallvec.workspace = true
 smart-default.workspace = true
 static_assertions.workspace = true
 thiserror.workspace = true
