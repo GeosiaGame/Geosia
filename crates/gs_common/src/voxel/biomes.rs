@@ -50,9 +50,9 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: PLAINS_BIOME_NAME,
             representative_color: RGBA8::new(20, 180, 10, 255),
-            elevation: range(0.5..1.0),
+            elevation: range(0.5..1.5),
             temperature: range(..),
-            moisture: range(..2.5),
+            moisture: range(..),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
                 let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
                 let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
@@ -93,9 +93,9 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: HILLS_BIOME_NAME,
             representative_color: RGBA8::new(15, 110, 10, 255),
-            elevation: range(1.0..2.0),
+            elevation: range(1.5..3.0),
             temperature: range(..),
-            moisture: range(..2.5),
+            moisture: range(..),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
                 let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
                 let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
@@ -140,7 +140,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             representative_color: RGBA8::new(220, 220, 220, 255),
             elevation: range(3.0..),
             temperature: range(..),
-            moisture: range(..2.5),
+            moisture: range(..),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
                 let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
                 let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
@@ -214,7 +214,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: BEACH_BIOME_NAME,
             representative_color: RGBA8::new(224, 200, 130, 255),
-            elevation: range(..),
+            elevation: range(1.0..),
             temperature: range(..),
             moisture: range(2.5..),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {

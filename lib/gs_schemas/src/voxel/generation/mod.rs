@@ -7,7 +7,6 @@ use noise::{NoiseFn, Seedable};
 use self::positional_random::PositionalRandomFactory;
 use super::{chunk_storage::PaletteStorage, voxeltypes::BlockEntry};
 
-pub mod blur;
 pub mod fbm_noise;
 pub mod positional_random;
 

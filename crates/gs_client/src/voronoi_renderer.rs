@@ -1,7 +1,8 @@
-use bevy::render::render_asset::RenderAssetUsages;
+use bevy::{math::DVec2, render::render_asset::RenderAssetUsages};
 use bevy::render::texture::Image;
-use gs_common::voxel::generator::StdGenerator;
-use gs_schemas::{
+use image::{GenericImage, Rgba};
+use ocg_common::voxel::generator::{is_inside, StdGenerator};
+use ocg_schemas::{
     dependencies::itertools::{iproduct, Itertools},
     voxel::biome::BiomeRegistry,
 };
@@ -22,10 +23,21 @@ pub fn draw_voronoi(generator: &StdGenerator, biome_registry: &BiomeRegistry, wi
     let mut temperature_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
     let mut moisture_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
 
+    let mut original_cells_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
+
     for (x, y) in iproduct!(0..width_u32, 0..height_u32) {
         let mapped_x = x as i32 - (width / 2) as i32;
         let mapped_y = y as i32 - (height / 2) as i32;
+
         let point = [mapped_x, mapped_y];
+
+        for center in generator.delaunay_centers() {
+            if is_inside(DVec2::new(mapped_x as f64, mapped_y as f64), &center.center_locations[..]) {
+                original_cells_img.put_pixel(x, y, Rgba([0, 0, 255, 255]));
+                break;
+            }
+        }
+
         let biomes = generator.get_biomes_at_point(&point);
 
         if biomes.is_some() {
@@ -72,6 +84,23 @@ pub fn draw_voronoi(generator: &StdGenerator, biome_registry: &BiomeRegistry, wi
         }
     }
 
+    for edge in generator.edges().iter() {
+        let edge = edge.borrow();
+        let point_v_0 = edge.v0.as_ref().unwrap().borrow().point;
+        let point_v_1 = edge.v1.as_ref().unwrap().borrow().point;
+        let point_d_0 = edge.d0.as_ref().unwrap().borrow().point;
+        let point_d_1 = edge.d1.as_ref().unwrap().borrow().point;
+        let mut f = 0.0;
+        while f <= 1.0 {
+            let current_v = point_v_0.lerp(point_v_1, f);
+            let current_d = point_d_0.lerp(point_d_1, f);
+            original_cells_img.put_pixel((current_v.x.round() as i32 + width as i32 / 2 - 1).max(0) as u32, (current_v.y.round() as i32 + height as i32 / 2 - 1).max(0) as u32, Rgba([255, 0, 0, 255]));
+            original_cells_img.put_pixel((current_d.x.round() as i32 + width as i32 / 2 - 1).max(0) as u32, (current_d.y.round() as i32 + height as i32 / 2 - 1).max(0) as u32, Rgba([0, 255, 0, 255]));
+            f += 0.01;
+        }
+    }
+
+
     std::fs::create_dir_all("./output").expect("failed to make image output directory.");
     noise_img
         .save("./output/total_noise_map.png")
@@ -88,6 +117,10 @@ pub fn draw_voronoi(generator: &StdGenerator, biome_registry: &BiomeRegistry, wi
 
     biome_img
         .save("./output/biome_map.png")
+        .expect("failed to save biome map image");
+
+    original_cells_img
+        .save("./output/original_cells.png")
         .expect("failed to save biome map image");
     // return a RGBA8 bevy image.
     Image::from_dynamic(biome_img, false, RenderAssetUsages::all())

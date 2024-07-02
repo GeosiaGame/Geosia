@@ -1,14 +1,14 @@
 //! Standard world generator.
 
-use std::{cell::RefCell, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::Instant};
+use std::{cell::RefCell, cmp::Ordering, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::Instant};
 
-use bevy::utils::hashbrown::HashMap;
+use bevy::{scene::ron::de, utils::hashbrown::HashMap};
 use bevy_math::{DVec2, IVec2, IVec3};
 use gs_schemas::{
     coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIMZ},
     dependencies::{
         itertools::{iproduct, Itertools},
-        smallvec::{smallvec, SmallVec},
+        smallvec::SmallVec,
     },
     registry::RegistryId,
     voxel::{
@@ -37,15 +37,7 @@ pub const WORLD_SIZE_Y: i32 = 1;
 const TRIANGLE_VERTICES: [(usize, usize); 3] = [(0, 1), (1, 2), (2, 0)];
 const LAKE_TRESHOLD: f64 = 0.3;
 
-/// gosh this is jank why can't I just use DVec2
-fn lerp(start: &Point, end: &Point, value: f64) -> Point {
-    let mul = |p: &Point, v: f64| Point { x: p.x * v, y: p.y * v };
-    let add = |p1: &Point, p2: &Point| Point {
-        x: p1.x + p2.x,
-        y: p1.y + p2.y,
-    };
-    add(&mul(start, 1.0 - value), &mul(end, value))
-}
+const BIOME_BLEND_RADIUS: f64 = 4.0;
 
 /// Standard world generator implementation.
 pub struct StdGenerator {
@@ -62,6 +54,9 @@ pub struct StdGenerator {
     centers: Vec<Rc<RefCell<Center>>>,
     corners: Vec<Rc<RefCell<Corner>>>,
     edges: Vec<Rc<RefCell<Edge>>>,
+
+    delaunay_centers: Vec<DelaunayCenter>,
+    voronoi_centers: Vec<VoronoiCenter>,
 }
 
 impl StdGenerator {
@@ -89,10 +84,13 @@ impl StdGenerator {
             },
 
             voronoi: None,
-            points: vec![],
-            centers: vec![],
-            corners: vec![],
-            edges: vec![],
+            points: Vec::new(),
+            centers: Vec::new(),
+            corners: Vec::new(),
+            edges: Vec::new(),
+
+            delaunay_centers: Vec::new(),
+            voronoi_centers: Vec::new(),
         }
     }
 
@@ -148,7 +146,7 @@ impl StdGenerator {
         block_registry: &BlockRegistry,
         biome_registry: &BiomeRegistry,
     ) {
-        let mut blended = vec![smallvec![]; CHUNK_DIM2Z];
+        let mut blended = vec![SmallVec::new(); CHUNK_DIM2Z];
 
         let vparams: [i32; CHUNK_DIM2Z] = {
             let mut vparams: [MaybeUninit<i32>; CHUNK_DIM2Z] = unsafe { MaybeUninit::uninit().assume_init() };
@@ -255,16 +253,27 @@ impl StdGenerator {
             .build();
         self.voronoi = diagram;
         let diagram = self.voronoi.as_ref().unwrap();
+        let edges = Self::make_edges(diagram, &mut self.delaunay_centers, &mut self.voronoi_centers);
+
         let mut center_lookup: HashMap<[i32; 2], Rc<RefCell<Center>>> = HashMap::new();
 
         for point in diagram.sites() {
-            let center = Rc::new(RefCell::new(Center::new(point.clone())));
+            let point = DVec2::new(point.x, point.y);
+            let center = Rc::new(RefCell::new(Center::new(point)));
             self.centers.push(center.clone());
-            center_lookup.insert([point.x.round() as i32, point.y.round() as i32], center);
+            center_lookup.insert([point.x.round() as i32, point.y.round() as i32], center.clone());
         }
 
-        let mut corner_map: Vec<Vec<Rc<RefCell<Corner>>>> = vec![];
-        let mut make_corner = |point: Point| {
+        for delaunay_center in self.delaunay_centers.iter_mut() {
+            for (i, pos) in delaunay_center.center_locations.into_iter().enumerate() {
+                let center = center_lookup[&[pos.x.round() as i32, pos.y.round() as i32]].clone();
+                delaunay_center.centers.push(center);
+                println!("delaunay center at {:?}: added center for index {i} at {:?}", delaunay_center.point, pos)
+            }
+        }
+
+        let mut corner_map: Vec<Vec<Rc<RefCell<Corner>>>> = Vec::new();
+        let mut make_corner = |point: DVec2| {
             let mut bucket = point.x.abs() as usize;
             while bucket <= point.x.abs() as usize + 2 {
                 if corner_map.get(bucket).is_none() {
@@ -282,7 +291,7 @@ impl StdGenerator {
 
             let bucket = point.x.abs() as usize + 1;
             while corner_map.get(bucket).is_none() {
-                corner_map.push(vec![]);
+                corner_map.push(Vec::new());
             }
             let q = Corner::new(point);
             //q.border = q.point.x == -x_size/2.0 || q.point.x == x_size/2.0
@@ -304,10 +313,9 @@ impl StdGenerator {
             }
         };
 
-        let edges = Self::make_edges(diagram, diagram.sites());
         for (delaunay_edge, voronoi_edge) in edges {
             let mut edge = Edge::new();
-            edge.midpoint = lerp(&voronoi_edge.0, &voronoi_edge.1, 0.5);
+            edge.midpoint = voronoi_edge.0.lerp(voronoi_edge.1, 0.5);
 
             // Edges point to corners. Edges point to centers.
             edge.v0 = Some(make_corner(voronoi_edge.0));
@@ -371,51 +379,72 @@ impl StdGenerator {
 
             self.edges.push(rc);
         }
+
+        for voronoi_center in self.voronoi_centers.iter_mut() {
+            for pos in voronoi_center.corner_locations.iter() {
+                voronoi_center.corners.push(make_corner(*pos));
+            }
+        }
     }
 
     /// returns: \[(delaunay edges, voronoi edges)\]
-    fn make_edges(voronoi: &Voronoi, points: &[Point]) -> Vec<(PointEdge, PointEdge)> {
-        let mut list_of_delaunay_edges: Vec<PointEdge> = vec![];
+    fn make_edges(voronoi: &Voronoi, delaunay_centers: &mut Vec<DelaunayCenter>, voronoi_centers: &mut Vec<VoronoiCenter>) -> Vec<(PointEdge, PointEdge)> {
+        let points = voronoi.sites().iter().map(|p| DVec2::new(p.x, p.y)).collect_vec();
+        let mut list_of_delaunay_edges: Vec<PointEdge> = Vec::new();
 
         let triangles = &voronoi.triangulation().triangles;
-        let triangles: Vec<[&Point; 3]> = (0..triangles.len() / 3)
+        let triangles = (0..triangles.len() / 3)
             .map(|t| {
                 [
-                    &points[triangles[3 * t]],
-                    &points[triangles[3 * t + 1]],
-                    &points[triangles[3 * t + 2]],
+                    points[triangles[3 * t]],
+                    points[triangles[3 * t + 1]],
+                    points[triangles[3 * t + 2]],
                 ]
             })
-            .collect();
+            .collect_vec();
 
-        for triangle in triangles {
+        for (site, triangle) in triangles.into_iter().enumerate() {
             for e in TRIANGLE_VERTICES {
                 // for all edges of triangle
-                let vertex_1 = triangle[e.0].to_owned();
-                let vertex_2 = triangle[e.1].to_owned();
+                let vertex_1 = triangle[e.0];
+                let vertex_2 = triangle[e.1];
                 list_of_delaunay_edges.push(PointEdge(vertex_1, vertex_2)); // always lesser index first
             }
+            let center_point = &voronoi.vertices()[site];
+            let center_point = DVec2::new(center_point.x, center_point.y);
+            delaunay_centers.push(DelaunayCenter {
+                point: center_point,
+                center_locations: triangle,
+                centers: SmallVec::new(),
+            });
         }
 
-        let mut list_of_voronoi_edges: Vec<PointEdge> = vec![];
+        let mut list_of_voronoi_edges: Vec<PointEdge> = Vec::new();
 
         for cell in voronoi.iter_cells() {
-            let vertices = cell.iter_vertices().collect::<Vec<&Point>>();
+            let vertices = cell.iter_vertices().map(|p| DVec2::new(p.x, p.y)).collect::<Vec<DVec2>>();
             for i in 0..vertices.len() {
-                let vertex_1 = vertices[i].to_owned();
-                let vertex_2 = vertices[(i + 1) % vertices.len()].to_owned();
+                let vertex_1 = vertices[i];
+                let vertex_2 = vertices[(i + 1) % vertices.len()];
                 list_of_voronoi_edges.push(PointEdge(vertex_1, vertex_2));
             }
+            let center_point = cell.site_position();
+            let center_point = DVec2::new(center_point.x, center_point.y);
+            voronoi_centers.push(VoronoiCenter {
+                point: center_point,
+                corner_locations: vertices,
+                corners: SmallVec::new(),
+            });
         }
 
         list_of_delaunay_edges
             .iter()
-            .cloned()
-            .zip(list_of_voronoi_edges.iter().cloned())
+            .copied()
+            .zip(list_of_voronoi_edges.iter().copied())
             .collect_vec()
     }
 
-    fn make_noise(noises: &Noises, point: &Point) -> NoiseValues {
+    fn make_noise(noises: &Noises, point: DVec2) -> NoiseValues {
         let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
         let point = [point.x / scale_factor, point.y / scale_factor];
         let elevation = Self::map_range((-1.5, 1.5), (0.0, 5.0), noises.elevation_noise.get_2d(point));
@@ -441,7 +470,7 @@ impl StdGenerator {
         for p in &mut self.centers {
             let mut p_b = p.borrow_mut();
             // assign noise parameters based on node position
-            p_b.noise = Self::make_noise(&self.noises, &p_b.point);
+            p_b.noise = Self::make_noise(&self.noises, p_b.point);
             let mut num_water = 0;
 
             for q in p_b.corners.clone() {
@@ -494,7 +523,7 @@ impl StdGenerator {
         // otherwise it's coast.
         for q in &mut self.corners {
             let mut q_b = q.borrow_mut();
-            q_b.noise = Self::make_noise(&self.noises, &q_b.point);
+            q_b.noise = Self::make_noise(&self.noises, q_b.point);
             let mut num_ocean = 0;
             let mut num_land = 0;
             for p in &q_b.touches {
@@ -512,7 +541,7 @@ impl StdGenerator {
 
         for e in &self.edges {
             let mut e_b = e.borrow_mut();
-            e_b.noise = Self::make_noise(&self.noises, &e_b.midpoint);
+            e_b.noise = Self::make_noise(&self.noises, e_b.midpoint);
         }
     }
 
@@ -736,33 +765,8 @@ impl StdGenerator {
         let (void_id, _) = biome_registry.lookup_name_to_object(VOID_BIOME_NAME.as_ref()).unwrap();
 
         let size = self.size_blocks_xz();
-        let mut data: Vec<Vec<SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>>> = vec![];
         for (x, y) in iproduct!(-size..size, -size..size) {
-            self.find_biomes_at_point(
-                &Point {
-                    x: x as f64,
-                    y: y as f64,
-                },
-                void_id,
-            );
-            let offset_x = (x + size) as usize;
-            let offset_y = (y + size) as usize;
-            while data.get(offset_x).is_none() {
-                data.push(vec![]);
-            }
-            while data[offset_x].get(offset_y).is_none() {
-                data[offset_x].push(smallvec![]);
-            }
-            data[offset_x][offset_y].clone_from(&self.biome_map.biome_map[&[x, y]]);
-        }
-        let output =
-            gs_schemas::voxel::generation::blur::blur_biomes(&data.iter().map(Vec::as_slice).collect_vec()[..]);
-        for (x, vec) in output.iter().enumerate() {
-            for (y, values) in vec.iter().enumerate() {
-                self.biome_map
-                    .biome_map
-                    .insert([x as i32 - size, y as i32 - size], values.clone());
-            }
+            self.find_biomes_at_point(DVec2::new(x as f64, y as f64), void_id);
         }
     }
 
@@ -778,132 +782,105 @@ impl StdGenerator {
         None
     }
 
-    fn find_biomes_at_point(
-        &mut self,
-        point: &Point,
-        default: RegistryId,
-    ) -> SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> {
-        let sqr_distance = |a: &Point, b: &Point| {
-            let x = b.x - a.x;
-            let y = b.y - a.y;
-
-            x * x + y * y
+    fn find_biomes_at_point(&mut self, point: DVec2, default: RegistryId) {
+        let distance_ordering = |a: &VoronoiCenter, b: &VoronoiCenter| -> Ordering {
+            let dist_a = point.distance(a.point);
+            let dist_b = point.distance(b.point);
+            if dist_a < dist_b {
+                Ordering::Less
+            } else if dist_a > dist_b {
+                Ordering::Greater
+            } else {
+                Ordering::Equal
+            }
         };
+        let fade = |t: f64| -> f64 { t * t * (3.0 - 2.0 * t) };
 
-        let mut closest = &self.centers[0];
-        let mut closest_distance = sqr_distance(point, &closest.borrow().point);
+        let mut sorted = self.voronoi_centers.clone();
+        sorted.sort_by(distance_ordering);
+
+        let mut closest = &sorted[0];
+        let mut closest_distance = point.distance(closest.point);
 
         // just get the closest point because getting it by contained center didn't work as I expected.
         // oh i guess this just works perfectly??
-        for center in &self.centers {
-            let distance = sqr_distance(point, &center.borrow().point);
-            if distance < closest_distance {
+        /*
+        for center in sorted.iter() {
+            if is_inside(point, &center.center_locations[..]) {
                 closest = center;
-                closest_distance = distance;
+                break;
             }
         }
+        */
+        let mut nearby_centers = closest.corners.iter().map(|c| (c, 1.0)).collect_vec();
+
+        /*
+        //println!("point {:?} touches centers {:?}", point, nearby_centers.iter().map(|c| c.0.borrow().point.clone()).collect_vec());
         let center_b = closest.borrow();
-
-        let mut point_elevation = center_b.noise.elevation;
-        let mut point_temperature = center_b.noise.temperature;
-        let mut point_moisture = center_b.noise.moisture;
-
-        let weight = sqr_distance(&center_b.point, point).abs().sqrt() / 10.0;
-        let mut to_blend: SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]> = smallvec![BiomeEntry {
-            id: center_b.biome.unwrap_or(default),
-            weight
-        }];
-
-        let mut total = 0.0;
-        for corner in &center_b.corners {
-            let corner = corner.borrow();
-            if corner.biome.is_none() {
-                continue;
-            }
-
-            let total_distance_sqr = sqr_distance(&center_b.point, &corner.point).abs();
-            let distance_sqr = sqr_distance(&corner.point, point).abs();
-            let weight = distance_sqr / total_distance_sqr.max(1.0);
-            // weight at this point is (distance from the corner) / (distance between corner and center)
-            let blend = to_blend.iter_mut().find(|e| e.id == corner.biome.unwrap_or(default));
-            if let Some(blend) = blend {
-                blend.weight += weight;
-            } else {
-                to_blend.push(BiomeEntry {
-                    id: corner.biome.unwrap_or(default),
-                    weight,
-                });
-            }
-
-            point_elevation += corner.noise.elevation * weight;
-            point_temperature += corner.noise.temperature * weight;
-            point_moisture += corner.noise.moisture * weight;
-
-            total += 1.0;
+        println!("point {:?} selected corner at {:?} touches centers {:?}", point, &center_b.point, &center_b.touches.iter().map(|c| c.borrow().point.clone()).collect_vec());
+        for center in &center_b.touches {
+            nearby_centers.push((center.clone(), 1.0));
         }
-        for edge in &center_b.borders {
-            let edge = edge.borrow();
-            if edge.biome.is_none() {
-                continue;
+        for center in &sorted {
+            let center_b = center.borrow();
+            for neighbor in &center_b.touches {
+                if sqr_distance(&neighbor.borrow().point, point).sqrt() >= 4.0 * BIOME_BLEND_RADIUS + closest_distance {
+                    nearby_centers.push((neighbor.clone(), 1.0));
+                }
             }
-
-            let total_distance_sqr = sqr_distance(&center_b.point, &edge.midpoint).abs();
-            let distance_sqr = sqr_distance(&edge.midpoint, point).abs();
-            let weight = distance_sqr / total_distance_sqr.max(1.0);
-
-            let blend = to_blend.iter_mut().find(|e| e.id == edge.biome.unwrap_or(default));
-            if let Some(blend) = blend {
-                blend.weight += weight;
-            } else {
-                to_blend.push(BiomeEntry {
-                    id: edge.biome.unwrap_or(default),
-                    weight,
-                });
-            }
-
-            point_elevation += edge.noise.elevation * weight;
-            point_temperature += edge.noise.temperature * weight;
-            point_moisture += edge.noise.moisture * weight;
-
-            total += 1.0;
         }
-        for neighbor in &center_b.neighbors {
-            let neighbor = neighbor.borrow();
-            let total_distance_sqr = sqr_distance(&center_b.point, &neighbor.point).abs();
-            let distance_sqr = sqr_distance(&neighbor.point, point).abs();
-            let weight = distance_sqr / total_distance_sqr.max(1.0);
+        */
 
-            let blend = to_blend.iter_mut().find(|e| e.id == neighbor.biome.unwrap_or(default));
-            if let Some(blend) = blend {
-                blend.weight += weight;
-            } else {
-                to_blend.push(BiomeEntry {
-                    id: neighbor.biome.unwrap_or(default),
-                    weight,
-                });
-            }
+        let mut total_weight = 0.0;
+        for (first_node, second_node) in nearby_centers.iter_mut().map(RefCell::new).map(Rc::new).tuple_windows() {
+            let mut first_node = first_node.borrow_mut();
+            let mut second_node = second_node.borrow_mut();
+            let first = first_node.0.borrow().point;
+            let second = second_node.0.borrow().point;
 
-            point_elevation += neighbor.noise.elevation * weight;
-            point_temperature += neighbor.noise.temperature * weight;
-            point_moisture += neighbor.noise.moisture * weight;
+            let distance_from_midpoint = (point - (first + second) / 2.0)
+                .dot(second - first)
+                / (second - first).length();
+            let weight = fade((distance_from_midpoint / BIOME_BLEND_RADIUS).max(-1.0).min(1.0) * 0.5 + 0.5);
 
-            total += 1.0;
-        }
+            first_node.1 *= 1.0 - weight;
+            second_node.1 *= weight;
 
-        point_elevation /= total;
-        point_temperature /= total;
-        point_moisture /= total;
-
-        for entry in &mut to_blend {
-            entry.weight /= total;
+            total_weight += weight;
         }
 
         let p = [point.x.round() as i32, point.y.round() as i32];
+        let default_biome_list = &mut SmallVec::<[BiomeEntry; EXPECTED_BIOME_COUNT]>::new();
+        //let mut to_blend = self.biome_map.biome_map.get(&p).unwrap_or(default_biome_list).clone();
+        let mut to_blend = default_biome_list.clone();
+        //let (mut point_elevation, mut point_temperature, mut point_moisture) =
+        //    self.biome_map.noise_map.get(&p).unwrap_or_else(|| &(0.0, 0.0, 0.0));
+        let (mut point_elevation, mut point_temperature, mut point_moisture) = (0.0, 0.0, 0.0);
+
+        for node in nearby_centers {
+            let (center, mut weight) = node;
+            let center = center.borrow();
+            weight /= total_weight;
+
+            point_elevation += center.noise.elevation * weight;
+            point_temperature += center.noise.temperature * weight;
+            point_moisture += center.noise.moisture * weight;
+
+            let blend = to_blend.iter_mut().find(|e| e.id == center.biome.unwrap_or(default));
+            if let Some(blend) = blend {
+                blend.weight += weight;
+            } else {
+                to_blend.push(BiomeEntry {
+                    id: center.biome.unwrap_or(default),
+                    weight,
+                });
+            }
+        }
+
         self.biome_map.biome_map.insert(p, to_blend);
         self.biome_map
             .noise_map
             .insert(p, (point_elevation, point_temperature, point_moisture));
-        self.biome_map.biome_map[&p].clone()
     }
 
     /// Get the biomes at the given point from the biome map.
@@ -927,6 +904,14 @@ impl StdGenerator {
             .expect("voronoi map should exist, but it somehow failed to generate.")
     }
 
+    pub fn delaunay_centers(&self) -> &Vec<DelaunayCenter> {
+        &self.delaunay_centers
+    }
+
+    pub fn edges(&self) -> &Vec<Rc<RefCell<Edge>>> {
+        &self.edges
+    }
+
     /// Get the +XZ size of the world, in blocks.
     pub fn size_blocks_xz(&self) -> i32 {
         self.size_chunks_xz * CHUNK_DIM
@@ -938,6 +923,21 @@ impl StdGenerator {
     }
 }
 
+pub fn is_inside(point: DVec2, polygon: &[DVec2]) -> bool {
+    let len = polygon.len();
+    for i in 0..len {
+        let v1 = polygon[i] - point;
+        let v2 = polygon[(i + 1) % len] - point;
+        let edge = v1 - v2;
+
+        let x = edge.perp_dot(v1);
+        if x > 0.0 {
+            return false;
+        }
+    }
+    return true;
+}
+
 #[derive(Clone, Copy, Serialize, Deserialize, Default, PartialEq, Debug)]
 struct NoiseValues {
     elevation: f64,
@@ -946,8 +946,8 @@ struct NoiseValues {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-struct Center {
-    point: Point,
+pub struct Center {
+    pub point: DVec2,
     noise: NoiseValues,
     biome: Option<RegistryId>,
 
@@ -961,7 +961,7 @@ struct Center {
 }
 
 impl Center {
-    fn new(point: Point) -> Center {
+    fn new(point: DVec2) -> Center {
         Self {
             point,
             noise: NoiseValues::default(),
@@ -971,23 +971,23 @@ impl Center {
             ocean: false,
             coast: false,
 
-            neighbors: vec![],
-            borders: vec![],
-            corners: vec![],
+            neighbors: Vec::new(),
+            borders: Vec::new(),
+            corners: Vec::new(),
         }
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
-struct PointEdge(Point, Point);
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct PointEdge(DVec2, DVec2);
 
 #[derive(Clone, PartialEq, Debug)]
-struct Edge {
-    d0: Option<Rc<RefCell<Center>>>,
-    d1: Option<Rc<RefCell<Center>>>, // Delaunay edge
-    v0: Option<Rc<RefCell<Corner>>>,
-    v1: Option<Rc<RefCell<Corner>>>, // Voronoi edge
-    midpoint: Point,                 // halfway between v0,v1
+pub struct Edge {
+    pub d0: Option<Rc<RefCell<Center>>>,
+    pub d1: Option<Rc<RefCell<Center>>>, // Delaunay edge
+    pub v0: Option<Rc<RefCell<Corner>>>,
+    pub v1: Option<Rc<RefCell<Corner>>>, // Voronoi edge
+    pub midpoint: DVec2,                 // halfway between v0,v1
 
     noise: NoiseValues,        // noise value at midpoint
     biome: Option<RegistryId>, // biome at midpoint
@@ -1002,7 +1002,7 @@ impl Edge {
             d1: None,
             v0: None,
             v1: None,
-            midpoint: Point::default(),
+            midpoint: DVec2::default(),
 
             noise: NoiseValues::default(),
             biome: None,
@@ -1013,8 +1013,8 @@ impl Edge {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-struct Corner {
-    point: Point,
+pub struct Corner {
+    pub point: DVec2,
     noise: NoiseValues,
     border: bool,
     biome: Option<RegistryId>,
@@ -1034,7 +1034,7 @@ struct Corner {
 }
 
 impl Corner {
-    fn new(position: Point) -> Corner {
+    fn new(position: DVec2) -> Corner {
         Self {
             noise: NoiseValues::default(),
             point: position,
@@ -1050,9 +1050,23 @@ impl Corner {
             coast: false,
             river: 0,
 
-            touches: vec![],
-            protrudes: vec![],
-            adjacent: vec![],
+            touches: Vec::new(),
+            protrudes: Vec::new(),
+            adjacent: Vec::new(),
         }
     }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct DelaunayCenter {
+    point: DVec2,
+    pub center_locations: [DVec2; 3],
+    centers: SmallVec<[Rc<RefCell<Center>>; 3]>,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct VoronoiCenter {
+    point: DVec2,
+    pub corner_locations: Vec<DVec2>,
+    corners: SmallVec<[Rc<RefCell<Corner>>; 4]>,
 }
