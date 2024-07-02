@@ -2,7 +2,7 @@
 
 use std::{cell::RefCell, cmp::Ordering, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::Instant};
 
-use bevy::{scene::ron::de, utils::hashbrown::HashMap};
+use bevy::utils::hashbrown::HashMap;
 use bevy_math::{DVec2, IVec2, IVec3};
 use gs_schemas::{
     coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIMZ},
@@ -265,10 +265,9 @@ impl StdGenerator {
         }
 
         for delaunay_center in self.delaunay_centers.iter_mut() {
-            for (i, pos) in delaunay_center.center_locations.into_iter().enumerate() {
+            for pos in delaunay_center.center_locations.into_iter() {
                 let center = center_lookup[&[pos.x.round() as i32, pos.y.round() as i32]].clone();
                 delaunay_center.centers.push(center);
-                println!("delaunay center at {:?}: added center for index {i} at {:?}", delaunay_center.point, pos)
             }
         }
 
@@ -388,7 +387,11 @@ impl StdGenerator {
     }
 
     /// returns: \[(delaunay edges, voronoi edges)\]
-    fn make_edges(voronoi: &Voronoi, delaunay_centers: &mut Vec<DelaunayCenter>, voronoi_centers: &mut Vec<VoronoiCenter>) -> Vec<(PointEdge, PointEdge)> {
+    fn make_edges(
+        voronoi: &Voronoi,
+        delaunay_centers: &mut Vec<DelaunayCenter>,
+        voronoi_centers: &mut Vec<VoronoiCenter>,
+    ) -> Vec<(PointEdge, PointEdge)> {
         let points = voronoi.sites().iter().map(|p| DVec2::new(p.x, p.y)).collect_vec();
         let mut list_of_delaunay_edges: Vec<PointEdge> = Vec::new();
 
@@ -422,7 +425,10 @@ impl StdGenerator {
         let mut list_of_voronoi_edges: Vec<PointEdge> = Vec::new();
 
         for cell in voronoi.iter_cells() {
-            let vertices = cell.iter_vertices().map(|p| DVec2::new(p.x, p.y)).collect::<Vec<DVec2>>();
+            let vertices = cell
+                .iter_vertices()
+                .map(|p| DVec2::new(p.x, p.y))
+                .collect::<Vec<DVec2>>();
             for i in 0..vertices.len() {
                 let vertex_1 = vertices[i];
                 let vertex_2 = vertices[(i + 1) % vertices.len()];
@@ -783,7 +789,7 @@ impl StdGenerator {
     }
 
     fn find_biomes_at_point(&mut self, point: DVec2, default: RegistryId) {
-        let distance_ordering = |a: &VoronoiCenter, b: &VoronoiCenter| -> Ordering {
+        let distance_ordering = |a: &DelaunayCenter, b: &DelaunayCenter| -> Ordering {
             let dist_a = point.distance(a.point);
             let dist_b = point.distance(b.point);
             if dist_a < dist_b {
@@ -796,51 +802,33 @@ impl StdGenerator {
         };
         let fade = |t: f64| -> f64 { t * t * (3.0 - 2.0 * t) };
 
-        let mut sorted = self.voronoi_centers.clone();
+        let mut sorted = self.delaunay_centers.clone();
         sorted.sort_by(distance_ordering);
 
         let mut closest = &sorted[0];
-        let mut closest_distance = point.distance(closest.point);
 
-        // just get the closest point because getting it by contained center didn't work as I expected.
-        // oh i guess this just works perfectly??
-        /*
-        for center in sorted.iter() {
+        for center in self.delaunay_centers.iter() {
             if is_inside(point, &center.center_locations[..]) {
                 closest = center;
                 break;
             }
         }
-        */
-        let mut nearby_centers = closest.corners.iter().map(|c| (c, 1.0)).collect_vec();
-
-        /*
-        //println!("point {:?} touches centers {:?}", point, nearby_centers.iter().map(|c| c.0.borrow().point.clone()).collect_vec());
-        let center_b = closest.borrow();
-        println!("point {:?} selected corner at {:?} touches centers {:?}", point, &center_b.point, &center_b.touches.iter().map(|c| c.borrow().point.clone()).collect_vec());
-        for center in &center_b.touches {
-            nearby_centers.push((center.clone(), 1.0));
-        }
-        for center in &sorted {
-            let center_b = center.borrow();
-            for neighbor in &center_b.touches {
-                if sqr_distance(&neighbor.borrow().point, point).sqrt() >= 4.0 * BIOME_BLEND_RADIUS + closest_distance {
-                    nearby_centers.push((neighbor.clone(), 1.0));
-                }
-            }
-        }
-        */
+        let mut nearby = closest
+            .centers
+            .iter()
+            .map(|c| Rc::new(RefCell::new((c, 1.0))))
+            .collect_vec();
 
         let mut total_weight = 0.0;
-        for (first_node, second_node) in nearby_centers.iter_mut().map(RefCell::new).map(Rc::new).tuple_windows() {
+        // ::<(Rc<RefCell<&mut (&Rc<RefCell<Center>>, f64)>>, Rc<RefCell<&mut (&Rc<RefCell<Center>>, f64)>>)>
+        for (mut first_node, mut second_node) in nearby.clone().into_iter().tuple_combinations() {
             let mut first_node = first_node.borrow_mut();
             let mut second_node = second_node.borrow_mut();
             let first = first_node.0.borrow().point;
             let second = second_node.0.borrow().point;
 
-            let distance_from_midpoint = (point - (first + second) / 2.0)
-                .dot(second - first)
-                / (second - first).length();
+            let distance_from_midpoint =
+                (point - (first + second) / 2.0).dot(second - first) / (second - first).length();
             let weight = fade((distance_from_midpoint / BIOME_BLEND_RADIUS).max(-1.0).min(1.0) * 0.5 + 0.5);
 
             first_node.1 *= 1.0 - weight;
@@ -857,8 +845,8 @@ impl StdGenerator {
         //    self.biome_map.noise_map.get(&p).unwrap_or_else(|| &(0.0, 0.0, 0.0));
         let (mut point_elevation, mut point_temperature, mut point_moisture) = (0.0, 0.0, 0.0);
 
-        for node in nearby_centers {
-            let (center, mut weight) = node;
+        for node in nearby {
+            let (center, mut weight) = *node.borrow();
             let center = center.borrow();
             weight /= total_weight;
 
