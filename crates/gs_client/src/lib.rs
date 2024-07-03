@@ -176,6 +176,10 @@ mod debug_window {
     use gs_common::voxel::biomes::setup_basic_biomes;
     use gs_common::voxel::generator::StdGenerator;
     use gs_common::voxel::generator::WORLD_SIZE_XZ;
+    use gs_common::voxel::generator::WORLD_SIZE_Y;
+    use gs_schemas::coordinates::AbsChunkPos;
+    use gs_schemas::coordinates::CHUNK_DIM;
+    use gs_schemas::dependencies::itertools::iproduct;
     use gs_schemas::voxel::biome::BiomeRegistry;
 
     use crate::voronoi_renderer;
@@ -199,12 +203,6 @@ mod debug_window {
         let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4);
         generator.generate_world_biomes(&biome_reg);
         let world_size_blocks = generator.size_blocks_xz() as usize;
-        images.add(voronoi_renderer::draw_voronoi(
-            &generator,
-            &biome_reg,
-            world_size_blocks,
-            world_size_blocks,
-        ));
 
         let start = Instant::now();
 
@@ -221,6 +219,61 @@ mod debug_window {
             ..default()
         });
 
+        let img_handle = images.add(voronoi_renderer::draw_voronoi(
+            &generator,
+            &biome_reg,
+            &block_reg,
+            &test_chunks,
+            world_size_blocks,
+            world_size_blocks,
+            WORLD_SIZE_Y * CHUNK_DIM
+        ));
+
+        let img_handle = images.add(voronoi_renderer::draw_voronoi(
+            &generator,
+            &biome_reg,
+            &block_reg,
+            &test_chunks,
+            world_size_blocks,
+            world_size_blocks,
+            WORLD_SIZE_Y * CHUNK_DIM
+        ));
+
+        commands
+            .spawn(NodeBundle {
+                style: Style {
+                    width: Val::Percent(25.0),
+                    height: Val::Percent(25.0),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    flex_shrink: 0.0,
+                    ..default()
+                },
+                background_color: Color::CRIMSON.into(),
+                ..default()
+            })
+            .with_children(|parent| {
+                parent.spawn(TextBundle::from_section(
+                    "Hello gs",
+                    TextStyle {
+                        font: font.clone(),
+                        font_size: 75.0,
+                        color: Color::rgb(0.9, 0.9, 0.9),
+                    },
+                ));
+                log::warn!("Child made");
+            });
+
+        commands.spawn(ImageBundle {
+            image: UiImage::new(img_handle),
+            style: Style {
+                width: Val::Px(100.0),
+                height: Val::Px(100.0),
+                flex_shrink: 0.0,
+                ..default()
+            },
+            ..default()
+        });
         log::warn!("Setting up debug window done");
     }
 }

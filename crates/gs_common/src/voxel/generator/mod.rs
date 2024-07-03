@@ -1,6 +1,6 @@
 //! Standard world generator.
 
-use std::{cell::RefCell, cmp::Ordering, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::Instant};
+use std::{cell::RefCell, cmp::Ordering, collections::VecDeque, mem::MaybeUninit, ops::Deref, rc::Rc, time::Instant};
 
 use bevy::utils::hashbrown::HashMap;
 use bevy_math::{DVec2, IVec2, IVec3};
@@ -30,14 +30,14 @@ use voronoice::*;
 use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME, RIVER_BIOME_NAME};
 
 /// World size of the +X & +Z axis, in chunks.
-pub const WORLD_SIZE_XZ: i32 = 1;
+pub const WORLD_SIZE_XZ: i32 = 8;
 /// World size of the +Y axis, in chunks.
 pub const WORLD_SIZE_Y: i32 = 1;
 
 const TRIANGLE_VERTICES: [(usize, usize); 3] = [(0, 1), (1, 2), (2, 0)];
 const LAKE_TRESHOLD: f64 = 0.3;
 
-const BIOME_BLEND_RADIUS: f64 = 4.0;
+const BIOME_BLEND_RADIUS: f64 = 16.0;
 
 /// Standard world generator implementation.
 pub struct StdGenerator {
@@ -228,7 +228,7 @@ impl StdGenerator {
         for entry in blend {
             let biome = entry.lookup(biome_registry).unwrap();
             let noise = nf(global_pos / scale_factor, biome);
-            let strength = (biome.blend_influence - entry.weight) / biome.blend_influence;
+            let strength = entry.weight * biome.blend_influence;
             heights += noise * strength;
             weights += strength;
         }
@@ -789,9 +789,9 @@ impl StdGenerator {
     }
 
     fn find_biomes_at_point(&mut self, point: DVec2, default: RegistryId) {
-        let distance_ordering = |a: &DelaunayCenter, b: &DelaunayCenter| -> Ordering {
-            let dist_a = point.distance(a.point);
-            let dist_b = point.distance(b.point);
+        let distance_ordering = |a: &Rc<RefCell<Center>>, b: &Rc<RefCell<Center>>| -> Ordering {
+            let dist_a = point.distance(a.borrow().point);
+            let dist_b = point.distance(b.borrow().point);
             if dist_a < dist_b {
                 Ordering::Less
             } else if dist_a > dist_b {
@@ -802,26 +802,22 @@ impl StdGenerator {
         };
         let fade = |t: f64| -> f64 { t * t * (3.0 - 2.0 * t) };
 
-        let mut sorted = self.delaunay_centers.clone();
+        let mut sorted = self.centers.clone();
         sorted.sort_by(distance_ordering);
 
-        let mut closest = &sorted[0];
+        let closest = sorted[0].borrow();
+        let closest_distance = closest.point.distance(point);
 
-        for center in self.delaunay_centers.iter() {
-            if is_inside(point, &center.center_locations[..]) {
-                closest = center;
-                break;
+        let mut nearby = Vec::new();
+        for center in sorted.iter() {
+            let c_b = center.borrow();
+            if c_b.point.distance(point) <= 4.0 * BIOME_BLEND_RADIUS + closest_distance {
+                nearby.push(Rc::new(RefCell::new((center.clone(), 1.0))));
             }
         }
-        let mut nearby = closest
-            .centers
-            .iter()
-            .map(|c| Rc::new(RefCell::new((c, 1.0))))
-            .collect_vec();
 
         let mut total_weight = 0.0;
-        // ::<(Rc<RefCell<&mut (&Rc<RefCell<Center>>, f64)>>, Rc<RefCell<&mut (&Rc<RefCell<Center>>, f64)>>)>
-        for (mut first_node, mut second_node) in nearby.clone().into_iter().tuple_combinations() {
+        for (first_node, second_node) in nearby.clone().into_iter().tuple_combinations() {
             let mut first_node = first_node.borrow_mut();
             let mut second_node = second_node.borrow_mut();
             let first = first_node.0.borrow().point;
@@ -836,19 +832,19 @@ impl StdGenerator {
 
             total_weight += weight;
         }
+        if total_weight < 0.1 {
+            total_weight += 1.0;
+        }
 
         let p = [point.x.round() as i32, point.y.round() as i32];
-        let default_biome_list = &mut SmallVec::<[BiomeEntry; EXPECTED_BIOME_COUNT]>::new();
-        //let mut to_blend = self.biome_map.biome_map.get(&p).unwrap_or(default_biome_list).clone();
-        let mut to_blend = default_biome_list.clone();
-        //let (mut point_elevation, mut point_temperature, mut point_moisture) =
-        //    self.biome_map.noise_map.get(&p).unwrap_or_else(|| &(0.0, 0.0, 0.0));
+        let mut to_blend = SmallVec::<[BiomeEntry; EXPECTED_BIOME_COUNT]>::new();
         let (mut point_elevation, mut point_temperature, mut point_moisture) = (0.0, 0.0, 0.0);
 
         for node in nearby {
-            let (center, mut weight) = *node.borrow();
+            let node = node.borrow();
+            let (center, mut weight) = node.deref();
             let center = center.borrow();
-            weight /= total_weight;
+            //weight /= total_weight;
 
             point_elevation += center.noise.elevation * weight;
             point_temperature += center.noise.temperature * weight;
@@ -1046,15 +1042,15 @@ impl Corner {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct DelaunayCenter {
+struct DelaunayCenter {
     point: DVec2,
-    pub center_locations: [DVec2; 3],
+    center_locations: [DVec2; 3],
     centers: SmallVec<[Rc<RefCell<Center>>; 3]>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct VoronoiCenter {
+struct VoronoiCenter {
     point: DVec2,
-    pub corner_locations: Vec<DVec2>,
-    corners: SmallVec<[Rc<RefCell<Corner>>; 4]>,
+    corner_locations: Vec<DVec2>,
+    corners: SmallVec<[Rc<RefCell<Corner>>; 6]>,
 }

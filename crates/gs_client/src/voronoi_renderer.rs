@@ -1,22 +1,29 @@
-use bevy::{math::DVec2, render::render_asset::RenderAssetUsages};
+use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::texture::Image;
 use image::{GenericImage, Rgba};
-use ocg_common::voxel::generator::{is_inside, StdGenerator};
+use ocg_common::voxel::generator::StdGenerator;
 use ocg_schemas::{
-    dependencies::itertools::{iproduct, Itertools},
-    voxel::biome::BiomeRegistry,
+    coordinates::{AbsBlockPos, AbsChunkPos, InChunkPos, CHUNK_DIM}, dependencies::itertools::{iproduct, Itertools}, voxel::{biome::BiomeRegistry, chunk_group::ChunkGroup, chunk_storage::ChunkStorage, voxeltypes::{BlockRegistry, EMPTY_BLOCK_NAME}}
 };
 use image::{GenericImage, Rgba};
+
+use crate::ClientData;
 
 fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {
     to_range.0 + (s - from_range.0) * (to_range.1 - to_range.0) / (from_range.1 - from_range.0)
 }
 
 /// Make a bevy image out of the voronoi diagram.
-pub fn draw_voronoi(generator: &StdGenerator, biome_registry: &BiomeRegistry, width: usize, height: usize) -> Image {
+pub fn draw_voronoi(generator: &StdGenerator,
+    biome_registry: &BiomeRegistry, block_registry: &BlockRegistry,
+    chunks: &ChunkGroup<ClientData>,
+    width: usize, length: usize, height: i32) -> Image {
+    let (empty_id, _) = block_registry.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
+
     let width_u32 = width as u32;
-    let height_u32 = height as u32;
+    let height_u32 = length as u32;
     let mut biome_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
+    let mut heightmap_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
 
     let mut noise_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
     let mut elevation_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
@@ -25,21 +32,12 @@ pub fn draw_voronoi(generator: &StdGenerator, biome_registry: &BiomeRegistry, wi
 
     let mut original_cells_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
 
-    for (x, y) in iproduct!(0..width_u32, 0..height_u32) {
+    for (x, z) in iproduct!(0..width_u32, 0..height_u32) {
         let mapped_x = x as i32 - (width / 2) as i32;
-        let mapped_y = y as i32 - (height / 2) as i32;
+        let mapped_z = z as i32 - (length / 2) as i32;
 
-        let point = [mapped_x, mapped_y];
-
-        for center in generator.delaunay_centers() {
-            if is_inside(DVec2::new(mapped_x as f64, mapped_y as f64), &center.center_locations[..]) {
-                original_cells_img.put_pixel(x, y, Rgba([0, 0, 255, 255]));
-                break;
-            }
-        }
-
+        let point = [mapped_x, mapped_z];
         let biomes = generator.get_biomes_at_point(&point);
-
         if biomes.is_some() {
             let average_color = biomes
                 .unwrap()
@@ -54,7 +52,7 @@ pub fn draw_voronoi(generator: &StdGenerator, biome_registry: &BiomeRegistry, wi
                 color[1] += c.g as f64 * w;
                 total_weight += w;
             }
-            if total_weight != 0.0 {
+            if total_weight.abs() > f64::EPSILON {
                 color[0] /= total_weight;
                 color[1] /= total_weight;
                 color[2] /= total_weight;
@@ -66,9 +64,9 @@ pub fn draw_voronoi(generator: &StdGenerator, biome_registry: &BiomeRegistry, wi
                 255,
             ];
 
-            biome_img.put_pixel(x, y, Rgba(color));
+            biome_img.put_pixel(x, z, Rgba(color));
         } else {
-            biome_img.put_pixel(x, y, Rgba([0, 0, 0, 0]));
+            biome_img.put_pixel(x, z, Rgba([0, 0, 0, 0]));
         }
 
         let noises = generator.get_noises_at_point(&point);
@@ -76,11 +74,27 @@ pub fn draw_voronoi(generator: &StdGenerator, biome_registry: &BiomeRegistry, wi
             let elevation = map_range((0.0, 5.0), (0.0, 255.0), noises.0) as u8;
             let temperature = map_range((0.0, 5.0), (0.0, 255.0), noises.1) as u8;
             let moisture = map_range((0.0, 5.0), (0.0, 255.0), noises.2) as u8;
-            noise_img.put_pixel(x, y, Rgba([elevation, temperature, moisture, 255]));
+            noise_img.put_pixel(x, z, Rgba([elevation, temperature, moisture, 255]));
 
-            elevation_img.put_pixel(x, y, Rgba([elevation, elevation, elevation, 255]));
-            temperature_img.put_pixel(x, y, Rgba([temperature, temperature, temperature, 255]));
-            moisture_img.put_pixel(x, y, Rgba([moisture, moisture, moisture, 255]));
+            elevation_img.put_pixel(x, z, Rgba([elevation, elevation, elevation, 255]));
+            temperature_img.put_pixel(x, z, Rgba([temperature, temperature, temperature, 255]));
+            moisture_img.put_pixel(x, z, Rgba([moisture, moisture, moisture, 255]));
+        }
+
+        for y in (height - 1)..-height {
+            let block_pos = AbsBlockPos::new(mapped_x, y, mapped_z);
+            let chunk_pos = AbsChunkPos::from(block_pos);
+            let in_chunk_pos = InChunkPos::try_new(block_pos.x - chunk_pos.x * CHUNK_DIM,
+                block_pos.y - chunk_pos.y * CHUNK_DIM,
+                block_pos.z - chunk_pos.z * CHUNK_DIM).unwrap();
+            if let Some(chunk) = chunks.chunks.get(&chunk_pos) {
+                if chunk.blocks.get(in_chunk_pos).id != empty_id {
+                    let y_f = y as f64 / (height * 2) as f64 + height as f64;
+                    let y_c = (y_f * 255.0).min(255.0).max(0.0).round() as u8;
+                    heightmap_img.put_pixel(x, z, Rgba([y_c, y_c, y_c, 255]));
+                    break;
+                }
+            }
         }
     }
 
@@ -94,9 +108,9 @@ pub fn draw_voronoi(generator: &StdGenerator, biome_registry: &BiomeRegistry, wi
         while f <= 1.0 {
             let current_v = point_v_0.lerp(point_v_1, f);
             let current_d = point_d_0.lerp(point_d_1, f);
-            original_cells_img.put_pixel((current_v.x.round() as i32 + width as i32 / 2 - 1).max(0) as u32, (current_v.y.round() as i32 + height as i32 / 2 - 1).max(0) as u32, Rgba([255, 0, 0, 255]));
-            original_cells_img.put_pixel((current_d.x.round() as i32 + width as i32 / 2 - 1).max(0) as u32, (current_d.y.round() as i32 + height as i32 / 2 - 1).max(0) as u32, Rgba([0, 255, 0, 255]));
-            f += 0.01;
+            original_cells_img.put_pixel((current_v.x.round() as i32 + width as i32 / 2).min(width as i32 - 1).max(0) as u32, (current_v.y.round() as i32 + length as i32 / 2).min(length as i32 - 1).max(0) as u32, Rgba([255, 0, 0, 255]));
+            original_cells_img.put_pixel((current_d.x.round() as i32 + width as i32 / 2).min(width as i32 - 1).max(0) as u32, (current_d.y.round() as i32 + length as i32 / 2).min(length as i32 - 1).max(0) as u32, Rgba([0, 255, 0, 255]));
+            f += 0.001;
         }
     }
 
@@ -118,10 +132,13 @@ pub fn draw_voronoi(generator: &StdGenerator, biome_registry: &BiomeRegistry, wi
     biome_img
         .save("./output/biome_map.png")
         .expect("failed to save biome map image");
+    heightmap_img
+        .save("./output/height_map.png")
+        .expect("failed to save height map image");
 
     original_cells_img
         .save("./output/original_cells.png")
-        .expect("failed to save biome map image");
+        .expect("failed to save cell map image");
     // return a RGBA8 bevy image.
     Image::from_dynamic(biome_img, false, RenderAssetUsages::all())
 }
