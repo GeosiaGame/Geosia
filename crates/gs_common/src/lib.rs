@@ -37,6 +37,7 @@ use gs_schemas::{GameSide, GsExtraData};
 use rand::{Rng, SeedableRng};
 use smallvec::SmallVec;
 use tokio_util::bytes::Bytes;
+use voxel::generator::{StdGenerator, WORLD_SIZE_XZ, WORLD_SIZE_Y};
 use voxel::plugin::VoxelUniverseBuilder;
 
 use crate::config::{GameConfig, GameConfigHandle};
@@ -293,33 +294,31 @@ impl GameServer {
             .0;
         let null_world = EmptyPersistenceLayer::<ServerData>::new(BlockEntry::new(air, 0), ());
         let mut persistence = MemoryPersistenceLayer::new(Box::new(null_world));
-        persistence.request_load(&[AbsChunkPos::ZERO]);
-        let mut chunk0_s = persistence
-            .try_dequeue_responses(1)
-            .into_iter()
-            .next()
-            .unwrap()
-            .unwrap()
-            .1;
-        let chunk0 = chunk0_s.mutate_stored();
-        chunk0.blocks.fill(InChunkRange::WHOLE_CHUNK, BlockEntry::new(dirt, 0));
-        chunk0.blocks.fill(
-            InChunkRange::from_corners(
-                InChunkPos::try_new(0, 30, 0).unwrap(),
-                InChunkPos::try_new(31, 31, 31).unwrap(),
-            ),
-            BlockEntry::new(grass, 0),
-        );
-        let mut rng = rand_xoshiro::Xoshiro256StarStar::from_entropy();
-        for (x, y) in iproduct!(0..32, 0..32) {
-            if rng.gen_bool(0.67) {
-                chunk0
-                    .blocks
-                    .put(InChunkPos::try_new(x, 29, y).unwrap(), BlockEntry::new(grass, 0));
-            }
-        }
-        persistence.request_save(Box::new([(AbsChunkPos::ZERO, chunk0_s)]));
+        
+
         let block_registry = Arc::clone(&engine.server_data.shared_registries.block_types);
+        let biome_registry = Arc::clone(&engine.server_data.shared_registries.biome_types);
+
+        let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4);
+        generator.generate_world_biomes(&biome_registry);
+        let world_size_blocks = generator.size_blocks_xz() as usize;
+
+
+        for (cx, cy, cz) in iproduct!(-WORLD_SIZE_XZ..=WORLD_SIZE_XZ, -WORLD_SIZE_Y..=WORLD_SIZE_Y, -WORLD_SIZE_XZ..=WORLD_SIZE_XZ) {
+            let cpos = AbsChunkPos::new(cx, cy, cz);
+            persistence.request_load(&[cpos]); 
+            let mut chunk_s = persistence
+                .try_dequeue_responses(1)
+                .into_iter()
+                .next()
+                .unwrap()
+                .unwrap()
+                .1;
+            let chunk = chunk_s.mutate_stored();
+            generator.generate_chunk(cpos, &mut chunk.blocks, &block_registry, &biome_registry);
+            persistence.request_save(Box::new([(cpos, chunk_s)]));
+        }
+
 
         fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {
             app.configure_sets(schedule, InGameSystemSet);
@@ -440,8 +439,11 @@ impl GameServer {
 pub fn builtin_game_registries() -> GameRegistries {
     let mut block_types = Registry::default();
     voxel::blocks::setup_basic_blocks(&mut block_types);
+    let mut biome_types = Registry::default();
+    voxel::biomes::setup_basic_biomes(&mut biome_types);
 
     GameRegistries {
         block_types: Arc::new(block_types),
+        biome_types: Arc::new(biome_types),
     }
 }

@@ -3491,6 +3491,14 @@ pub mod game_bootstrap_data {
     pub fn has_block_registry(&self) -> bool {
       !self.reader.get_pointer_field(1).is_null()
     }
+    #[inline]
+    pub fn get_biome_registry(self) -> ::capnp::Result<crate::schemas::game_types_capnp::registry_id_mapping_bundle::Reader<'a>> {
+      ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(2), ::core::option::Option::None)
+    }
+    #[inline]
+    pub fn has_biome_registry(&self) -> bool {
+      !self.reader.get_pointer_field(2).is_null()
+    }
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
@@ -3576,6 +3584,22 @@ pub mod game_bootstrap_data {
     #[inline]
     pub fn has_block_registry(&self) -> bool {
       !self.builder.is_pointer_field_null(1)
+    }
+    #[inline]
+    pub fn get_biome_registry(self) -> ::capnp::Result<crate::schemas::game_types_capnp::registry_id_mapping_bundle::Builder<'a>> {
+      ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(2), ::core::option::Option::None)
+    }
+    #[inline]
+    pub fn set_biome_registry(&mut self, value: crate::schemas::game_types_capnp::registry_id_mapping_bundle::Reader<'_>) -> ::capnp::Result<()> {
+      ::capnp::traits::SetterInput::set_pointer_builder(self.builder.reborrow().get_pointer_field(2), value, false)
+    }
+    #[inline]
+    pub fn init_biome_registry(self, ) -> crate::schemas::game_types_capnp::registry_id_mapping_bundle::Builder<'a> {
+      ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(2), 0)
+    }
+    #[inline]
+    pub fn has_biome_registry(&self) -> bool {
+      !self.builder.is_pointer_field_null(2)
     }
   }
 

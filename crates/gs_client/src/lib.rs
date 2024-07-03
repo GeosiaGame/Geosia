@@ -196,19 +196,6 @@ mod debug_window {
         log::warn!("Setting up debug window");
         let _ = asset_server.load::<Font>("fonts/cascadiacode.ttf");
 
-        let mut biome_reg = BiomeRegistry::default();
-        setup_basic_biomes(&mut biome_reg);
-        let biome_reg = biome_reg;
-
-        let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4);
-        generator.generate_world_biomes(&biome_reg);
-        let world_size_blocks = generator.size_blocks_xz() as usize;
-
-        let start = Instant::now();
-
-        let duration = start.elapsed();
-        println!("chunk generation took {:?}", duration);
-
         commands.spawn(DirectionalLightBundle {
             directional_light: DirectionalLight {
                 shadows_enabled: false,
@@ -216,62 +203,6 @@ mod debug_window {
                 ..default()
             },
             transform: Transform::from_xyz(0., 1000., 0.).looking_at(Vec3::new(300.0, 0.0, 300.0), Vec3::Y),
-            ..default()
-        });
-
-        let img_handle = images.add(voronoi_renderer::draw_voronoi(
-            &generator,
-            &biome_reg,
-            &block_reg,
-            &test_chunks,
-            world_size_blocks,
-            world_size_blocks,
-            WORLD_SIZE_Y * CHUNK_DIM
-        ));
-
-        let img_handle = images.add(voronoi_renderer::draw_voronoi(
-            &generator,
-            &biome_reg,
-            &block_reg,
-            &test_chunks,
-            world_size_blocks,
-            world_size_blocks,
-            WORLD_SIZE_Y * CHUNK_DIM
-        ));
-
-        commands
-            .spawn(NodeBundle {
-                style: Style {
-                    width: Val::Percent(25.0),
-                    height: Val::Percent(25.0),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    flex_shrink: 0.0,
-                    ..default()
-                },
-                background_color: Color::CRIMSON.into(),
-                ..default()
-            })
-            .with_children(|parent| {
-                parent.spawn(TextBundle::from_section(
-                    "Hello OCG",
-                    TextStyle {
-                        font: font.clone(),
-                        font_size: 75.0,
-                        color: Color::rgb(0.9, 0.9, 0.9),
-                    },
-                ));
-                log::warn!("Child made");
-            });
-
-        commands.spawn(ImageBundle {
-            image: UiImage::new(img_handle),
-            style: Style {
-                width: Val::Px(100.0),
-                height: Val::Px(100.0),
-                flex_shrink: 0.0,
-                ..default()
-            },
             ..default()
         });
         log::warn!("Setting up debug window done");
