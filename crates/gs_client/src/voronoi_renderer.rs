@@ -99,10 +99,11 @@ pub fn draw_voronoi(generator: &StdGenerator,
     }
 
     for edge in generator.edges().iter() {
-        let point_v_0 = edge.v0(generator).as_ref().unwrap().point;
-        let point_v_1 = edge.v1(generator).as_ref().unwrap().point;
-        let point_d_0 = edge.d0(generator).as_ref().unwrap().point;
-        let point_d_1 = edge.d1(generator).as_ref().unwrap().point;
+        let edge = edge.borrow();
+        let point_v_0 = edge.v0.as_ref().unwrap().borrow().point;
+        let point_v_1 = edge.v1.as_ref().unwrap().borrow().point;
+        let point_d_0 = edge.d0.as_ref().unwrap().borrow().point;
+        let point_d_1 = edge.d1.as_ref().unwrap().borrow().point;
         let mut f = 0.0;
         while f <= 1.0 {
             let current_v = point_v_0.lerp(point_v_1, f);

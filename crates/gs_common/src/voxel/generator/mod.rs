@@ -1,9 +1,6 @@
 //! Standard world generator.
 
-use std::cell::RefMut;
-use std::fmt::Debug;
-use std::ops::Deref;
-use std::{cell::RefCell, cmp::Ordering, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::Instant};
+use std::{cell::RefCell, cmp::Ordering, collections::VecDeque, mem::MaybeUninit, ops::Deref, rc::Rc, time::Instant};
 
 use bevy::utils::hashbrown::HashMap;
 use bevy_math::{DVec2, IVec2, IVec3};
@@ -54,22 +51,12 @@ pub struct StdGenerator {
 
     voronoi: Option<Voronoi>,
     points: Vec<Point>,
-    centers: Vec<Center>,
-    corners: Vec<Corner>,
-    edges: Vec<Edge>,
+    centers: Vec<Rc<RefCell<Center>>>,
+    corners: Vec<Rc<RefCell<Corner>>>,
+    edges: Vec<Rc<RefCell<Edge>>>,
 
     delaunay_centers: Vec<DelaunayCenter>,
     voronoi_centers: Vec<VoronoiCenter>,
-}
-
-impl Debug for StdGenerator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StdGenerator")
-            .field("seed", &self.seed)
-            .field("size_chunks_xz", &self.size_chunks_xz)
-            .field("biome_point_count", &self.biome_point_count)
-            .finish()
-    }
 }
 
 impl StdGenerator {
@@ -124,10 +111,8 @@ impl StdGenerator {
         let size = (self.size_chunks_xz * CHUNK_DIM) as f64;
 
         let start = Instant::now();
-        let bpc = self.biome_point_count;
-        self.pick_biome_points(bpc, size, size);
-        let points = self.points.clone();
-        self.make_diagram(size, size, points);
+        self.pick_biome_points(self.biome_point_count, size, size);
+        self.make_diagram(size, size, self.points.clone());
         let duration = start.elapsed();
         println!("picking points & building graph took {:?}", duration);
 
@@ -270,17 +255,13 @@ impl StdGenerator {
         let diagram = self.voronoi.as_ref().unwrap();
         let edges = Self::make_edges(diagram, &mut self.delaunay_centers, &mut self.voronoi_centers);
 
-        let mut center_lookup: HashMap<[i32; 2], usize> = HashMap::new();
+        let mut center_lookup: HashMap<[i32; 2], Rc<RefCell<Center>>> = HashMap::new();
 
         for point in diagram.sites() {
             let point = DVec2::new(point.x, point.y);
-            let center = Center::new(point);
-            let index = self.centers.len();
-            self.centers.push(center);
-            center_lookup.insert(
-                [point.x.round() as i32, point.y.round() as i32],
-                index,
-            );
+            let center = Rc::new(RefCell::new(Center::new(point)));
+            self.centers.push(center.clone());
+            center_lookup.insert([point.x.round() as i32, point.y.round() as i32], center.clone());
         }
 
         for delaunay_center in self.delaunay_centers.iter_mut() {
@@ -290,8 +271,7 @@ impl StdGenerator {
             }
         }
 
-        let mut corner_map: Vec<Vec<usize>> = Vec::new();
-        let mut corners: Vec<Corner> = Vec::new();
+        let mut corner_map: Vec<Vec<Rc<RefCell<Corner>>>> = Vec::new();
         let mut make_corner = |point: DVec2| {
             let mut bucket = point.x.abs() as usize;
             while bucket <= point.x.abs() as usize + 2 {
@@ -299,14 +279,10 @@ impl StdGenerator {
                     break;
                 }
                 for q in &corner_map[bucket] {
-                    let corner = &corners.get(*q);
-                    if corner.is_none() {
-                        return None;
-                    }
-                    let dx = -corner.unwrap().point.x;
-                    let dy = point.y - corner.unwrap().point.y;
+                    let dx = -q.borrow().point.x;
+                    let dy = point.y - q.borrow().point.y;
                     if dx * dx + dy * dy < 1e-6 {
-                        return Some(*q);
+                        return q.clone();
                     }
                 }
                 bucket += 1;
@@ -319,101 +295,95 @@ impl StdGenerator {
             let q = Corner::new(point);
             //q.border = q.point.x == -x_size/2.0 || q.point.x == x_size/2.0
             //            || q.point.y == -y_size/2.0 || q.point.y == y_size/2.0;
-            let value = corners.len();
-            corners.push(q);
-            corner_map[bucket].push(value);
-            Some(value)
+            let q = Rc::new(RefCell::new(q));
+            self.corners.push(q.clone());
+            corner_map[bucket].push(q.clone());
+            q
         };
 
-        let add_to_corner_list = |v: &mut Vec<usize>, x: &Option<usize>| {
-            if x.is_some() && !v.contains(x.as_ref().unwrap()) {
-                v.push(x.unwrap());
+        let add_to_corner_list = |v: &mut Vec<Rc<RefCell<Corner>>>, x: &Option<Rc<RefCell<Corner>>>| {
+            if x.is_some() && !v.iter().any(|y| Rc::ptr_eq(y, x.as_ref().unwrap())) {
+                v.push(x.clone().unwrap());
             }
         };
-        let add_to_center_list = |v: &mut Vec<usize>, x: &Option<usize>| {
-            if x.is_some() && !v.contains(x.as_ref().unwrap()) {
-                v.push(x.unwrap());
+        let add_to_center_list = |v: &mut Vec<Rc<RefCell<Center>>>, x: &Option<Rc<RefCell<Center>>>| {
+            if x.is_some() && !v.iter().any(|y| Rc::ptr_eq(y, x.as_ref().unwrap())) {
+                v.push(x.clone().unwrap());
             }
         };
 
-        let mut new_edges: Vec<Edge> = Vec::new();
         for (delaunay_edge, voronoi_edge) in edges {
-            let edge = Edge::new();
-            let index = new_edges.len();
-            new_edges.push(edge);
-            let edge = &mut new_edges[index];
+            let mut edge = Edge::new();
             edge.midpoint = voronoi_edge.0.lerp(voronoi_edge.1, 0.5);
 
             // Edges point to corners. Edges point to centers.
-            edge.v0 = make_corner(voronoi_edge.0).clone();
-            edge.v1 = make_corner(voronoi_edge.1).clone();
-            edge.d0 = center_lookup.get(&[delaunay_edge.0.x.round() as i32, delaunay_edge.0.y.round() as i32]).map(|u| *u);
-            edge.d1 = center_lookup.get(&[delaunay_edge.1.x.round() as i32, delaunay_edge.1.y.round() as i32]).map(|u| *u);
+            edge.v0 = Some(make_corner(voronoi_edge.0));
+            edge.v1 = Some(make_corner(voronoi_edge.1));
+            edge.d0 = center_lookup
+                .get(&[delaunay_edge.0.x.round() as i32, delaunay_edge.0.y.round() as i32])
+                .cloned();
+            edge.d1 = center_lookup
+                .get(&[delaunay_edge.1.x.round() as i32, delaunay_edge.1.y.round() as i32])
+                .cloned();
+
+            let rc = Rc::new(RefCell::new(edge));
 
             // Centers point to edges. Corners point to edges.
-            if let Some(d0) = &mut edge.d0(self) {
-                d0.borders.push(index);
+            if let Some(d0) = &rc.borrow().d0 {
+                d0.borrow_mut().borders.push(rc.clone());
             }
-            if let Some(d1) = &mut edge.d1(self) {
-                d1.borders.push(index);
+            if let Some(d1) = &rc.borrow().d1 {
+                d1.borrow_mut().borders.push(rc.clone());
             }
-            if let Some(v0) = &mut edge.v0(self) {
-                v0.protrudes.push(index);
+            if let Some(v0) = &rc.borrow().v0 {
+                v0.borrow_mut().protrudes.push(rc.clone());
             }
-            if let Some(v1) = &mut edge.v1(self) {
-                v1.protrudes.push(index);
+            if let Some(v1) = &rc.borrow().v1 {
+                v1.borrow_mut().protrudes.push(rc.clone());
             }
 
             // Centers point to centers.
-            if let (Some(d0), Some(d1)) = (&edge.d0, &edge.d1) {
-                add_to_center_list(&mut self.centers[*d0].neighbors, &Some(*d1));
-                add_to_center_list(&mut self.centers[*d1].neighbors, &Some(*d0));
+            if let (Some(d0), Some(d1)) = (&rc.borrow().d0, &rc.borrow().d1) {
+                add_to_center_list(&mut d0.borrow_mut().neighbors, &Some(d1.clone()));
+                add_to_center_list(&mut d1.borrow_mut().neighbors, &Some(d0.clone()));
             }
 
             // Corners point to corners
-            let v0 = edge.v0.clone();
-            let v1 = edge.v1.clone();
-            if let (Some(v0), Some(i1)) = (edge.v0_mut(self), v1) {
-                add_to_corner_list(&mut v0.adjacent, &Some(i1));
-            }
-            if let (Some(v1), Some(i0)) = (edge.v1_mut(self), v0) {
-                add_to_corner_list(&mut v1.adjacent, &Some(i0));
+            if let (Some(v0), Some(v1)) = (&rc.borrow().v0, &rc.borrow().v1) {
+                add_to_corner_list(&mut v0.borrow_mut().adjacent, &Some(v1.clone()));
+                add_to_corner_list(&mut v1.borrow_mut().adjacent, &Some(v0.clone()));
             }
 
             // Centers point to corners
-            if let Some(d0) = edge.d0_mut(self) {
-                add_to_corner_list(&mut d0.corners, &v0);
-                add_to_corner_list(&mut d0.corners, &v1);
+            if let Some(d0) = &rc.borrow().d0 {
+                add_to_corner_list(&mut d0.borrow_mut().corners, &rc.borrow().v0);
+                add_to_corner_list(&mut d0.borrow_mut().corners, &rc.borrow().v1);
             }
 
             // Centers point to corners
-            if let Some(d1) = edge.d1_mut(self) {
-                add_to_corner_list(&mut d1.corners, &v0);
-                add_to_corner_list(&mut d1.corners, &v1);
+            if let Some(d1) = &rc.borrow().d1 {
+                add_to_corner_list(&mut d1.borrow_mut().corners, &rc.borrow().v0);
+                add_to_corner_list(&mut d1.borrow_mut().corners, &rc.borrow().v1);
             }
 
             // Corners point to centers
-            let d0 = edge.d0.clone();
-            let d1 = edge.d1.clone();
-            if let Some(v0) = edge.v0_mut(self) {
-                add_to_center_list(&mut v0.touches, &d0);
-                add_to_center_list(&mut v0.touches, &d1);
+            if let Some(v0) = &rc.borrow().v0 {
+                add_to_center_list(&mut v0.borrow_mut().touches, &rc.borrow().d0);
+                add_to_center_list(&mut v0.borrow_mut().touches, &rc.borrow().d1);
             }
-            if let Some(v1) = edge.v1_mut(self) {
-                add_to_center_list(&mut v1.touches, &d0);
-                add_to_center_list(&mut v1.touches, &d1);
+            if let Some(v1) = &rc.borrow().v1 {
+                add_to_center_list(&mut v1.borrow_mut().touches, &rc.borrow().d0);
+                add_to_center_list(&mut v1.borrow_mut().touches, &rc.borrow().d1);
             }
 
+            self.edges.push(rc);
         }
 
         for voronoi_center in self.voronoi_centers.iter_mut() {
             for pos in voronoi_center.corner_locations.iter() {
-                voronoi_center.corners.push(make_corner(*pos).unwrap());
+                voronoi_center.corners.push(make_corner(*pos));
             }
         }
-
-        self.corners = corners;
-        self.edges = new_edges;
     }
 
     /// returns: \[(delaunay edges, voronoi edges)\]
@@ -501,103 +471,97 @@ impl StdGenerator {
     /// in the second pass, mark any water-containing polygon
     /// connected to an ocean as ocean.
     fn assign_noise_and_oceans(&mut self) {
-        //let mut queue = VecDeque::new();
+        let mut queue = VecDeque::new();
 
-        // FIXME figure out indexing, borrows
-        for (i, p) in self.centers.iter_mut().enumerate() {
+        for p in &mut self.centers {
+            let mut p_b = p.borrow_mut();
             // assign noise parameters based on node position
-            p.noise = Self::make_noise(&self.noises, p.point);
-            /*
-            let mut num_water = 0.0;
+            p_b.noise = Self::make_noise(&self.noises, p_b.point);
+            let mut num_water = 0;
 
-            let corner_len = p.corners.len() as f64;
-            for q in p.get_corners_mut(self) {
+            for q in p_b.corners.clone() {
+                let q = q.borrow();
                 if q.border {
-                    // p.ocean = true;
-                    // p.water = true;
-                    queue.push_back(i);
+                    p_b.ocean = true;
+                    p_b.water = true;
+                    queue.push_back(p.clone());
                 }
                 if q.water {
-                    num_water += 1.0;
+                    num_water += 1;
                 }
             }
-            p.water = p.ocean || num_water >= corner_len * LAKE_TRESHOLD;
-            */
+            p_b.water = p_b.ocean || num_water as f64 >= p_b.corners.len() as f64 * LAKE_TRESHOLD;
         }
-        /*
         while !queue.is_empty() {
             let p = queue.pop_back();
             if p.is_none() {
                 break;
             }
-            let p = p.unwrap();
-            let p: &mut Center = &mut self.centers[p];
-            for (mut r, i) in p.get_neighbors(self).zip(p.neighbors.clone()) {
-                if r.water && !r.ocean {
-                    r.ocean = true;
-                    queue.push_back(i);
+            for r in &p.unwrap().borrow().neighbors {
+                let mut r_b = r.borrow_mut();
+                if r_b.water && !r_b.ocean {
+                    r_b.ocean = true;
+                    queue.push_back(r.clone());
                 }
             }
         }
 
         // Set the polygon attribute 'coast' based on its neighbors. If
         // it has at least one ocean and at least one land neighbor,
-        // then self is a coastal polygon.
+        // then this is a coastal polygon.
         for p in &mut self.centers {
             let mut num_ocean = 0;
             let mut num_land = 0;
-            for r in p.get_neighbors(self) {
-                if r.ocean {
+            for r in &p.borrow().neighbors {
+                if r.borrow().ocean {
                     num_ocean += 1;
                 }
-                if !r.water {
+                if !r.borrow().water {
                     num_land += 1;
                 }
             }
-            p.coast = num_land > 0 && num_ocean > 0;
+            p.borrow_mut().coast = num_land > 0 && num_ocean > 0;
         }
 
         // Set the corner attributes based on the computed polygon
-        // attributes. If all polygons connected to self corner are
+        // attributes. If all polygons connected to this corner are
         // ocean, then it's ocean; if all are land, then it's land;
         // otherwise it's coast.
         for q in &mut self.corners {
-            q.noise = Self::make_noise(&self.noises, q.point);
+            let mut q_b = q.borrow_mut();
+            q_b.noise = Self::make_noise(&self.noises, q_b.point);
             let mut num_ocean = 0;
             let mut num_land = 0;
-            for p in q.get_touches(self) {
-                if p.ocean {
+            for p in &q_b.touches {
+                if p.borrow().ocean {
                     num_ocean += 1;
                 }
-                if !p.water {
+                if !p.borrow().water {
                     num_land += 1;
                 }
             }
-            q.ocean = num_ocean == q.touches.len();
-            q.coast = num_land > 0 && num_ocean > 0;
-            q.water = q.border || (num_land != q.touches.len() && !q.coast);
+            q_b.ocean = num_ocean == q_b.touches.len();
+            q_b.coast = num_land > 0 && num_ocean > 0;
+            q_b.water = q_b.border || (num_land != q_b.touches.len() && !q_b.coast);
         }
 
-        for e in &mut self.edges {
-            e.noise = Self::make_noise(&self.noises, e.midpoint);
+        for e in &self.edges {
+            let mut e_b = e.borrow_mut();
+            e_b.noise = Self::make_noise(&self.noises, e_b.midpoint);
         }
-        */
     }
 
     fn calculate_downslopes(&mut self) {
-        // FIXME figure out indexing, borrows
-        /*
         let mut r;
-        for (i, q) in self.corners.iter_mut().enumerate() {
-            r = i;
-            for (s, i) in q.get_adjacent(self).zip(&q.adjacent) {
-                if s.noise.elevation <= q.noise.elevation {
-                    r = *i;
+        for q in &self.corners {
+            r = q.clone();
+            for s in &q.borrow().adjacent {
+                if s.borrow().noise.elevation <= r.borrow().noise.elevation {
+                    r = s.clone();
                 }
             }
-            q.downslope = Some(r);
+            q.borrow_mut().downslope = Some(r);
         }
-        */
     }
 
     /// Calculate the watershed of every land point. The watershed is
@@ -605,16 +569,17 @@ impl StdGenerator {
     /// watersheds are currently calculated on corners, but it'd be
     /// more useful to compute them on polygon centers so that every
     /// polygon can be marked as being in one watershed.
-    #[allow(clippy::assigning_clones)] // false positive, "fixing" self causes a borrow checker error
+    #[allow(clippy::assigning_clones)] // false positive, "fixing" this causes a borrow checker error
     fn calculate_watersheds(&mut self, biome_registry: &BiomeRegistry) {
         let (ocean_id, _) = biome_registry.lookup_name_to_object(OCEAN_BIOME_NAME.as_ref()).unwrap();
         let (beach_id, _) = biome_registry.lookup_name_to_object(BEACH_BIOME_NAME.as_ref()).unwrap();
 
         // Initially the watershed pointer points downslope one step.
-        for (i, q) in self.corners.iter_mut().enumerate() {
-            q.watershed = Some(i);
-            if q.biome != Some(ocean_id) && q.biome != Some(beach_id) {
-                q.watershed = q.downslope;
+        for q in &self.corners {
+            let mut q_b = q.borrow_mut();
+            q_b.watershed = Some(q.clone());
+            if q_b.biome != Some(ocean_id) && q_b.biome != Some(beach_id) {
+                q_b.watershed = q_b.downslope.clone();
             }
         }
 
@@ -623,22 +588,21 @@ impl StdGenerator {
         // only takes 20 iterations because most points are not far from
         // a coast.  TODO: can run faster by looking at
         // p.watershed.watershed instead of p.downslope.watershed.
-        
-        // FIXME figure out indexing, borrows
-        /*
         for _ in 0..100 {
             let mut changed = false;
-            for q in &mut self.corners {
-                if &q.get_watershed(self).unwrap() == q {
+            for q in &self.corners {
+                let mut q_b = q.borrow_mut();
+                // why does this stack overflow???
+                if Rc::ptr_eq(q_b.watershed.as_ref().unwrap(), q) {
                     continue;
                 }
-                if !q.ocean && !q.coast && !q.get_watershed(self).unwrap().coast && {
-                    let downslope = q.get_downslope(self).unwrap();
-                    let r = downslope.get_watershed(self).unwrap();
+                if !q_b.ocean && !q_b.coast && !q_b.watershed.as_ref().unwrap().borrow().coast && {
+                    let downslope = q_b.downslope.as_ref().unwrap().borrow();
+                    let r = downslope.watershed.as_ref().unwrap().borrow();
                     !r.ocean
                 } {
-                    let downslope_watershed = q.get_downslope(self).unwrap().watershed.unwrap();
-                    q.watershed = Some(downslope_watershed);
+                    let downslope_watershed = q_b.downslope.as_ref().unwrap().borrow().watershed.clone().unwrap();
+                    q_b.watershed = Some(downslope_watershed);
                     changed = true;
                 }
             }
@@ -648,55 +612,49 @@ impl StdGenerator {
         }
 
         // How big is each watershed?
-        for q in &mut self.corners {
-            let q_shed = q.watershed.unwrap();
-            let mut r = q.get_watershed(self).unwrap();
-            if q_shed == r.watershed.unwrap() {
-                q.watershed_size += 1;
+        for q in &self.corners {
+            let mut q_b = q.borrow_mut();
+            let r = q_b.watershed.as_ref().unwrap();
+            if Rc::ptr_eq(q_b.watershed.as_ref().unwrap(), r) {
+                q_b.watershed_size += 1;
             } else {
-                r.watershed_size += 1;
+                r.borrow_mut().watershed_size += 1;
             }
         }
-        */
     }
 
     fn create_rivers(&mut self, biome_registry: &BiomeRegistry) {
         let (river_id, _) = biome_registry.lookup_name_to_object(RIVER_BIOME_NAME.as_ref()).unwrap();
 
-        // FIXME figure out indexing, borrows
-        /*
         for _ in 0..(self.size_chunks_xz / 2) {
-            let mut i = self.random.gen_range(0..self.corners.len());
-            let mut q = self.corners[i].clone();
-            if q.ocean || q.noise.elevation < 1.0 || q.noise.elevation > 3.5 {
+            let mut q = self.corners[self.random.gen_range(0..self.corners.len())].clone();
+            if q.borrow_mut().ocean || q.borrow_mut().noise.elevation < 1.0 || q.borrow_mut().noise.elevation > 3.5 {
                 continue;
             }
-            while !q.coast {
-                if i == q.downslope.unwrap() {
+            while !q.borrow().coast {
+                if Rc::ptr_eq(&q, q.borrow().downslope.as_ref().unwrap()) {
                     break;
                 }
-                let index = self.lookup_edge_from_corner(&q, &q.get_downslope(self).unwrap()).unwrap();
-                let edge = &mut self.edges[index];
+                let edge = Self::lookup_edge_from_corner(&q, q.borrow().downslope.as_ref().unwrap()).unwrap();
+                let mut edge = edge.borrow_mut();
                 edge.river += 1;
-                q.river += 1;
-                q.get_downslope(self).unwrap().river += 1;
+                q.borrow_mut().river += 1;
+                q.borrow_mut().downslope.as_mut().unwrap().borrow_mut().river += 1;
                 edge.biome = Some(river_id);
 
-                i = q.downslope.unwrap();
-                q = q.get_downslope(self).unwrap();
+                q = q.clone().borrow_mut().downslope.as_ref().unwrap().clone();
             }
         }
-        */
     }
 
     fn assign_biomes(&mut self, biome_registry: &BiomeRegistry) {
         // go over all centers and assign biomes to them based on noise & other parameters.
+        for p in &mut self.centers {
+            let mut center = p.borrow_mut();
 
-        // FIXME figure out indexing, borrows
-        /*
-        for center in &mut self.centers {
             // first assign the corners' biomes
-            for mut corner in center.get_corners_mut(self) {
+            for corner in &center.corners {
+                let mut corner = corner.borrow_mut();
                 if corner.biome.is_some() {
                     continue;
                 }
@@ -737,7 +695,8 @@ impl StdGenerator {
                 }
             }
             // then the edges' biomes
-            for mut edge in center.get_borders_mut(self) {
+            for edge in &center.borders {
+                let mut edge = edge.borrow_mut();
                 if edge.biome.is_some() {
                     continue;
                 }
@@ -806,7 +765,6 @@ impl StdGenerator {
                 );
             }
         }
-        */
     }
 
     fn blur_biomes(&mut self, biome_registry: &BiomeRegistry) {
@@ -818,22 +776,22 @@ impl StdGenerator {
         }
     }
 
-    fn lookup_edge_from_corner(&self, q: &Corner, s: &Corner) -> Option<usize> {
-        for (edge, i) in q.get_protrudes(self).zip(&q.protrudes) {
-            if edge.v0.is_some() && edge.v0(self).unwrap() == *s {
-                return Some(*i);
+    fn lookup_edge_from_corner(q: &Rc<RefCell<Corner>>, s: &Rc<RefCell<Corner>>) -> Option<Rc<RefCell<Edge>>> {
+        for edge in &q.borrow().protrudes {
+            if edge.borrow().v0.is_some() && Rc::ptr_eq(edge.borrow().v0.as_ref().unwrap(), s) {
+                return Some(edge.clone());
             }
-            if edge.v1.is_some() && edge.v1(self).unwrap() == *s {
-                return Some(*i);
+            if edge.borrow().v1.is_some() && Rc::ptr_eq(edge.borrow().v1.as_ref().unwrap(), s) {
+                return Some(edge.clone());
             }
         }
         None
     }
 
     fn find_biomes_at_point(&mut self, point: DVec2, default: RegistryId) {
-        let distance_ordering = |a: &Center, b: &Center| -> Ordering {
-            let dist_a = point.distance(a.point);
-            let dist_b = point.distance(b.point);
+        let distance_ordering = |a: &Rc<RefCell<Center>>, b: &Rc<RefCell<Center>>| -> Ordering {
+            let dist_a = point.distance(a.borrow().point);
+            let dist_b = point.distance(b.borrow().point);
             if dist_a < dist_b {
                 Ordering::Less
             } else if dist_a > dist_b {
@@ -844,15 +802,16 @@ impl StdGenerator {
         };
         let fade = |t: f64| -> f64 { t * t * (3.0 - 2.0 * t) };
 
-        let mut sorted = &mut self.centers;
+        let mut sorted = self.centers.clone();
         sorted.sort_by(distance_ordering);
 
-        let closest = &sorted[0];
+        let closest = sorted[0].borrow();
         let closest_distance = closest.point.distance(point);
 
         let mut nearby = Vec::new();
         for center in sorted.iter() {
-            if center.point.distance(point) <= 4.0 * BIOME_BLEND_RADIUS + closest_distance {
+            let c_b = center.borrow();
+            if c_b.point.distance(point) <= 4.0 * BIOME_BLEND_RADIUS + closest_distance {
                 nearby.push(Rc::new(RefCell::new((center.clone(), 1.0))));
             }
         }
@@ -861,8 +820,8 @@ impl StdGenerator {
         for (first_node, second_node) in nearby.clone().into_iter().tuple_combinations() {
             let mut first_node = first_node.borrow_mut();
             let mut second_node = second_node.borrow_mut();
-            let first = first_node.0.point;
-            let second = second_node.0.point;
+            let first = first_node.0.borrow().point;
+            let second = second_node.0.borrow().point;
 
             let distance_from_midpoint =
                 (point - (first + second) / 2.0).dot(second - first) / (second - first).length();
@@ -884,6 +843,7 @@ impl StdGenerator {
         for node in nearby {
             let node = node.borrow();
             let (center, mut weight) = node.deref();
+            let center = center.borrow();
             //weight /= total_weight;
 
             point_elevation += center.noise.elevation * weight;
@@ -921,7 +881,7 @@ impl StdGenerator {
         to_range.0 + (s - from_range.0) * (to_range.1 - to_range.0) / (from_range.1 - from_range.0)
     }
 
-    /// Get the Voronoi diagram for self generator.
+    /// Get the Voronoi diagram for this generator.
     pub fn voronoi(&self) -> &Voronoi {
         self.voronoi
             .as_ref()
@@ -932,7 +892,7 @@ impl StdGenerator {
         &self.delaunay_centers
     }
 
-    pub fn edges(&self) -> &Vec<Edge> {
+    pub fn edges(&self) -> &Vec<Rc<RefCell<Edge>>> {
         &self.edges
     }
 
@@ -941,7 +901,7 @@ impl StdGenerator {
         self.size_chunks_xz * CHUNK_DIM
     }
 
-    /// Get the biome map of self generator.
+    /// Get the biome map of this generator.
     pub fn biome_map(&self) -> &BiomeMap {
         &self.biome_map
     }
@@ -969,7 +929,7 @@ struct NoiseValues {
     moisture: f64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Center {
     pub point: DVec2,
     noise: NoiseValues,
@@ -979,23 +939,9 @@ pub struct Center {
     ocean: bool,
     coast: bool,
 
-    neighbors: Vec<usize>,
-    borders: Vec<usize>,
-    corners: Vec<usize>,
-}
-
-impl PartialEq for Center {
-    fn eq(&self, other: &Self) -> bool {
-        self.point == other.point
-            && self.noise == other.noise
-            && self.biome == other.biome
-            && self.water == other.water
-            && self.ocean == other.ocean
-            && self.coast == other.coast
-            && self.neighbors == other.neighbors
-            && self.borders == other.borders
-            && self.corners == other.corners
-    }
+    neighbors: Vec<Rc<RefCell<Center>>>,
+    borders: Vec<Rc<RefCell<Edge>>>,
+    corners: Vec<Rc<RefCell<Corner>>>,
 }
 
 impl Center {
@@ -1014,59 +960,23 @@ impl Center {
             corners: Vec::new(),
         }
     }
-
-    fn get_neighbors<'a>(&'a self, generator: &'a StdGenerator) -> impl Iterator<Item = &Center> + Clone + '_ {
-        (0..self.neighbors.len())
-            .map(move |s| &generator.centers[s])
-    }
-
-    fn get_borders<'a>(&'a self, generator: &'a StdGenerator) -> impl Iterator<Item = &Edge> + Clone + '_ {
-        (0..self.borders.len())
-            .map(move |s| &generator.edges[s])
-    }
-    fn get_borders_mut<'a>(&'a mut self, generator: &'a mut StdGenerator) -> impl Iterator<Item = Edge> + '_ {
-        (0..self.borders.len())
-            .map(move |s| generator.edges[s].clone())
-    }
-    
-    fn get_corners<'a>(&'a self, generator: &'a StdGenerator) -> impl Iterator<Item = &Corner> + Clone + '_ {
-        (0..self.corners.len())
-            .map(move |s| &generator.corners[s])
-    }
-    fn get_corners_mut<'a>(&'a mut self, generator: &'a mut StdGenerator) -> impl Iterator<Item = Corner> + '_ {
-        (0..self.corners.len())
-            .map(move |s| generator.corners[s].clone())
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 struct PointEdge(DVec2, DVec2);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Edge {
-    pub d0: Option<usize>,
-    pub d1: Option<usize>, // Delaunay edge
-    pub v0: Option<usize>,
-    pub v1: Option<usize>, // Voronoi edge
-    pub midpoint: DVec2,   // halfway between v0,v1
+    pub d0: Option<Rc<RefCell<Center>>>,
+    pub d1: Option<Rc<RefCell<Center>>>, // Delaunay edge
+    pub v0: Option<Rc<RefCell<Corner>>>,
+    pub v1: Option<Rc<RefCell<Corner>>>, // Voronoi edge
+    pub midpoint: DVec2,                 // halfway between v0,v1
 
     noise: NoiseValues,        // noise value at midpoint
     biome: Option<RegistryId>, // biome at midpoint
 
     river: i32, // 0 if no river, or volume of water in river
-}
-
-impl PartialEq for Edge {
-    fn eq(&self, other: &Self) -> bool {
-        self.d0 == other.d0
-            && self.d1 == other.d1
-            && self.v0 == other.v0
-            && self.v1 == other.v1
-            && self.midpoint == other.midpoint
-            && self.noise == other.noise
-            && self.biome == other.biome
-            && self.river == other.river
-    }
 }
 
 impl Edge {
@@ -1084,67 +994,17 @@ impl Edge {
             river: 0,
         }
     }
-
-    pub fn d0<'a>(&'a self, generator: &'a StdGenerator) -> Option<Center> {
-        match self.d0 {
-            Some(d) => Some(generator.centers[d].clone()),
-            None => None,
-        }
-    }
-    pub fn d0_mut<'a>(&'a mut self, generator: &'a mut StdGenerator) -> Option<&'a mut Center> {
-        match self.d0 {
-            Some(d) => Some(&mut generator.centers[d]),
-            None => None,
-        }
-    }
-    pub fn d1<'a>(&'a self, generator: &'a StdGenerator) -> Option<Center> {
-        match self.d1 {
-            Some(d) => Some(generator.centers[d].clone()),
-            None => None,
-        }
-    }
-    pub fn d1_mut<'a>(&'a mut self, generator: &'a mut StdGenerator) -> Option<&'a mut Center> {
-        match self.d1 {
-            Some(d) => Some(&mut generator.centers[d]),
-            None => None,
-        }
-    }
-
-    pub fn v0<'a>(&'a self, generator: &'a StdGenerator) -> Option<Corner> {
-        match self.v0 {
-            Some(d) => if generator.corners.len() > d { Some(generator.corners[d].clone()) } else { None },
-            None => None,
-        }
-    }
-    pub fn v0_mut<'a>(&'a mut self, generator: &'a mut StdGenerator) -> Option<&'a mut Corner> {
-        match self.v0 {
-            Some(d) => if generator.corners.len() > d { Some(&mut generator.corners[d]) } else { None },
-            None => None,
-        }
-    }
-    pub fn v1<'a>(&'a self, generator: &'a StdGenerator) -> Option<Corner> {
-        match self.v1 {
-            Some(d) => Some(generator.corners[d].clone()),
-            None => None,
-        }
-    }
-    pub fn v1_mut<'a>(&'a mut self, generator: &'a mut StdGenerator) -> Option<&'a mut Corner> {
-        match self.v1 {
-            Some(d) => Some(&mut generator.corners[d]),
-            None => None,
-        }
-    }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Corner {
     pub point: DVec2,
     noise: NoiseValues,
     border: bool,
     biome: Option<RegistryId>,
 
-    downslope: Option<usize>,
-    watershed: Option<usize>,
+    downslope: Option<Rc<RefCell<Corner>>>,
+    watershed: Option<Rc<RefCell<Corner>>>,
     watershed_size: i32,
 
     water: bool,
@@ -1152,28 +1012,9 @@ pub struct Corner {
     coast: bool,
     river: i32,
 
-    touches: Vec<usize>,
-    protrudes: Vec<usize>,
-    adjacent: Vec<usize>,
-}
-
-impl PartialEq for Corner {
-    fn eq(&self, other: &Self) -> bool {
-        self.point == other.point
-            && self.noise == other.noise
-            && self.border == other.border
-            && self.biome == other.biome
-            && self.downslope == other.downslope
-            && self.watershed == other.watershed
-            && self.watershed_size == other.watershed_size
-            && self.water == other.water
-            && self.ocean == other.ocean
-            && self.coast == other.coast
-            && self.river == other.river
-            && self.touches == other.touches
-            && self.protrudes == other.protrudes
-            && self.adjacent == other.adjacent
-    }
+    touches: Vec<Rc<RefCell<Center>>>,
+    protrudes: Vec<Rc<RefCell<Edge>>>,
+    adjacent: Vec<Rc<RefCell<Corner>>>,
 }
 
 impl Corner {
@@ -1198,47 +1039,18 @@ impl Corner {
             adjacent: Vec::new(),
         }
     }
-
-    fn get_touches<'a>(&'a self, generator: &'a StdGenerator) -> impl Iterator<Item = Center> + Clone + '_ {
-        (0..self.touches.len())
-            .map(|s| generator.centers[s].clone())
-    }
-
-    fn get_protrudes<'a>(&'a self, generator: &'a StdGenerator) -> impl Iterator<Item = Edge> + Clone + '_ {
-        (0..self.protrudes.len())
-            .map(|s| generator.edges[s].clone())
-    }
-
-    fn get_adjacent<'a>(&'a self, generator: &'a StdGenerator) -> impl Iterator<Item = Corner> + Clone + '_ {
-        (0..self.adjacent.len())
-            .map(|s| generator.corners[s].clone())
-    }
-
-    fn get_downslope<'a>(&'a self, generator: &'a StdGenerator) -> Option<Corner> {
-        match self.downslope {
-            Some(d) => Some(generator.corners[d].clone()),
-            None => None,
-        }
-    }
-
-    fn get_watershed<'a>(&'a self, generator: &'a StdGenerator) -> Option<Corner> {
-        match self.watershed {
-            Some(d) => Some(generator.corners[d].clone()),
-            None => None,
-        }
-    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
 struct DelaunayCenter {
     point: DVec2,
     center_locations: [DVec2; 3],
-    centers: SmallVec<[usize; 3]>,
+    centers: SmallVec<[Rc<RefCell<Center>>; 3]>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
 struct VoronoiCenter {
     point: DVec2,
     corner_locations: Vec<DVec2>,
-    corners: SmallVec<[usize; 6]>,
+    corners: SmallVec<[Rc<RefCell<Corner>>; 6]>,
 }
