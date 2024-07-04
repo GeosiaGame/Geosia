@@ -3,5 +3,5 @@ max_width = 120
 group_imports = "StdExternalCrate"
 ignore = [
     # Rustfmt likes to reorder imports, which messes up the comments in prelude.rs
-    "crates/ocg_common/src/prelude.rs"
+    "crates/gs_common/src/prelude.rs"
 ]
