@@ -274,9 +274,7 @@ impl Client2ServerConnection {
     }
 }
 
-impl gs_schemas::schemas::network_capnp::authenticated_client_connection::Server
-    for AuthenticatedClientConnectionImpl
-{
+impl gs_schemas::schemas::network_capnp::authenticated_client_connection::Server for AuthenticatedClientConnectionImpl {
     fn terminate_connection(
         &mut self,
         _: TerminateConnectionParams,

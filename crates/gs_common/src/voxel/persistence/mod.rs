@@ -3,12 +3,12 @@
 use std::ops::Deref;
 
 use anyhow::Result;
-use hashbrown::HashSet;
 use gs_schemas::coordinates::AbsChunkPos;
 use gs_schemas::mutwatcher::MutWatcher;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
 use gs_schemas::GsExtraData;
+use hashbrown::HashSet;
 
 pub mod empty;
 pub mod memory;

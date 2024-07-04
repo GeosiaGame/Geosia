@@ -2,10 +2,10 @@
 
 use std::collections::VecDeque;
 
-use hashbrown::HashMap;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::GsExtraData;
 use gs_schemas::{coordinates::AbsChunkPos, mutwatcher::MutWatcher};
+use hashbrown::HashMap;
 
 use crate::voxel::persistence::{ChunkPersistenceLayer, ChunkPersistenceLayerStats, ChunkProviderResult};
 

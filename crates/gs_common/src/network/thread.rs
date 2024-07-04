@@ -5,9 +5,9 @@ use std::pin::Pin;
 use std::thread::JoinHandle;
 
 use futures::FutureExt;
-use hashbrown::HashMap;
 use gs_schemas::schemas::NetworkStreamHeader;
 use gs_schemas::GameSide;
+use hashbrown::HashMap;
 use thiserror::Error;
 use tokio::task::LocalSet;
 

@@ -4,7 +4,6 @@ use bevy::color::palettes::tailwind;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::prelude::*;
 use capnp::message::TypedReader;
-use meshgen::mesh_from_chunk;
 use gs_common::network::transport::RPC_LOCAL_READER_OPTIONS;
 use gs_common::prelude::*;
 use gs_common::voxel::plugin::{
@@ -18,6 +17,7 @@ use gs_schemas::schemas::network_capnp as rpc;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
 use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
+use meshgen::mesh_from_chunk;
 use smallvec::SmallVec;
 use tokio_util::bytes::Bytes;
 

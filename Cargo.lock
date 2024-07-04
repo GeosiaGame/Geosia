@@ -2986,6 +2986,93 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be136d9dacc2a13cc70bb6c8f902b414fb2641f8db1314637c6b7933411a8f82"
 
 [[package]]
+name = "gs_client"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_egui",
+ "capnp",
+ "capnp-rpc",
+ "gs_common",
+ "gs_schemas",
+ "hashbrown",
+ "image",
+ "log",
+ "quinn",
+ "smallvec",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "voronoice",
+]
+
+[[package]]
+name = "gs_common"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "arc-swap",
+ "bevy",
+ "bevy_math",
+ "capnp",
+ "capnp-rpc",
+ "clap",
+ "futures",
+ "gs_schemas",
+ "hashbrown",
+ "image",
+ "lru",
+ "noise",
+ "quinn",
+ "rand",
+ "rand_xoshiro",
+ "serde",
+ "smallvec",
+ "smart-default",
+ "static_assertions",
+ "thiserror",
+ "thread_local",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+ "voronoice",
+]
+
+[[package]]
+name = "gs_schemas"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "bitflags 2.6.0",
+ "bitvec",
+ "bytemuck",
+ "capnp",
+ "capnpc",
+ "criterion",
+ "either",
+ "hashbrown",
+ "itertools 0.13.0",
+ "kstring",
+ "noise",
+ "once_cell",
+ "quickcheck",
+ "quickcheck_macros",
+ "rand",
+ "rand_pcg",
+ "rand_xoshiro",
+ "rgb",
+ "serde",
+ "smallvec",
+ "thiserror",
+ "uuid",
+ "zorder",
+]
+
+[[package]]
 name = "guillotiere"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4122,93 +4209,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c8bb09a4a2b1d668170cfe0a7d5bc103f8999fb316c98099b6a9939c9f2e79d"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "gs_client"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "bevy",
- "bevy_egui",
- "capnp",
- "capnp-rpc",
- "hashbrown",
- "image",
- "log",
- "gs_common",
- "gs_schemas",
- "quinn",
- "smallvec",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
- "voronoice",
-]
-
-[[package]]
-name = "gs_common"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "arc-swap",
- "bevy",
- "bevy_math",
- "capnp",
- "capnp-rpc",
- "clap",
- "futures",
- "hashbrown",
- "image",
- "lru",
- "noise",
- "gs_schemas",
- "quinn",
- "rand",
- "rand_xoshiro",
- "serde",
- "smallvec",
- "smart-default",
- "static_assertions",
- "thiserror",
- "thread_local",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
- "voronoice",
-]
-
-[[package]]
-name = "gs_schemas"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy_math",
- "bitflags 2.6.0",
- "bitvec",
- "bytemuck",
- "capnp",
- "capnpc",
- "criterion",
- "either",
- "hashbrown",
- "itertools 0.13.0",
- "kstring",
- "noise",
- "once_cell",
- "quickcheck",
- "quickcheck_macros",
- "rand",
- "rand_pcg",
- "rand_xoshiro",
- "rgb",
- "serde",
- "smallvec",
- "thiserror",
- "uuid",
- "zorder",
 ]
 
 [[package]]

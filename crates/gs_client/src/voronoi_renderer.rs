@@ -1,11 +1,11 @@
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::texture::Image;
-use image::{GenericImage, Rgba};
 use gs_common::voxel::generator::StdGenerator;
 use gs_schemas::{
     dependencies::itertools::{iproduct, Itertools},
     voxel::biome::BiomeRegistry,
 };
+use image::{GenericImage, Rgba};
 
 fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {
     to_range.0 + (s - from_range.0) * (to_range.1 - to_range.0) / (from_range.1 - from_range.0)

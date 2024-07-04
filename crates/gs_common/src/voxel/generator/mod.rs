@@ -4,7 +4,6 @@ use std::{cell::RefCell, collections::VecDeque, mem::MaybeUninit, rc::Rc, time::
 
 use bevy::utils::hashbrown::HashMap;
 use bevy_math::{DVec2, IVec2, IVec3};
-use noise::OpenSimplex;
 use gs_schemas::{
     coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIMZ},
     dependencies::{
@@ -22,6 +21,7 @@ use gs_schemas::{
         voxeltypes::{BlockEntry, BlockRegistry},
     },
 };
+use noise::OpenSimplex;
 use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoshiro128StarStar;
 use serde::{Deserialize, Serialize};
