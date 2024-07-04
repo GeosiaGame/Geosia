@@ -1,12 +1,13 @@
 //! Client-side voxel world rendering
 
+use bevy::color::palettes::tailwind;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::prelude::*;
 use capnp::message::TypedReader;
 use gs_common::network::transport::RPC_LOCAL_READER_OPTIONS;
 use gs_common::prelude::*;
 use gs_common::voxel::plugin::{
-    BlockRegistryHolder, NetworkVoxelClient, VoxelUniverse, VoxelUniverseBuilder, CHUNK_PACKET_QUEUE_LENGTH,
+    BlockRegistryHolder, NetworkVoxelClient, VoxelUniverseBuilder, CHUNK_PACKET_QUEUE_LENGTH,
 };
 use gs_common::InGameSystemSet;
 use gs_schemas::coordinates::{AbsChunkPos, RelChunkPos};
@@ -20,7 +21,7 @@ use meshgen::mesh_from_chunk;
 use smallvec::SmallVec;
 use tokio_util::bytes::Bytes;
 
-use crate::{ClientData, WhiteMaterialResource};
+use crate::ClientData;
 
 pub mod meshgen;
 
@@ -62,8 +63,6 @@ impl<'world> ClientVoxelUniverseBuilder for VoxelUniverseBuilder<'world, ClientD
 }
 
 fn chunk_packet_receiver_system(world: &mut World) {
-    let white_material = world.get_resource::<WhiteMaterialResource>().unwrap().clone();
-
     let mut nvc = world.query::<&mut NetworkVoxelClient<ClientData>>();
     let mut nvc = nvc.get_single_mut(world).unwrap();
     let mut batch: SmallVec<[Bytes; CHUNK_PACKET_QUEUE_LENGTH]> = SmallVec::new();
@@ -76,13 +75,13 @@ fn chunk_packet_receiver_system(world: &mut World) {
     }
 
     for raw_packet in batch {
-        if let Err(e) = handle_chunk_packet(raw_packet, world, &white_material) {
+        if let Err(e) = handle_chunk_packet(raw_packet, world) {
             error!("Error while processing received chunk packet: {e}");
         }
     }
 }
 
-fn handle_chunk_packet(raw_packet: Bytes, world: &mut World, white_material: &WhiteMaterialResource) -> Result<()> {
+fn handle_chunk_packet(raw_packet: Bytes, world: &mut World) -> Result<()> {
     let mut slice = &raw_packet as &[u8];
     let msg = capnp::serialize::read_message_from_flat_slice(&mut slice, RPC_LOCAL_READER_OPTIONS)?;
     let typed_reader = TypedReader::<_, rpc::chunk_data_stream_packet::Owned>::new(msg);
@@ -92,31 +91,35 @@ fn handle_chunk_packet(raw_packet: Bytes, world: &mut World, white_material: &Wh
     let data_r = root.reborrow().get_data()?;
 
     {
+        /*let universe = world.query::<>();
+        let Some(universe) = universe else {
+            warn!("Missing voxel universe while processing chunk data packet, did the game already shut down?");
+            return Ok(());
+        };*/
+        // TODO: actually add the chunk to the universe chunk loader
         let block_registry = Arc::clone(&world.resource::<BlockRegistryHolder>().0);
         let empty = block_registry
             .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
             .context("no empty block")?
             .0;
 
-        let mut universe = world.query::<&mut VoxelUniverse<ClientData>>();
-        let Ok(mut universe) = universe.get_single_mut(world) else {
-            warn!("Missing voxel universe while processing chunk data packet, did the game already shut down?");
-            return Ok(());
-        };
-
-        let chunks = universe.loaded_chunks_mut();
+        // Just add the chunk mesh directly right now for testing
+        let mut test_chunks = ClientChunkGroup::new();
         for (cx, cy, cz) in iproduct!(-1..=1, -1..=1, -1..=1) {
             let cpos = RelChunkPos::new(cx, cy, cz) + pos;
-            if !chunks.chunks.contains_key(&cpos) {
-                let chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
-                chunks.chunks.insert(cpos, MutWatcher::new(chunk));
-            }
+            let chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
+            test_chunks.chunks.insert(cpos, MutWatcher::new(chunk));
         }
         let mid_chunk = ClientChunk::read_full(&data_r, Default::default())?;
-        chunks.chunks.insert(pos, MutWatcher::new(mid_chunk));
+        test_chunks.chunks.insert(pos, MutWatcher::new(mid_chunk));
 
-        for (pos, _) in chunks.chunks.iter() {
-            let chunks = &chunks.get_neighborhood_around(*pos).transpose_option();
+        let white_material = world.resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
+            base_color: tailwind::GRAY_500.into(),
+            ..default()
+        });
+
+        for (pos, _) in test_chunks.chunks.iter() {
+            let chunks = &test_chunks.get_neighborhood_around(*pos).transpose_option();
             if let Some(chunks) = chunks {
                 let chunk_mesh = mesh_from_chunk(&block_registry, chunks).unwrap();
 
@@ -124,7 +127,7 @@ fn handle_chunk_packet(raw_packet: Bytes, world: &mut World, white_material: &Wh
 
                 world.spawn(PbrBundle {
                     mesh,
-                    material: white_material.mat.clone().unwrap(),
+                    material: white_material.clone(),
                     transform: Transform::from_xyz(0.0, 0.0, 0.0),
                     ..default()
                 });
