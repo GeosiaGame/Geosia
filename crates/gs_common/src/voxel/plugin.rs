@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use gs_schemas::coordinates::AbsChunkPos;
 use gs_schemas::schemas::network_capnp::stream_header::StandardTypes;
 use gs_schemas::schemas::NetworkStreamHeader;
+use gs_schemas::voxel::biome::BiomeRegistry;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
 use gs_schemas::voxel::voxeltypes::BlockRegistry;
 use gs_schemas::{GameSide, GsExtraData};
@@ -81,9 +82,14 @@ pub struct NetworkVoxelClient<ExtraData: GsExtraData> {
 #[derive(Resource, Clone, Deref)]
 pub struct BlockRegistryHolder(pub Arc<BlockRegistry>);
 
+/// The bevy [`Resource`] for shared biome registry access from systems.
+#[derive(Resource, Clone, Deref)]
+pub struct BiomeRegistryHolder(pub Arc<BiomeRegistry>);
+
 /// Builder for voxel universe initialization
 pub struct VoxelUniverseBuilder<'world, ExtraData: GsExtraData> {
-    _registry: Arc<BlockRegistry>,
+    _block_registry: Arc<BlockRegistry>,
+    _biome_registry: Arc<BiomeRegistry>,
     /// The bundle being spawned
     pub bundle: EntityWorldMut<'world>,
     _extra_data: PhantomData<ExtraData>,
@@ -91,17 +97,23 @@ pub struct VoxelUniverseBuilder<'world, ExtraData: GsExtraData> {
 
 impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
     /// Starts initializing a new voxel universe in a bevy World. Cannot be used on a World without cleaning up the previous universe first.
-    pub fn new(world: &'world mut World, registry: Arc<BlockRegistry>) -> Result<Self> {
+    pub fn new(
+        world: &'world mut World,
+        block_registry: Arc<BlockRegistry>,
+        biome_registry: Arc<BiomeRegistry>,
+    ) -> Result<Self> {
         let mut old_worlds = world.query::<&VoxelUniverseTag>();
         if old_worlds.iter(world).next().is_some() {
             bail!("Existing voxel worlds still in the bevy app");
         }
 
-        world.insert_resource(BlockRegistryHolder(Arc::clone(&registry)));
+        world.insert_resource(BlockRegistryHolder(Arc::clone(&block_registry)));
+        world.insert_resource(BiomeRegistryHolder(Arc::clone(&biome_registry)));
         let bundle = world.spawn((VoxelUniverseTag, VoxelUniverse::<ED>::new(default())));
 
         Ok(Self {
-            _registry: registry,
+            _block_registry: block_registry,
+            _biome_registry: biome_registry,
             bundle,
             _extra_data: default(),
         })
@@ -171,6 +183,12 @@ impl<ExtraData: GsExtraData> VoxelUniverse<ExtraData> {
     #[inline]
     pub fn loaded_chunks(&self) -> &ChunkGroup<ExtraData> {
         &self.loaded_chunks
+    }
+
+    /// Writable access to the currently loaded chunks
+    #[inline]
+    pub fn loaded_chunks_mut(&mut self) -> &mut ChunkGroup<ExtraData> {
+        &mut self.loaded_chunks
     }
 }
 

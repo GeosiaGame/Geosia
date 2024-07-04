@@ -13,6 +13,7 @@ pub mod network;
 pub mod prelude;
 pub mod promises;
 pub mod voxel;
+mod world_debug_image_renderer;
 
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -25,16 +26,14 @@ use bevy::state::app::StatesPlugin;
 use bevy::time::TimePlugin;
 use bevy::utils::synccell::SyncCell;
 use capnp::message::TypedBuilder;
-use gs_schemas::coordinates::{AbsChunkPos, InChunkPos, InChunkRange};
-use gs_schemas::dependencies::itertools::iproduct;
+use gs_schemas::coordinates::{AbsChunkPos, CHUNK_DIM};
+use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::registries::GameRegistries;
 use gs_schemas::registry::Registry;
 use gs_schemas::schemas::network_capnp::stream_header::StandardTypes;
 use gs_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader};
-use gs_schemas::voxel::chunk_storage::ChunkStorage;
 use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
-use gs_schemas::{GameSide, GsExtraData};
-use rand::{Rng, SeedableRng};
+use gs_schemas::{GameSide, gsExtraData};
 use smallvec::SmallVec;
 use tokio_util::bytes::Bytes;
 use voxel::generator::{StdGenerator, WORLD_SIZE_XZ, WORLD_SIZE_Y};
@@ -45,7 +44,6 @@ use crate::network::server::{ConnectedPlayer, LocalConnectionPipe, NetworkServer
 use crate::network::thread::NetworkThread;
 use crate::network::transport::InProcessStream;
 use crate::prelude::*;
-use crate::voxel::blocks::{DIRT_BLOCK_NAME, GRASS_BLOCK_NAME};
 use crate::voxel::persistence::empty::EmptyPersistenceLayer;
 use crate::voxel::persistence::memory::MemoryPersistenceLayer;
 use crate::voxel::persistence::ChunkPersistenceLayer;
@@ -278,23 +276,8 @@ impl GameServer {
             .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
             .unwrap()
             .0;
-        let dirt = engine
-            .server_data
-            .shared_registries
-            .block_types
-            .lookup_name_to_object(DIRT_BLOCK_NAME.as_ref())
-            .unwrap()
-            .0;
-        let grass = engine
-            .server_data
-            .shared_registries
-            .block_types
-            .lookup_name_to_object(GRASS_BLOCK_NAME.as_ref())
-            .unwrap()
-            .0;
         let null_world = EmptyPersistenceLayer::<ServerData>::new(BlockEntry::new(air, 0), ());
         let mut persistence = MemoryPersistenceLayer::new(Box::new(null_world));
-        
 
         let block_registry = Arc::clone(&engine.server_data.shared_registries.block_types);
         let biome_registry = Arc::clone(&engine.server_data.shared_registries.biome_types);
@@ -303,22 +286,31 @@ impl GameServer {
         generator.generate_world_biomes(&biome_registry);
         let world_size_blocks = generator.size_blocks_xz() as usize;
 
-
-        for (cx, cy, cz) in iproduct!(-WORLD_SIZE_XZ..=WORLD_SIZE_XZ, -WORLD_SIZE_Y..=WORLD_SIZE_Y, -WORLD_SIZE_XZ..=WORLD_SIZE_XZ) {
-            let cpos = AbsChunkPos::new(cx, cy, cz);
-            persistence.request_load(&[cpos]); 
-            let mut chunk_s = persistence
-                .try_dequeue_responses(1)
-                .into_iter()
-                .next()
-                .unwrap()
-                .unwrap()
-                .1;
-            let chunk = chunk_s.mutate_stored();
-            generator.generate_chunk(cpos, &mut chunk.blocks, &block_registry, &biome_registry);
-            persistence.request_save(Box::new([(cpos, chunk_s)]));
+        let chunk_positions = (-WORLD_SIZE_XZ..=WORLD_SIZE_XZ)
+            .cartesian_product(-WORLD_SIZE_Y..=WORLD_SIZE_Y)
+            .cartesian_product(-WORLD_SIZE_XZ..=WORLD_SIZE_XZ)
+            .map(|((x, y), z)| AbsChunkPos::new(x, y, z))
+            .collect_vec();
+        persistence.request_load(&*chunk_positions);
+        for (chunk, pos) in persistence
+            .try_dequeue_responses(chunk_positions.len())
+            .into_iter()
+            .zip(chunk_positions)
+        {
+            let mut chunk = chunk.unwrap().1;
+            generator.generate_chunk(pos, &mut chunk.mutate_stored().blocks, &block_registry, &biome_registry);
+            persistence.request_save(Box::new([(pos, chunk)]));
         }
 
+        world_debug_image_renderer::draw_debug_maps(
+            &generator,
+            &biome_registry,
+            &block_registry,
+            &mut persistence,
+            world_size_blocks,
+            world_size_blocks,
+            WORLD_SIZE_Y * CHUNK_DIM,
+        );
 
         fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {
             app.configure_sets(schedule, InGameSystemSet);
@@ -334,7 +326,7 @@ impl GameServer {
         app.insert_resource(GameServerControlCommandReceiver(SyncCell::new(ctrl_rx)));
         app.insert_resource(GameServerResource(engine));
 
-        VoxelUniverseBuilder::<ServerData>::new(app.world_mut(), block_registry)
+        VoxelUniverseBuilder::<ServerData>::new(app.world_mut(), block_registry, biome_registry)
             .unwrap()
             .with_persistent_storage(Box::new(persistence))
             .unwrap()

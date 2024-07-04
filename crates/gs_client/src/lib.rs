@@ -10,11 +10,11 @@
 mod debugcam;
 pub mod network;
 pub mod states;
-mod voronoi_renderer;
 pub mod voxel;
 
 use bevy::a11y::AccessibilityPlugin;
 use bevy::audio::AudioPlugin;
+use bevy::color::palettes::tailwind;
 use bevy::core_pipeline::CorePipelinePlugin;
 use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
@@ -63,6 +63,11 @@ impl GsExtraData for ClientData {
 
 /// Channel for executing commands on the client bevy App.
 pub type GameControlChannel = StdUnboundedSender<Box<GameBevyCommand>>;
+
+#[derive(Resource, Clone)]
+pub(crate) struct WhiteMaterialResource {
+    mat: Option<Handle<StandardMaterial>>,
+}
 
 /// The entry point to the client executable
 pub fn client_main() {
@@ -145,6 +150,7 @@ pub fn client_main() {
         .add_plugins(states::in_game::InGamePlugin);
 
     app.add_plugins(debug_window::DebugWindow);
+    app.add_systems(PostStartup, add_material_assets);
     app.add_systems(PostUpdate, control_command_handler_system);
 
     app.run();
@@ -168,21 +174,16 @@ fn control_command_handler_system(world: &mut World) {
     }
 }
 
+fn add_material_assets(mut assets: ResMut<Assets<StandardMaterial>>, mut white_material_asset: ResMut<WhiteMaterialResource>) {
+    let white_material = assets.add(StandardMaterial {
+        base_color: tailwind::GRAY_500.into(),
+        ..default()
+    });
+    white_material_asset.mat = Some(white_material);
+}
+
 mod debug_window {
-    use std::time::Instant;
-
-    use bevy::log;
     use bevy::prelude::*;
-    use gs_common::voxel::biomes::setup_basic_biomes;
-    use gs_common::voxel::generator::StdGenerator;
-    use gs_common::voxel::generator::WORLD_SIZE_XZ;
-    use gs_common::voxel::generator::WORLD_SIZE_Y;
-    use gs_schemas::coordinates::AbsChunkPos;
-    use gs_schemas::coordinates::CHUNK_DIM;
-    use gs_schemas::dependencies::itertools::iproduct;
-    use gs_schemas::voxel::biome::BiomeRegistry;
-
-    use crate::voronoi_renderer;
 
     pub struct DebugWindow;
 
@@ -192,7 +193,7 @@ mod debug_window {
         }
     }
 
-    fn debug_window_setup(mut commands: Commands, asset_server: Res<AssetServer>, mut images: ResMut<Assets<Image>>) {
+    fn debug_window_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         log::warn!("Setting up debug window");
         let _ = asset_server.load::<Font>("fonts/cascadiacode.ttf");
 

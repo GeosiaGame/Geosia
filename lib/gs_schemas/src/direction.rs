@@ -72,7 +72,7 @@ impl Direction {
         }
     }
 
-    /// Tries to convert an integer vector into a direction it it's precisely an axis-aligned unit vector.
+    /// Tries to convert an integer vector into a direction if it's precisely an axis-aligned unit vector.
     pub fn try_from_ivec(v: IVec3) -> Option<Self> {
         let va: [i32; 3] = v.into();
         match va {

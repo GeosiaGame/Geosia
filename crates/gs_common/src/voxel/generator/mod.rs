@@ -25,6 +25,7 @@ use noise::OpenSimplex;
 use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoshiro128StarStar;
 use serde::{Deserialize, Serialize};
+use tracing::{info, warn};
 use voronoice::*;
 
 use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME, RIVER_BIOME_NAME};
@@ -106,7 +107,7 @@ impl StdGenerator {
         self.biome_map.generatable_biomes = biomes;
 
         let total = Instant::now();
-        println!("starting biome generation");
+        info!("starting biome generation");
 
         let size = (self.size_chunks_xz * CHUNK_DIM) as f64;
 
@@ -114,28 +115,28 @@ impl StdGenerator {
         self.pick_biome_points(self.biome_point_count, size, size);
         self.make_diagram(size, size, self.points.clone());
         let duration = start.elapsed();
-        println!("picking points & building graph took {:?}", duration);
+        info!("picking points & building graph took {:?}", duration);
 
         let start = Instant::now();
         self.assign_noise_and_oceans();
         let duration = start.elapsed();
-        println!("height calculations took {:?}", duration);
+        info!("height calculations took {:?}", duration);
 
         let start = Instant::now();
         self.calculate_downslopes();
         self.calculate_watersheds(biome_registry);
         self.create_rivers(biome_registry); // stack overflow???
         let duration = start.elapsed();
-        println!("moisture calculations took {:?}", duration);
+        info!("moisture calculations took {:?}", duration);
 
         let start = Instant::now();
         self.assign_biomes(biome_registry);
         self.blur_biomes(biome_registry);
         let duration = start.elapsed();
-        println!("biome map lookup took {:?}", duration);
+        info!("biome map lookup took {:?}", duration);
 
         let duration = total.elapsed();
-        println!("biome generation took {:?} total", duration);
+        info!("biome generation took {:?} total", duration);
     }
 
     /// Generate a single chunk's blocks for the world.
@@ -746,20 +747,19 @@ impl StdGenerator {
                     && biome.temperature.contains(center.noise.temperature)
                     && biome.moisture.contains(center.noise.moisture)
                 {
-                    //println!("biome at point {:?} is {biome}, noise values: {:?}", center.point, center.noise);
                     center.biome = Some(*id);
                     found = true;
                     break;
                 }
             }
             if !found {
-                println!(
+                warn!(
                     "found no biome for point {:?}, noise values: {:?}. Picking randomly.",
                     center.point, center.noise
                 );
                 let index = self.random.gen_range(0..self.biome_map.generatable_biomes.len());
                 center.biome = Some(self.biome_map.generatable_biomes[index].0);
-                println!(
+                warn!(
                     "picked {}",
                     biome_registry.lookup_id_to_object(center.biome.unwrap()).unwrap()
                 );
@@ -816,7 +816,6 @@ impl StdGenerator {
             }
         }
 
-        let mut total_weight = 0.0;
         for (first_node, second_node) in nearby.clone().into_iter().tuple_combinations() {
             let mut first_node = first_node.borrow_mut();
             let mut second_node = second_node.borrow_mut();
@@ -829,11 +828,6 @@ impl StdGenerator {
 
             first_node.1 *= 1.0 - weight;
             second_node.1 *= weight;
-
-            total_weight += weight;
-        }
-        if total_weight < 0.1 {
-            total_weight += 1.0;
         }
 
         let p = [point.x.round() as i32, point.y.round() as i32];
@@ -842,9 +836,9 @@ impl StdGenerator {
 
         for node in nearby {
             let node = node.borrow();
-            let (center, mut weight) = node.deref();
+            let (center, weight) = node.deref();
             let center = center.borrow();
-            //weight /= total_weight;
+            let weight = *weight;
 
             point_elevation += center.noise.elevation * weight;
             point_temperature += center.noise.temperature * weight;
@@ -888,10 +882,7 @@ impl StdGenerator {
             .expect("voronoi map should exist, but it somehow failed to generate.")
     }
 
-    pub fn delaunay_centers(&self) -> &Vec<DelaunayCenter> {
-        &self.delaunay_centers
-    }
-
+    /// Get all voronoi edges this map contains.
     pub fn edges(&self) -> &Vec<Rc<RefCell<Edge>>> {
         &self.edges
     }
@@ -907,7 +898,7 @@ impl StdGenerator {
     }
 }
 
-pub fn is_inside(point: DVec2, polygon: &[DVec2]) -> bool {
+fn is_inside(point: DVec2, polygon: &[DVec2]) -> bool {
     let len = polygon.len();
     for i in 0..len {
         let v1 = polygon[i] - point;
@@ -929,8 +920,10 @@ struct NoiseValues {
     moisture: f64,
 }
 
+/// Center of a voronoi cell, corner of a delaunay triangle
 #[derive(Clone, PartialEq, Debug)]
 pub struct Center {
+    /// Center of the cell
     pub point: DVec2,
     noise: NoiseValues,
     biome: Option<RegistryId>,
@@ -965,13 +958,19 @@ impl Center {
 #[derive(Clone, Copy, PartialEq, Debug)]
 struct PointEdge(DVec2, DVec2);
 
+/// Edge of a voronoi cell & delaunay triangle
 #[derive(Clone, PartialEq, Debug)]
 pub struct Edge {
+    /// Delaunay edge start
     pub d0: Option<Rc<RefCell<Center>>>,
-    pub d1: Option<Rc<RefCell<Center>>>, // Delaunay edge
+    /// Delaunay edge end
+    pub d1: Option<Rc<RefCell<Center>>>,
+    /// Voronoi edge start
     pub v0: Option<Rc<RefCell<Corner>>>,
-    pub v1: Option<Rc<RefCell<Corner>>>, // Voronoi edge
-    pub midpoint: DVec2,                 // halfway between v0,v1
+    /// Voronoi edge end
+    pub v1: Option<Rc<RefCell<Corner>>>,
+    /// halfway between v0,v1
+    pub midpoint: DVec2,
 
     noise: NoiseValues,        // noise value at midpoint
     biome: Option<RegistryId>, // biome at midpoint
@@ -996,8 +995,10 @@ impl Edge {
     }
 }
 
+/// Corner of a voronoi cell, center of a delaunay triangle
 #[derive(Clone, PartialEq, Debug)]
 pub struct Corner {
+    /// Location of the corner
     pub point: DVec2,
     noise: NoiseValues,
     border: bool,
