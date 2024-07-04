@@ -2,7 +2,6 @@
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
-use std::sync::Condvar;
 
 use bevy::log;
 use bevy::prelude::*;
@@ -29,7 +28,7 @@ use crate::{
 
 /// The network thread game server state, accessible from network functions.
 pub struct NetworkThreadServerState {
-    ready_to_accept_streams: Arc<(Mutex<bool>, Condvar)>,
+    ready_to_accept_streams: AsyncWatchSender<bool>,
     free_local_id: i32,
     connected_clients: HashMap<PeerAddress, ConnectedNetClient>,
     bootstrapped_clients: HashMap<PeerAddress, Rc<RefCell<AuthenticatedServer2ClientEndpoint>>>,
@@ -89,8 +88,9 @@ pub type LocalConnectionPipe = (PeerAddress, InProcessDuplex);
 
 impl Default for NetworkThreadServerState {
     fn default() -> Self {
+        let (tx, _rx) = async_watch_channel(false);
         Self {
-            ready_to_accept_streams: Arc::new((Mutex::new(false), Condvar::new())),
+            ready_to_accept_streams: tx,
             free_local_id: Default::default(),
             connected_clients: Default::default(),
             bootstrapped_clients: Default::default(),
@@ -119,9 +119,7 @@ impl NetworkThreadServerState {
 
     /// Unblocks stream processing, call after all the handlers are registered.
     pub async fn allow_streams(this: &Rc<RefCell<Self>>) {
-        let flag = Arc::clone(&this.borrow().ready_to_accept_streams);
-        *flag.0.lock().unwrap() = true;
-        flag.1.notify_all();
+        this.borrow_mut().ready_to_accept_streams.send_replace(true);
     }
 
     /// Begins listening on the configured endpoints, and starts looking for configuration changes.
@@ -254,8 +252,10 @@ impl NetworkThreadServerState {
         _addr: PeerAddress,
         mut incoming_streams: AsyncUnboundedReceiver<InProcessStream>,
     ) -> Result<()> {
-        let flag = Arc::clone(&this.borrow().ready_to_accept_streams);
-        drop(flag.1.wait_while(flag.0.lock().unwrap(), |allowed| !*allowed).unwrap());
+        let mut ready_watcher = this.borrow().ready_to_accept_streams.subscribe();
+        while !*ready_watcher.borrow_and_update() {
+            ready_watcher.changed().await?;
+        }
         while let Some(stream) = incoming_streams.recv().await {
             let handler = engine.network_thread.create_stream_handler(Rc::clone(&this), stream);
             match handler {
