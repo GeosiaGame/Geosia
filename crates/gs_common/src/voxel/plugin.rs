@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 use gs_schemas::coordinates::AbsChunkPos;
+use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::schemas::network_capnp::stream_header::StandardTypes;
 use gs_schemas::schemas::NetworkStreamHeader;
 use gs_schemas::voxel::biome::BiomeRegistry;
@@ -12,13 +13,13 @@ use gs_schemas::voxel::chunk_group::ChunkGroup;
 use gs_schemas::voxel::voxeltypes::BlockRegistry;
 use gs_schemas::{GameSide, GsExtraData};
 use tokio_util::bytes::Bytes;
-use ocg_schemas::dependencies::itertools::Itertools;
+
 use crate::network::thread::{NetworkThread, NetworkThreadState};
 use crate::network::transport::InProcessStream;
 use crate::prelude::*;
+use crate::voxel::generator::{WORLD_SIZE_XZ, WORLD_SIZE_Y};
 use crate::voxel::persistence::ChunkPersistenceLayer;
 use crate::{InGameSystemSet, ServerData};
-use crate::voxel::generator::{WORLD_SIZE_XZ, WORLD_SIZE_Y};
 
 /// The maximum number of stored chunk packets before applying stream backpressure.
 pub const CHUNK_PACKET_QUEUE_LENGTH: usize = 64;

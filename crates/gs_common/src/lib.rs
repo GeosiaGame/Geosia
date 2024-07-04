@@ -33,7 +33,7 @@ use gs_schemas::registry::Registry;
 use gs_schemas::schemas::network_capnp::stream_header::StandardTypes;
 use gs_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader};
 use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
-use gs_schemas::{GameSide, gsExtraData};
+use gs_schemas::{GsExtraData, GameSide};
 use smallvec::SmallVec;
 use tokio_util::bytes::Bytes;
 use voxel::generator::{StdGenerator, WORLD_SIZE_XZ, WORLD_SIZE_Y};
@@ -292,10 +292,7 @@ impl GameServer {
             .map(|((x, y), z)| AbsChunkPos::new(x, y, z))
             .collect_vec();
         persistence.request_load(&*chunk_positions);
-        for chunk in persistence
-            .try_dequeue_responses(chunk_positions.len())
-            .into_iter()
-        {
+        for chunk in persistence.try_dequeue_responses(chunk_positions.len()).into_iter() {
             let (pos, mut chunk) = chunk.unwrap();
             generator.generate_chunk(pos, &mut chunk.mutate_stored().blocks, &block_registry, &biome_registry);
             persistence.request_save(Box::new([(pos, chunk)]));

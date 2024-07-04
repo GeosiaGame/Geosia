@@ -1,4 +1,3 @@
-use image::{GenericImage, Rgba};
 use gs_schemas::{
     coordinates::{AbsBlockPos, AbsChunkPos, InChunkPos, CHUNK_DIM},
     dependencies::itertools::{iproduct, Itertools},
