@@ -7,7 +7,7 @@ on:
       - ready_for_review
   push:
     branches:
-      - master
+      - dev
   workflow_dispatch:
 
 name: Check PR
