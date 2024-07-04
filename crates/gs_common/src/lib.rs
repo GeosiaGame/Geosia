@@ -33,7 +33,7 @@ use gs_schemas::registry::Registry;
 use gs_schemas::schemas::network_capnp::stream_header::StandardTypes;
 use gs_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader};
 use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
-use gs_schemas::{GsExtraData, GameSide};
+use gs_schemas::{GameSide, GsExtraData};
 use smallvec::SmallVec;
 use tokio_util::bytes::Bytes;
 use voxel::generator::{StdGenerator, WORLD_SIZE_XZ, WORLD_SIZE_Y};
