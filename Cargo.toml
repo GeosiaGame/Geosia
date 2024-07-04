@@ -3,20 +3,20 @@ members = ["lib/*", "crates/*"]
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.70"
+rust-version = "1.79"
 edition = "2021"
 license = "LGPL-3.0-only"
-authors = ["OpenCubeGame team"]
-repository = "https://github.com/OpenCubeGame/OpenCubeGame"
+authors = ["Geosia team"]
+repository = "https://github.com/GeosiaGame/Geosia"
 keywords = ["gaming", "games", "voxel"]
 categories = ["games"]
 
 [workspace.dependencies]
 # Local, unpublished (versions stay at 0.0.0 to reduce churn)
-ocg_client = { path = "crates/ocg_client", version = "0.0.0" }
-ocg_common = { path = "crates/ocg_common", version = "0.0.0" }
+gs_client = { path = "crates/gs_client", version = "0.0.0" }
+gs_common = { path = "crates/gs_common", version = "0.0.0" }
 # Local, published
-ocg_schemas = { version = "0.0.1", path = "lib/ocg_schemas" }
+gs_schemas = { version = "0.0.1", path = "lib/gs_schemas" }
 
 # Remote
 anyhow = "1.0.71"
@@ -68,7 +68,7 @@ quickcheck_macros = "1.0.0"
 [workspace.dependencies.bevy]
 version = "0.14.0-rc.4"
 default-features = false
-# Extra features are used in ocg_client on top of these common ones
+# Extra features are used in gs_client on top of these common ones
 features = [
     # Default Bevy functionality:
     "bevy_asset",         # Assets management
@@ -79,7 +79,6 @@ features = [
 
     # Extra Bevy functionality:
     "serialize",            # Support for `serde` Serialize/Deserialize
-    # "bevy_dynamic_plugin",  # Support for loading of `DynamicPlugin`s
 
     # Development/Debug features:
     # "dynamic_linking", # Dynamic linking for faster compile-times

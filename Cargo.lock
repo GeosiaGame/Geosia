@@ -4125,7 +4125,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ocg_client"
+name = "gs_client"
 version = "0.0.0"
 dependencies = [
  "anyhow",
@@ -4136,8 +4136,8 @@ dependencies = [
  "hashbrown",
  "image",
  "log",
- "ocg_common",
- "ocg_schemas",
+ "gs_common",
+ "gs_schemas",
  "quinn",
  "smallvec",
  "thiserror",
@@ -4148,7 +4148,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ocg_common"
+name = "gs_common"
 version = "0.0.0"
 dependencies = [
  "anyhow",
@@ -4163,7 +4163,7 @@ dependencies = [
  "image",
  "lru",
  "noise",
- "ocg_schemas",
+ "gs_schemas",
  "quinn",
  "rand",
  "rand_xoshiro",
@@ -4181,7 +4181,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ocg_schemas"
+name = "gs_schemas"
 version = "0.0.1"
 dependencies = [
  "anyhow",

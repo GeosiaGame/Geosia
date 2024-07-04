@@ -53,7 +53,7 @@
 
 ## Serialization
 
-- All the data formats used by the game are defined in the `lib/ocg_schemas` crate, in a way that makes them usable for internal and external tools
+- All the data formats used by the game are defined in the `lib/gs_schemas` crate, in a way that makes them usable for internal and external tools
 - On-disk storage
   - A strongly-typed SQlite database will be initially used to store all savefile data, if we ran into limitations this can be split into multiple files or even a custom format
   - Most game code should be completely storage-agnostic, allowing for the data to be easily switched to a different format in development if we see it becomes necessary

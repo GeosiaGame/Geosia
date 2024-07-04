@@ -1,0 +1,40 @@
+[package]
+name = "gs_common"
+version = "0.0.0"
+description = "Geosia shared client+server code"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Local
+gs_schemas.workspace = true
+# Remote
+anyhow.workspace = true
+arc-swap.workspace = true
+bevy.workspace = true
+bevy_math.workspace = true
+capnp-rpc.workspace = true
+capnp.workspace = true
+clap.workspace = true
+futures.workspace = true
+hashbrown.workspace = true
+image.workspace = true
+lru.workspace = true
+noise.workspace = true
+quinn.workspace = true
+rand.workspace = true
+rand_xoshiro.workspace = true
+serde.workspace = true
+smallvec.workspace = true
+smart-default.workspace = true
+static_assertions.workspace = true
+thiserror.workspace = true
+thread_local.workspace = true
+tokio-util.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+voronoice.workspace = true
