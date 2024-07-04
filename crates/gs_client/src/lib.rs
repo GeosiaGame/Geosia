@@ -64,11 +64,6 @@ impl GsExtraData for ClientData {
 /// Channel for executing commands on the client bevy App.
 pub type GameControlChannel = StdUnboundedSender<Box<GameBevyCommand>>;
 
-#[derive(Resource, Clone)]
-pub(crate) struct WhiteMaterialResource {
-    mat: Option<Handle<StandardMaterial>>,
-}
-
 /// The entry point to the client executable
 pub fn client_main() {
     // Safety: no other threads should be running at this point.
@@ -150,7 +145,6 @@ pub fn client_main() {
         .add_plugins(states::in_game::InGamePlugin);
 
     app.add_plugins(debug_window::DebugWindow);
-    app.add_systems(PostStartup, add_material_assets);
     app.add_systems(PostUpdate, control_command_handler_system);
 
     app.run();
@@ -172,14 +166,6 @@ fn control_command_handler_system(world: &mut World) {
     for cmd in pending_cmds {
         cmd(world);
     }
-}
-
-fn add_material_assets(mut assets: ResMut<Assets<StandardMaterial>>, mut white_material_asset: ResMut<WhiteMaterialResource>) {
-    let white_material = assets.add(StandardMaterial {
-        base_color: tailwind::GRAY_500.into(),
-        ..default()
-    });
-    white_material_asset.mat = Some(white_material);
 }
 
 mod debug_window {

@@ -12,12 +12,13 @@ use gs_schemas::voxel::chunk_group::ChunkGroup;
 use gs_schemas::voxel::voxeltypes::BlockRegistry;
 use gs_schemas::{GameSide, GsExtraData};
 use tokio_util::bytes::Bytes;
-
+use ocg_schemas::dependencies::itertools::Itertools;
 use crate::network::thread::{NetworkThread, NetworkThreadState};
 use crate::network::transport::InProcessStream;
 use crate::prelude::*;
 use crate::voxel::persistence::ChunkPersistenceLayer;
 use crate::{InGameSystemSet, ServerData};
+use crate::voxel::generator::{WORLD_SIZE_XZ, WORLD_SIZE_Y};
 
 /// The maximum number of stored chunk packets before applying stream backpressure.
 pub const CHUNK_PACKET_QUEUE_LENGTH: usize = 64;
@@ -130,14 +131,20 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
 
         // TODO: remove
         let mut universe = self.bundle.get_mut::<VoxelUniverse<ED>>().unwrap();
-        persistence_layer.request_load(&[AbsChunkPos::ZERO]);
-        let resp = persistence_layer
-            .try_dequeue_responses(1)
+
+        let chunk_positions = (-WORLD_SIZE_XZ..=WORLD_SIZE_XZ)
+            .cartesian_product(-WORLD_SIZE_Y..=WORLD_SIZE_Y)
+            .cartesian_product(-WORLD_SIZE_XZ..=WORLD_SIZE_XZ)
+            .map(|((x, y), z)| AbsChunkPos::new(x, y, z))
+            .collect_vec();
+        persistence_layer.request_load(&*chunk_positions);
+        for chunk in persistence_layer
+            .try_dequeue_responses(chunk_positions.len())
             .into_iter()
-            .next()
-            .unwrap()
-            .unwrap();
-        universe.loaded_chunks.chunks.insert(resp.0, resp.1);
+        {
+            let (pos, chunk) = chunk.unwrap();
+            universe.loaded_chunks.chunks.insert(pos, chunk);
+        }
 
         self.bundle.insert(PersistentVoxelStorage::<ED> {
             _persistence_layer: persistence_layer,

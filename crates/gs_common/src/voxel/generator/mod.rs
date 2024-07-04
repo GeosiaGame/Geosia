@@ -31,7 +31,7 @@ use voronoice::*;
 use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME, RIVER_BIOME_NAME};
 
 /// World size of the +X & +Z axis, in chunks.
-pub const WORLD_SIZE_XZ: i32 = 8;
+pub const WORLD_SIZE_XZ: i32 = 2;
 /// World size of the +Y axis, in chunks.
 pub const WORLD_SIZE_Y: i32 = 1;
 
