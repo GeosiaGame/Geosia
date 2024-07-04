@@ -2,7 +2,7 @@
 
 ## One sentence pitch
 
-OCG is a block-oriented sandbox factory game where you start your factory with almost nothing, and grow it to an interplanetary scale.
+Geosia is a block-oriented sandbox factory game where you start your factory with almost nothing, and grow it to an interplanetary scale.
 
 ## Key aspects of the game
 

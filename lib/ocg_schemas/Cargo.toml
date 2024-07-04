@@ -1,12 +1,12 @@
 [package]
 name = "ocg_schemas"
 version = "0.0.1"
-description = "Disk and network data serialization schemas for the OpenCubeGame"
+description = "Disk and network data serialization schemas for the Geosia game"
 
 authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
-repository = "https://github.com/OpenCubeGame/OpenCubeGame/tree/dev/lib/gs_schemas"
+repository = "https://github.com/GeosiaGame/Geosia/tree/dev/lib/ocg_schemas"
 edition = "2021"
 
 [features]

@@ -1,4 +1,4 @@
-# OpenCubeGame
+# Geosia
 
 ## Folder structure
 
