@@ -113,7 +113,7 @@ pub fn draw_debug_maps(
                 .1;
             if chunk.blocks.get(in_chunk_pos).id != empty_id {
                 let y_f = y as f64 / (height * 2) as f64 + height as f64;
-                let y_c = (y_f * 255.0).min(255.0).max(0.0).round() as u8;
+                let y_c = (y_f * 255.0).clamp(0.0, 255.0).round() as u8;
                 heightmap_img.put_pixel(x, z, Rgba([y_c, y_c, y_c, 255]));
                 break;
             }

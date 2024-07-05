@@ -291,7 +291,7 @@ impl GameServer {
             .cartesian_product(-WORLD_SIZE_XZ..=WORLD_SIZE_XZ)
             .map(|((x, y), z)| AbsChunkPos::new(x, y, z))
             .collect_vec();
-        persistence.request_load(&*chunk_positions);
+        persistence.request_load(&chunk_positions);
         for chunk in persistence.try_dequeue_responses(chunk_positions.len()).into_iter() {
             let (pos, mut chunk) = chunk.unwrap();
             generator.generate_chunk(pos, &mut chunk.mutate_stored().blocks, &block_registry, &biome_registry);

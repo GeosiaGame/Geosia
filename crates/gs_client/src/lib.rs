@@ -14,7 +14,6 @@ pub mod voxel;
 
 use bevy::a11y::AccessibilityPlugin;
 use bevy::audio::AudioPlugin;
-use bevy::color::palettes::tailwind;
 use bevy::core_pipeline::CorePipelinePlugin;
 use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
@@ -180,7 +179,7 @@ mod debug_window {
     }
 
     fn debug_window_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-        log::warn!("Setting up debug window");
+        warn!("Setting up debug window");
         let _ = asset_server.load::<Font>("fonts/cascadiacode.ttf");
 
         commands.spawn(DirectionalLightBundle {
@@ -192,6 +191,6 @@ mod debug_window {
             transform: Transform::from_xyz(0., 1000., 0.).looking_at(Vec3::new(300.0, 0.0, 300.0), Vec3::Y),
             ..default()
         });
-        log::warn!("Setting up debug window done");
+        warn!("Setting up debug window done");
     }
 }
