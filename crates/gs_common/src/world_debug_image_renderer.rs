@@ -22,6 +22,7 @@ fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {
 }
 
 /// Make a bevy image out of the voronoi diagram.
+#[allow(dead_code)]
 pub fn draw_debug_maps(
     generator: &StdGenerator,
     biome_registry: &BiomeRegistry,
