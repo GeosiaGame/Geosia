@@ -40,3 +40,6 @@ pub use tokio_util::compat::TokioAsyncReadCompatExt;
 
 // Our Promises
 pub use crate::promises::{GenericAsyncResult, AsyncResult};
+
+// Capnp namespaces
+pub use gs_schemas::schemas::network_capnp as rpc;

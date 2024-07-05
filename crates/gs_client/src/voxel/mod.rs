@@ -135,6 +135,5 @@ fn handle_chunk_packet(raw_packet: Bytes, world: &mut World) -> Result<()> {
         }
     }
 
-    info!("Received chunk packet at position {pos}");
     Ok(())
 }

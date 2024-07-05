@@ -31,7 +31,7 @@ impl<ExtraData: GsExtraData> ChunkPersistenceLayer<ExtraData> for EmptyPersisten
     fn request_load(&mut self, coordinates: &[AbsChunkPos]) {
         for pos in coordinates {
             let chunk = MutWatcher::new(Chunk::new(self.fill_block, self.extra_data.clone()));
-            self.queue.push_back(Ok((*pos, chunk)));
+            self.queue.push_back((*pos, Ok(chunk)));
         }
     }
 

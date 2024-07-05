@@ -25,29 +25,22 @@ use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
 use bevy::time::TimePlugin;
 use bevy::utils::synccell::SyncCell;
-use capnp::message::TypedBuilder;
-use gs_schemas::coordinates::{AbsChunkPos, CHUNK_DIM};
-use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::registries::GameRegistries;
 use gs_schemas::registry::Registry;
-use gs_schemas::schemas::network_capnp::stream_header::StandardTypes;
-use gs_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader};
 use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use gs_schemas::{GameSide, GsExtraData};
 use smallvec::SmallVec;
-use tokio_util::bytes::Bytes;
-use voxel::generator::{StdGenerator, WORLD_SIZE_XZ, WORLD_SIZE_Y};
+use voxel::blocks::{GRASS_BLOCK_NAME, STONE_BLOCK_NAME};
+use voxel::generator::flat::{FlatGenerator, FlatLayer};
+use voxel::persistence::generator::GeneratorPersistenceLayer;
 use voxel::plugin::VoxelUniverseBuilder;
 
 use crate::config::{GameConfig, GameConfigHandle};
-use crate::network::server::{ConnectedPlayer, LocalConnectionPipe, NetworkServerPlugin, NetworkThreadServerState};
+use crate::network::server::{LocalConnectionPipe, NetworkServerPlugin, NetworkThreadServerState};
 use crate::network::thread::NetworkThread;
-use crate::network::transport::InProcessStream;
 use crate::prelude::*;
-use crate::voxel::persistence::empty::EmptyPersistenceLayer;
 use crate::voxel::persistence::memory::MemoryPersistenceLayer;
-use crate::voxel::persistence::ChunkPersistenceLayer;
-use crate::voxel::plugin::{VoxelUniverse, VoxelUniversePlugin};
+use crate::voxel::plugin::VoxelUniversePlugin;
 
 // TODO: Populate these from build/git info
 /// The major SemVer field of the current build's version
@@ -93,12 +86,10 @@ pub struct ServerData {
 }
 
 impl GsExtraData for ServerData {
-    type ChunkData = ();
+    type ChunkData = voxel::plugin::ServerChunkMetadata;
     type GroupData = ();
 
-    fn side() -> GameSide {
-        GameSide::Server
-    }
+    const SIDE: GameSide = GameSide::Server;
 }
 
 /// A command that can be remotely executed on the bevy world.
@@ -269,44 +260,58 @@ impl GameServer {
         app.add_plugins(VoxelUniversePlugin::<ServerData>::new())
             .add_plugins(NetworkServerPlugin);
 
-        let air = engine
-            .server_data
-            .shared_registries
-            .block_types
-            .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
-            .unwrap()
-            .0;
-        let null_world = EmptyPersistenceLayer::<ServerData>::new(BlockEntry::new(air, 0), ());
-        let mut persistence = MemoryPersistenceLayer::new(Box::new(null_world));
-
         let block_registry = Arc::clone(&engine.server_data.shared_registries.block_types);
         let biome_registry = Arc::clone(&engine.server_data.shared_registries.biome_types);
 
-        let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4);
-        generator.generate_world_biomes(&biome_registry);
-        let world_size_blocks = generator.size_blocks_xz() as usize;
+        let air = block_registry
+            .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
+            .unwrap()
+            .0;
+        let stone = block_registry
+            .lookup_name_to_object(STONE_BLOCK_NAME.as_ref())
+            .unwrap()
+            .0;
+        let grass = block_registry
+            .lookup_name_to_object(GRASS_BLOCK_NAME.as_ref())
+            .unwrap()
+            .0;
+        // let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4);
+        // generator.generate_world_biomes(&biome_registry);
+        // let world_size_blocks = generator.size_blocks_xz() as usize;
+        let generator = FlatGenerator::new(
+            -1,
+            vec![
+                FlatLayer {
+                    block_type: BlockEntry::new(air, 0),
+                    thickness: 1,
+                },
+                FlatLayer {
+                    block_type: BlockEntry::new(stone, 0),
+                    thickness: 20,
+                },
+                FlatLayer {
+                    block_type: BlockEntry::new(grass, 0),
+                    thickness: 1,
+                },
+                FlatLayer {
+                    block_type: BlockEntry::new(air, 0),
+                    thickness: 1,
+                },
+            ],
+        )
+        .unwrap();
+        let gen_world = GeneratorPersistenceLayer::new(Arc::new(generator), default());
+        let persistence = MemoryPersistenceLayer::new(Box::new(gen_world));
 
-        let chunk_positions = (-WORLD_SIZE_XZ..=WORLD_SIZE_XZ)
-            .cartesian_product(-WORLD_SIZE_Y..=WORLD_SIZE_Y)
-            .cartesian_product(-WORLD_SIZE_XZ..=WORLD_SIZE_XZ)
-            .map(|((x, y), z)| AbsChunkPos::new(x, y, z))
-            .collect_vec();
-        persistence.request_load(&chunk_positions);
-        for chunk in persistence.try_dequeue_responses(chunk_positions.len()).into_iter() {
-            let (pos, mut chunk) = chunk.unwrap();
-            generator.generate_chunk(pos, &mut chunk.mutate_stored().blocks, &block_registry, &biome_registry);
-            persistence.request_save(Box::new([(pos, chunk)]));
-        }
-
-        world_debug_image_renderer::draw_debug_maps(
-            &generator,
-            &biome_registry,
-            &block_registry,
-            &mut persistence,
-            world_size_blocks,
-            world_size_blocks,
-            WORLD_SIZE_Y * CHUNK_DIM,
-        );
+        // world_debug_image_renderer::draw_debug_maps(
+        //     &generator,
+        //     &biome_registry,
+        //     &block_registry,
+        //     &mut persistence,
+        //     world_size_blocks,
+        //     world_size_blocks,
+        //     WORLD_SIZE_Y * CHUNK_DIM,
+        // );
 
         fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {
             app.configure_sets(schedule, InGameSystemSet);
@@ -330,7 +335,6 @@ impl GameServer {
 
         app.add_systems(Startup, Self::network_startup_system);
         app.add_systems(FixedPostUpdate, Self::control_command_handler_system);
-        app.add_systems(FixedUpdate, Self::send_new_players_chunks_system);
         info!("Engine thread starting");
         app.run();
         info!("Engine thread terminating");
@@ -352,53 +356,6 @@ impl GameServer {
             .blocking_wait()
             .unwrap();
         info!("Bootstrapping network done");
-    }
-
-    // temporary testing stuff to send some chunk data to the client
-    fn send_new_players_chunks_system(
-        engine: Res<GameServerResource>,
-        voxels: Query<&VoxelUniverse<ServerData>>,
-        new_players: Query<&ConnectedPlayer, Added<ConnectedPlayer>>,
-    ) {
-        let engine = &engine.into_inner().0;
-        let Ok(voxels) = voxels.get_single() else { return };
-        for (pos, chunk) in voxels.loaded_chunks().chunks.iter() {
-            let mut builder = TypedBuilder::<rpc::chunk_data_stream_packet::Owned>::new_default();
-            let mut root = builder.init_root();
-            let mut position = root.reborrow().init_position();
-            position.set_x(pos.x);
-            position.set_y(pos.y);
-            position.set_z(pos.z);
-            chunk.write_full(&mut root.reborrow().init_data());
-            let mut buffer = Vec::new();
-            capnp::serialize::write_message(&mut buffer, builder.borrow_inner()).unwrap();
-            let buffer = Bytes::from(buffer);
-
-            for player in new_players.into_iter() {
-                let addr = player.address;
-                let my_buffer = buffer.clone();
-                engine
-                    .network_thread
-                    .schedule_task(move |rstate| {
-                        Box::pin(async move {
-                            let state = rstate.borrow();
-                            let Some(peer) = state.find_connected_client(addr) else {
-                                bail!("Cannot find connected client {addr:?} anymore");
-                            };
-                            let chunk_stream = peer
-                                .open_stream(NetworkStreamHeader::Standard(StandardTypes::ChunkData))
-                                .unwrap();
-                            let InProcessStream { tx, .. } = chunk_stream;
-                            info!("Sending {n} bytes of chunk data to {addr:?}", n = my_buffer.len());
-                            tx.send(my_buffer)?;
-                            drop(tx);
-                            Ok(())
-                        })
-                    })
-                    .blocking_wait()
-                    .unwrap();
-            }
-        }
     }
 
     fn control_command_handler_system(world: &mut World) {

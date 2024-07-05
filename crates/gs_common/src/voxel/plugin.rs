@@ -1,24 +1,30 @@
 //! The Bevy plugin for voxel universe handling.
 
+use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use gs_schemas::coordinates::AbsChunkPos;
+use capnp::message::TypedBuilder;
+use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, AbsChunkRange, RelChunkPos};
 use gs_schemas::dependencies::itertools::Itertools;
+use gs_schemas::mutwatcher::RevisionNumber;
 use gs_schemas::schemas::network_capnp::stream_header::StandardTypes;
 use gs_schemas::schemas::NetworkStreamHeader;
 use gs_schemas::voxel::biome::BiomeRegistry;
+use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
 use gs_schemas::voxel::voxeltypes::BlockRegistry;
 use gs_schemas::{GameSide, GsExtraData};
+use smallvec::SmallVec;
 use tokio_util::bytes::Bytes;
 
+use crate::network::server::{ConnectedPlayer, ConnectedPlayersTable};
 use crate::network::thread::{NetworkThread, NetworkThreadState};
 use crate::network::transport::InProcessStream;
-use crate::prelude::*;
-use crate::voxel::generator::{WORLD_SIZE_XZ, WORLD_SIZE_Y};
+use crate::network::PeerAddress;
 use crate::voxel::persistence::ChunkPersistenceLayer;
+use crate::{prelude::*, GameServer, GameServerResource};
 use crate::{InGameSystemSet, ServerData};
 
 /// The maximum number of stored chunk packets before applying stream backpressure.
@@ -32,8 +38,15 @@ pub struct VoxelUniversePlugin<ExtraData: GsExtraData> {
 
 impl<ExtraData: GsExtraData> Plugin for VoxelUniversePlugin<ExtraData> {
     fn build(&self, app: &mut App) {
-        if ExtraData::side() == GameSide::Server {
-            app.add_systems(PreUpdate, (system_process_chunk_loading).in_set(InGameSystemSet));
+        if ExtraData::SIDE == GameSide::Server {
+            app.add_systems(
+                FixedPreUpdate,
+                (server_system_process_chunk_loading).in_set(InGameSystemSet),
+            )
+            .add_systems(
+                FixedPostUpdate,
+                (server_system_process_chunk_sending).in_set(InGameSystemSet),
+            );
         }
     }
 
@@ -55,6 +68,13 @@ impl<ExtraData: GsExtraData> VoxelUniversePlugin<ExtraData> {
     }
 }
 
+/// The extra data associated with each chunk on the server
+#[derive(Default, Clone)]
+pub struct ServerChunkMetadata {
+    /// Map holding which revision was provided to each connected player
+    player_held_revisions: HashMap<Entity, RevisionNumber>,
+}
+
 /// A tag component marking voxel universes regardless of the generic type.
 #[derive(Clone, Copy, Component)]
 pub struct VoxelUniverseTag;
@@ -69,7 +89,8 @@ pub struct VoxelUniverse<ExtraData: GsExtraData> {
 /// Persistent storage for chunks, exists alongside VoxelUniverse on servers.
 #[derive(Component)]
 pub struct PersistentVoxelStorage<ExtraData: GsExtraData> {
-    _persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>,
+    persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>,
+    live_requests: BTreeSet<AbsChunkPos>,
 }
 
 /// Network chunk streaming client, exists alongside VoxelUniverse on clients.
@@ -87,6 +108,25 @@ pub struct BlockRegistryHolder(pub Arc<BlockRegistry>);
 /// The bevy [`Resource`] for shared biome registry access from systems.
 #[derive(Resource, Clone, Deref)]
 pub struct BiomeRegistryHolder(pub Arc<BiomeRegistry>);
+
+/// Component for entities anchored in the voxel grid.
+#[derive(Component, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Deref, DerefMut)]
+pub struct VoxelPosition(pub AbsBlockPos);
+
+impl VoxelPosition {
+    /// Returns the chunk corresponding to the stored block position.
+    pub fn chunk_pos(&self) -> AbsChunkPos {
+        self.0.into()
+    }
+}
+
+/// Component that triggers chunk loading in a given radius around itself.
+#[derive(Component, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Deref, DerefMut)]
+pub struct ChunkLoader {
+    /// The radius of the loading area, in chunk units.
+    /// If zero or less, does not load anything.
+    pub radius: i32,
+}
 
 /// Builder for voxel universe initialization
 pub struct VoxelUniverseBuilder<'world, ExtraData: GsExtraData> {
@@ -122,33 +162,19 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
     }
 
     /// Adds persistent storage support to the universe.
-    pub fn with_persistent_storage(
-        mut self,
-        mut persistence_layer: Box<dyn ChunkPersistenceLayer<ED>>,
-    ) -> Result<Self> {
+    pub fn with_persistent_storage(mut self, persistence_layer: Box<dyn ChunkPersistenceLayer<ED>>) -> Result<Self> {
         if self.bundle.contains::<NetworkVoxelClient<ED>>() {
             bail!("Universe already has a network client, cannot add persistent storage");
         }
 
-        // TODO: remove
-        let mut universe = self.bundle.get_mut::<VoxelUniverse<ED>>().unwrap();
-
-        let chunk_positions = (-WORLD_SIZE_XZ..=WORLD_SIZE_XZ)
-            .cartesian_product(-WORLD_SIZE_Y..=WORLD_SIZE_Y)
-            .cartesian_product(-WORLD_SIZE_XZ..=WORLD_SIZE_XZ)
-            .map(|((x, y), z)| AbsChunkPos::new(x, y, z))
-            .collect_vec();
-        persistence_layer.request_load(&chunk_positions);
-        for chunk in persistence_layer
-            .try_dequeue_responses(chunk_positions.len())
-            .into_iter()
-        {
-            let (pos, chunk) = chunk.unwrap();
-            universe.loaded_chunks.chunks.insert(pos, chunk);
-        }
+        // TODO: make the player load the chunks
+        self.bundle.world_scope(|w| {
+            w.spawn((VoxelPosition(AbsBlockPos::ZERO), ChunkLoader { radius: 2 }));
+        });
 
         self.bundle.insert(PersistentVoxelStorage::<ED> {
-            _persistence_layer: persistence_layer,
+            persistence_layer,
+            live_requests: default(),
         });
         Ok(self)
     }
@@ -212,10 +238,155 @@ impl<ED: GsExtraData> NetworkVoxelClient<ED> {
     }
 }
 
-fn system_process_chunk_loading(
-    _registry: Res<BlockRegistryHolder>,
-    mut voxels: Query<&mut VoxelUniverse<ServerData>>,
+fn server_system_process_chunk_loading(
+    mut voxel_q: Query<(
+        &mut VoxelUniverse<ServerData>,
+        &mut PersistentVoxelStorage<ServerData>,
+        &VoxelUniverseTag,
+    )>,
+    chunk_loaders: Query<(&ChunkLoader, &VoxelPosition)>,
 ) {
-    let _voxels: &mut VoxelUniverse<_> = voxels.single_mut().as_mut();
-    // TODO: actually load chunks
+    let Ok((mut voxels, mut persistence, _)) = voxel_q.get_single_mut() else {
+        return;
+    };
+    // TODO: do not fully scan every frame, this is really simple code to get it going right now
+
+    let persistence = &mut *persistence;
+    let chunk_map = &mut voxels.loaded_chunks.chunks;
+    let layer = &mut persistence.persistence_layer;
+    let live_requests = &mut persistence.live_requests;
+
+    // Dequeue all processed requests
+    {
+        let _span = trace_span!("Dequeue chunk load responses").entered();
+        for (loaded_pos, response) in layer.try_dequeue_responses(usize::MAX) {
+            live_requests.remove(&loaded_pos);
+            trace!(chunk_position = %loaded_pos, is_ok = response.is_ok(), "Chunk load request resolved");
+            let loaded_chunk = match response {
+                Ok(c) => c,
+                Err(e) => {
+                    error!("Could not load chunk at position {loaded_pos}: {e}");
+                    continue;
+                }
+            };
+            // Do not overwrite if the chunk was already loaded earlier.
+            chunk_map.entry(loaded_pos).or_insert(loaded_chunk);
+        }
+    }
+
+    // Find new requests to make
+    let to_request = {
+        let _span = trace_span!("Scan for new chunk load requests").entered();
+        let mut to_request: BTreeSet<AbsChunkPos> = default();
+
+        for (loader, lpos) in chunk_loaders.iter() {
+            if loader.radius <= 0 {
+                continue;
+            }
+            let r = loader.radius;
+            let center: AbsChunkPos = lpos.chunk_pos();
+            let range = AbsChunkRange::from_corners(center - RelChunkPos::splat(r), center + RelChunkPos::splat(r));
+            for cpos in range.iter_xzy() {
+                if chunk_map.contains_key(&cpos) {
+                    continue;
+                }
+                if live_requests.contains(&cpos) {
+                    continue;
+                }
+                to_request.insert(cpos);
+            }
+        }
+
+        to_request.into_iter().collect_vec()
+    };
+    {
+        let _span = trace_span!("Request chunks to load", n = to_request.len()).entered();
+        layer.request_load(&to_request);
+        live_requests.extend(to_request);
+    }
+}
+
+fn server_system_process_chunk_sending(
+    engine: Res<GameServerResource>,
+    mut voxel_q: Query<&mut VoxelUniverse<ServerData>>,
+    connected_players_table_q: Query<&ConnectedPlayersTable>,
+    connected_players_q: Query<&ConnectedPlayer>,
+) {
+    // TODO: send only nearby chunks, not everything. Also don't iterate every chunk every tick.
+    let Ok(player_list) = connected_players_table_q.get_single() else {
+        return;
+    };
+    let player_list = &player_list.players_by_address;
+    if player_list.is_empty() {
+        return;
+    }
+
+    let Ok(mut voxels) = voxel_q.get_single_mut() else {
+        return;
+    };
+    let voxels = &mut *voxels;
+
+    let engine = &engine.0 as &GameServer;
+
+    let mut send_list: SmallVec<[PeerAddress; 8]> = SmallVec::new();
+
+    for (&position, loaded_chunk) in voxels.loaded_chunks_mut().chunks.iter_mut() {
+        send_list.clear();
+        let chunk_rev = loaded_chunk.local_revision();
+        let chunk_player_list = &mut loaded_chunk.mutate_without_revision().extra_data.player_held_revisions;
+        // remove disconnected players
+        chunk_player_list.retain(|&player, _rev| connected_players_q.contains(player));
+        // find players with outdated revisions
+        for (&peer, &player) in player_list.iter() {
+            let entry = chunk_player_list.entry(player).or_insert_with(|| {
+                send_list.push(peer);
+                chunk_rev
+            });
+            if *entry < chunk_rev {
+                send_list.push(peer);
+                *entry = chunk_rev;
+            }
+        }
+        if send_list.is_empty() {
+            continue;
+        }
+        // serialize chunk once and send to all players
+        send_chunk_to_players(engine, position, loaded_chunk, &send_list);
+    }
+}
+
+fn send_chunk_to_players(engine: &GameServer, pos: AbsChunkPos, chunk: &Chunk<ServerData>, peers: &[PeerAddress]) {
+    let mut builder = TypedBuilder::<rpc::chunk_data_stream_packet::Owned>::new_default();
+    let mut root = builder.init_root();
+    let mut position = root.reborrow().init_position();
+    position.set_x(pos.x);
+    position.set_y(pos.y);
+    position.set_z(pos.z);
+    chunk.write_full(&mut root.reborrow().init_data());
+    let mut buffer = Vec::new();
+    capnp::serialize::write_message(&mut buffer, builder.borrow_inner()).unwrap();
+    let buffer = Bytes::from(buffer);
+
+    // TODO: error handling, throttling
+    let peers: SmallVec<[_; 8]> = peers.into();
+    let _ = engine.network_thread.schedule_task(move |rstate| {
+        Box::pin(async move {
+            let mut state = rstate.borrow_mut();
+            for addr in peers {
+                let my_buffer = buffer.clone();
+                let Some(peer) = state.find_connected_client_mut(addr) else {
+                    bail!("Cannot find connected client {addr:?} anymore");
+                };
+                if peer.chunk_stream.is_none() {
+                    peer.chunk_stream = Some(
+                        peer.open_stream(NetworkStreamHeader::Standard(StandardTypes::ChunkData))
+                            .unwrap(),
+                    );
+                }
+                let chunk_stream = peer.chunk_stream.as_mut().unwrap();
+                chunk_stream.tx.send(my_buffer)?;
+            }
+            Ok(())
+        })
+    });
 }

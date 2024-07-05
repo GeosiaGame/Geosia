@@ -1,5 +1,7 @@
 //! Standard world generator.
 
+pub mod flat;
+
 use std::{cell::RefCell, cmp::Ordering, collections::VecDeque, mem::MaybeUninit, ops::Deref, rc::Rc, time::Instant};
 
 use bevy::utils::hashbrown::HashMap;
@@ -16,10 +18,12 @@ use gs_schemas::{
             biome_map::{BiomeMap, EXPECTED_BIOME_COUNT, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD},
             BiomeDefinition, BiomeEntry, BiomeRegistry, Noises, VOID_BIOME_NAME,
         },
+        chunk::Chunk,
         chunk_storage::{ChunkStorage, PaletteStorage},
         generation::{fbm_noise::Fbm, positional_random::PositionalRandomFactory, Context, Noise4DTo2D},
         voxeltypes::{BlockEntry, BlockRegistry},
     },
+    GsExtraData,
 };
 use noise::OpenSimplex;
 use rand::{distributions::Uniform, Rng, SeedableRng};
@@ -40,6 +44,13 @@ const LAKE_TRESHOLD: f64 = 0.3;
 
 const BIOME_BLEND_RADIUS: f64 = 16.0;
 
+/// A chunk generator
+pub trait VoxelGenerator<ExtraData: GsExtraData>: Send + Sync {
+    /// Generates a single chunk at the given coordinates, with the given pre-filled extra data.
+    fn generate_chunk(&self, position: AbsChunkPos, extra_data: ExtraData::ChunkData) -> Chunk<ExtraData>;
+}
+
+// TODO: move to a separate module
 /// Standard world generator implementation.
 pub struct StdGenerator {
     seed: u64,

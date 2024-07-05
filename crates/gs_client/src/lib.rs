@@ -55,9 +55,7 @@ impl GsExtraData for ClientData {
     type ChunkData = voxel::ClientChunkData;
     type GroupData = voxel::ClientChunkGroupData;
 
-    fn side() -> GameSide {
-        GameSide::Client
-    }
+    const SIDE: GameSide = GameSide::Client;
 }
 
 /// Channel for executing commands on the client bevy App.

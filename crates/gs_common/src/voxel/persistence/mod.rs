@@ -11,10 +11,11 @@ use gs_schemas::GsExtraData;
 use hashbrown::HashSet;
 
 pub mod empty;
+pub mod generator;
 pub mod memory;
 
 /// A single response to a chunk loading request, generated some time after calling [`ChunkPersistenceLayer::request_load`].
-pub type ChunkProviderResult<ExtraData> = Result<(AbsChunkPos, MutWatcher<Chunk<ExtraData>>)>;
+pub type ChunkProviderResult<ExtraData> = (AbsChunkPos, Result<MutWatcher<Chunk<ExtraData>>>);
 
 /// Diagnostic statistics from a [`ChunkPersistenceLayer`]
 #[derive(Copy, Clone, Default, Debug, Hash)]
@@ -72,9 +73,8 @@ impl<ExtraData: GsExtraData> ChunkLoader<ExtraData> {
             .try_dequeue_responses(1)
             .into_iter()
             .next()
-            .unwrap()
             .unwrap();
-        loader.managed_group.chunks.insert(cpos, chunk);
+        loader.managed_group.chunks.insert(cpos, chunk.unwrap());
 
         loader
     }

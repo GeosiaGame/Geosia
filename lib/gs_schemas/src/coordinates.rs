@@ -531,6 +531,34 @@ impl Display for AbsBlockPos {
     }
 }
 
+impl PartialOrd for AbsBlockPos {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+
+    fn lt(&self, other: &Self) -> bool {
+        self.as_zpack() < other.as_zpack()
+    }
+
+    fn le(&self, other: &Self) -> bool {
+        self.as_zpack() <= other.as_zpack()
+    }
+
+    fn gt(&self, other: &Self) -> bool {
+        self.as_zpack() > other.as_zpack()
+    }
+
+    fn ge(&self, other: &Self) -> bool {
+        self.as_zpack() >= other.as_zpack()
+    }
+}
+
+impl Ord for AbsBlockPos {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_zpack().cmp(&other.as_zpack())
+    }
+}
+
 // === RelBlockPos
 impl_simple_ivec3_newtype!(RelBlockPos);
 impl_rel_abs_pair!(RelBlockPos, AbsBlockPos);
