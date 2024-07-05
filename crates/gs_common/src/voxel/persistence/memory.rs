@@ -35,7 +35,7 @@ impl<ExtraData: GsExtraData> ChunkPersistenceLayer<ExtraData> for MemoryPersiste
         for pos in coordinates {
             match self.storage.get(pos) {
                 Some(chunk) => {
-                    self.queue.push_back(Ok((*pos, chunk.clone())));
+                    self.queue.push_back((*pos, Ok(chunk.clone())));
                 }
                 None => {
                     underlying_requests.push(*pos);

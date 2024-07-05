@@ -109,8 +109,8 @@ pub fn draw_debug_maps(
                 .into_iter()
                 .next()
                 .unwrap()
-                .unwrap()
-                .1;
+                .1
+                .unwrap();
             if chunk.blocks.get(in_chunk_pos).id != empty_id {
                 let y_f = y as f64 / (height * 2) as f64 + height as f64;
                 let y_c = (y_f * 255.0).clamp(0.0, 255.0).round() as u8;

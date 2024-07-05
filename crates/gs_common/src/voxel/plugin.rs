@@ -1,10 +1,11 @@
 //! The Bevy plugin for voxel universe handling.
 
+use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use gs_schemas::coordinates::AbsChunkPos;
+use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, AbsChunkRange, RelChunkPos};
 use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::schemas::network_capnp::stream_header::StandardTypes;
 use gs_schemas::schemas::NetworkStreamHeader;
@@ -17,7 +18,6 @@ use tokio_util::bytes::Bytes;
 use crate::network::thread::{NetworkThread, NetworkThreadState};
 use crate::network::transport::InProcessStream;
 use crate::prelude::*;
-use crate::voxel::generator::{WORLD_SIZE_XZ, WORLD_SIZE_Y};
 use crate::voxel::persistence::ChunkPersistenceLayer;
 use crate::{InGameSystemSet, ServerData};
 
@@ -33,7 +33,7 @@ pub struct VoxelUniversePlugin<ExtraData: GsExtraData> {
 impl<ExtraData: GsExtraData> Plugin for VoxelUniversePlugin<ExtraData> {
     fn build(&self, app: &mut App) {
         if ExtraData::side() == GameSide::Server {
-            app.add_systems(PreUpdate, (system_process_chunk_loading).in_set(InGameSystemSet));
+            app.add_systems(FixedPreUpdate, (system_process_chunk_loading).in_set(InGameSystemSet));
         }
     }
 
@@ -69,7 +69,8 @@ pub struct VoxelUniverse<ExtraData: GsExtraData> {
 /// Persistent storage for chunks, exists alongside VoxelUniverse on servers.
 #[derive(Component)]
 pub struct PersistentVoxelStorage<ExtraData: GsExtraData> {
-    _persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>,
+    persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>,
+    live_requests: BTreeSet<AbsChunkPos>,
 }
 
 /// Network chunk streaming client, exists alongside VoxelUniverse on clients.
@@ -87,6 +88,25 @@ pub struct BlockRegistryHolder(pub Arc<BlockRegistry>);
 /// The bevy [`Resource`] for shared biome registry access from systems.
 #[derive(Resource, Clone, Deref)]
 pub struct BiomeRegistryHolder(pub Arc<BiomeRegistry>);
+
+/// Component for entities anchored in the voxel grid.
+#[derive(Component, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Deref, DerefMut)]
+pub struct VoxelPosition(pub AbsBlockPos);
+
+impl VoxelPosition {
+    /// Returns the chunk corresponding to the stored block position.
+    pub fn chunk_pos(&self) -> AbsChunkPos {
+        self.0.into()
+    }
+}
+
+/// Component that triggers chunk loading in a given radius around itself.
+#[derive(Component, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Deref, DerefMut)]
+pub struct ChunkLoader {
+    /// The radius of the loading area, in chunk units.
+    /// If zero or less, does not load anything.
+    pub radius: i32,
+}
 
 /// Builder for voxel universe initialization
 pub struct VoxelUniverseBuilder<'world, ExtraData: GsExtraData> {
@@ -122,33 +142,19 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
     }
 
     /// Adds persistent storage support to the universe.
-    pub fn with_persistent_storage(
-        mut self,
-        mut persistence_layer: Box<dyn ChunkPersistenceLayer<ED>>,
-    ) -> Result<Self> {
+    pub fn with_persistent_storage(mut self, persistence_layer: Box<dyn ChunkPersistenceLayer<ED>>) -> Result<Self> {
         if self.bundle.contains::<NetworkVoxelClient<ED>>() {
             bail!("Universe already has a network client, cannot add persistent storage");
         }
 
-        // TODO: remove
-        let mut universe = self.bundle.get_mut::<VoxelUniverse<ED>>().unwrap();
-
-        let chunk_positions = (-WORLD_SIZE_XZ..=WORLD_SIZE_XZ)
-            .cartesian_product(-WORLD_SIZE_Y..=WORLD_SIZE_Y)
-            .cartesian_product(-WORLD_SIZE_XZ..=WORLD_SIZE_XZ)
-            .map(|((x, y), z)| AbsChunkPos::new(x, y, z))
-            .collect_vec();
-        persistence_layer.request_load(&chunk_positions);
-        for chunk in persistence_layer
-            .try_dequeue_responses(chunk_positions.len())
-            .into_iter()
-        {
-            let (pos, chunk) = chunk.unwrap();
-            universe.loaded_chunks.chunks.insert(pos, chunk);
-        }
+        // TODO: make the player load the chunks
+        self.bundle.world_scope(|w| {
+            w.spawn((VoxelPosition(AbsBlockPos::ZERO), ChunkLoader { radius: 2 }));
+        });
 
         self.bundle.insert(PersistentVoxelStorage::<ED> {
-            _persistence_layer: persistence_layer,
+            persistence_layer,
+            live_requests: default(),
         });
         Ok(self)
     }
@@ -214,8 +220,67 @@ impl<ED: GsExtraData> NetworkVoxelClient<ED> {
 
 fn system_process_chunk_loading(
     _registry: Res<BlockRegistryHolder>,
-    mut voxels: Query<&mut VoxelUniverse<ServerData>>,
+    mut voxel_q: Query<(
+        &mut VoxelUniverse<ServerData>,
+        &mut PersistentVoxelStorage<ServerData>,
+        &VoxelUniverseTag,
+    )>,
+    chunk_loaders: Query<(&ChunkLoader, &VoxelPosition), Without<VoxelUniverseTag>>,
 ) {
-    let _voxels: &mut VoxelUniverse<_> = voxels.single_mut().as_mut();
-    // TODO: actually load chunks
+    let (mut voxels, mut persistence, _) = voxel_q.single_mut();
+    // TODO: do not fully scan every frame, this is really simple code to get it going right now
+
+    let persistence = &mut *persistence;
+    let chunk_map = &mut voxels.loaded_chunks.chunks;
+    let layer = &mut persistence.persistence_layer;
+    let live_requests = &mut persistence.live_requests;
+
+    // Dequeue all processed requests
+    {
+        let _span = trace_span!("Dequeue chunk load responses").entered();
+        for (loaded_pos, response) in layer.try_dequeue_responses(usize::MAX) {
+            live_requests.remove(&loaded_pos);
+            trace!(chunk_position = %loaded_pos, is_ok = response.is_ok(), "Chunk load request resolved");
+            let loaded_chunk = match response {
+                Ok(c) => c,
+                Err(e) => {
+                    error!("Could not load chunk at position {loaded_pos}: {e}");
+                    continue;
+                }
+            };
+            // Do not overwrite if the chunk was already loaded earlier.
+            chunk_map.entry(loaded_pos).or_insert(loaded_chunk);
+        }
+    }
+
+    // Find new requests to make
+    let to_request = {
+        let _span = trace_span!("Scan for new chunk load requests").entered();
+        let mut to_request: BTreeSet<AbsChunkPos> = default();
+
+        for (loader, lpos) in chunk_loaders.iter() {
+            if loader.radius <= 0 {
+                continue;
+            }
+            let r = loader.radius;
+            let center: AbsChunkPos = lpos.chunk_pos();
+            let range = AbsChunkRange::from_corners(center - RelChunkPos::splat(r), center + RelChunkPos::splat(r));
+            for cpos in range.iter_xzy() {
+                if chunk_map.contains_key(&cpos) {
+                    continue;
+                }
+                if live_requests.contains(&cpos) {
+                    continue;
+                }
+                to_request.insert(cpos);
+            }
+        }
+
+        to_request.into_iter().collect_vec()
+    };
+    {
+        let _span = trace_span!("Request chunks to load", n = to_request.len()).entered();
+        layer.request_load(&to_request);
+        live_requests.extend(to_request);
+    }
 }

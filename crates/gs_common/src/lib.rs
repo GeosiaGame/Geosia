@@ -293,7 +293,8 @@ impl GameServer {
             .collect_vec();
         persistence.request_load(&chunk_positions);
         for chunk in persistence.try_dequeue_responses(chunk_positions.len()).into_iter() {
-            let (pos, mut chunk) = chunk.unwrap();
+            let (pos, chunk) = chunk;
+            let mut chunk = chunk.unwrap();
             generator.generate_chunk(pos, &mut chunk.mutate_stored().blocks, &block_registry, &biome_registry);
             persistence.request_save(Box::new([(pos, chunk)]));
         }
@@ -389,7 +390,6 @@ impl GameServer {
                                 .open_stream(NetworkStreamHeader::Standard(StandardTypes::ChunkData))
                                 .unwrap();
                             let InProcessStream { tx, .. } = chunk_stream;
-                            info!("Sending {n} bytes of chunk data to {addr:?}", n = my_buffer.len());
                             tx.send(my_buffer)?;
                             drop(tx);
                             Ok(())
