@@ -39,6 +39,9 @@ pub struct ConnectedNetClient {
     rpc_task: JoinHandle<Result<()>>,
     stream_task: JoinHandle<Result<()>>,
     stream_sender: AsyncUnboundedSender<InProcessStream>,
+
+    /// The network stream for chunk data.
+    pub chunk_stream: Option<InProcessStream>,
 }
 
 impl ConnectedNetClient {
@@ -109,6 +112,11 @@ impl NetworkThreadServerState {
         self.connected_clients.get(&address)
     }
 
+    /// Finds a connected client by address.
+    pub fn find_connected_client_mut(&mut self, address: PeerAddress) -> Option<&mut ConnectedNetClient> {
+        self.connected_clients.get_mut(&address)
+    }
+
     /// Finds a bootstrapped client by address.
     pub fn find_bootstrapped_client(
         &self,
@@ -158,6 +166,7 @@ impl NetworkThreadServerState {
                 rpc_task,
                 stream_task,
                 stream_sender: spipe.outgoing_streams,
+                chunk_stream: None,
             },
         );
 

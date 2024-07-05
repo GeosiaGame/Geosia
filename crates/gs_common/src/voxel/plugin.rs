@@ -5,20 +5,26 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use bevy::prelude::*;
+use capnp::message::TypedBuilder;
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, AbsChunkRange, RelChunkPos};
 use gs_schemas::dependencies::itertools::Itertools;
+use gs_schemas::mutwatcher::RevisionNumber;
 use gs_schemas::schemas::network_capnp::stream_header::StandardTypes;
 use gs_schemas::schemas::NetworkStreamHeader;
 use gs_schemas::voxel::biome::BiomeRegistry;
+use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
 use gs_schemas::voxel::voxeltypes::BlockRegistry;
 use gs_schemas::{GameSide, GsExtraData};
+use smallvec::SmallVec;
 use tokio_util::bytes::Bytes;
 
+use crate::network::server::{ConnectedPlayer, ConnectedPlayersTable};
 use crate::network::thread::{NetworkThread, NetworkThreadState};
 use crate::network::transport::InProcessStream;
-use crate::prelude::*;
+use crate::network::PeerAddress;
 use crate::voxel::persistence::ChunkPersistenceLayer;
+use crate::{prelude::*, GameServer, GameServerResource};
 use crate::{InGameSystemSet, ServerData};
 
 /// The maximum number of stored chunk packets before applying stream backpressure.
@@ -32,8 +38,15 @@ pub struct VoxelUniversePlugin<ExtraData: GsExtraData> {
 
 impl<ExtraData: GsExtraData> Plugin for VoxelUniversePlugin<ExtraData> {
     fn build(&self, app: &mut App) {
-        if ExtraData::side() == GameSide::Server {
-            app.add_systems(FixedPreUpdate, (system_process_chunk_loading).in_set(InGameSystemSet));
+        if ExtraData::SIDE == GameSide::Server {
+            app.add_systems(
+                FixedPreUpdate,
+                (server_system_process_chunk_loading).in_set(InGameSystemSet),
+            )
+            .add_systems(
+                FixedPostUpdate,
+                (server_system_process_chunk_sending).in_set(InGameSystemSet),
+            );
         }
     }
 
@@ -53,6 +66,13 @@ impl<ExtraData: GsExtraData> VoxelUniversePlugin<ExtraData> {
             _extra_data: Default::default(),
         }
     }
+}
+
+/// The extra data associated with each chunk on the server
+#[derive(Default, Clone)]
+pub struct ServerChunkMetadata {
+    /// Map holding which revision was provided to each connected player
+    player_held_revisions: HashMap<Entity, RevisionNumber>,
 }
 
 /// A tag component marking voxel universes regardless of the generic type.
@@ -218,16 +238,17 @@ impl<ED: GsExtraData> NetworkVoxelClient<ED> {
     }
 }
 
-fn system_process_chunk_loading(
-    _registry: Res<BlockRegistryHolder>,
+fn server_system_process_chunk_loading(
     mut voxel_q: Query<(
         &mut VoxelUniverse<ServerData>,
         &mut PersistentVoxelStorage<ServerData>,
         &VoxelUniverseTag,
     )>,
-    chunk_loaders: Query<(&ChunkLoader, &VoxelPosition), Without<VoxelUniverseTag>>,
+    chunk_loaders: Query<(&ChunkLoader, &VoxelPosition)>,
 ) {
-    let (mut voxels, mut persistence, _) = voxel_q.single_mut();
+    let Ok((mut voxels, mut persistence, _)) = voxel_q.get_single_mut() else {
+        return;
+    };
     // TODO: do not fully scan every frame, this is really simple code to get it going right now
 
     let persistence = &mut *persistence;
@@ -283,4 +304,89 @@ fn system_process_chunk_loading(
         layer.request_load(&to_request);
         live_requests.extend(to_request);
     }
+}
+
+fn server_system_process_chunk_sending(
+    engine: Res<GameServerResource>,
+    mut voxel_q: Query<&mut VoxelUniverse<ServerData>>,
+    connected_players_table_q: Query<&ConnectedPlayersTable>,
+    connected_players_q: Query<&ConnectedPlayer>,
+) {
+    // TODO: send only nearby chunks, not everything. Also don't iterate every chunk every tick.
+    let Ok(player_list) = connected_players_table_q.get_single() else {
+        return;
+    };
+    let player_list = &player_list.players_by_address;
+    if player_list.is_empty() {
+        return;
+    }
+
+    let Ok(mut voxels) = voxel_q.get_single_mut() else {
+        return;
+    };
+    let voxels = &mut *voxels;
+
+    let engine = &engine.0 as &GameServer;
+
+    let mut send_list: SmallVec<[PeerAddress; 8]> = SmallVec::new();
+
+    for (&position, loaded_chunk) in voxels.loaded_chunks_mut().chunks.iter_mut() {
+        send_list.clear();
+        let chunk_rev = loaded_chunk.local_revision();
+        let chunk_player_list = &mut loaded_chunk.mutate_without_revision().extra_data.player_held_revisions;
+        // remove disconnected players
+        chunk_player_list.retain(|&player, _rev| connected_players_q.contains(player));
+        // find players with outdated revisions
+        for (&peer, &player) in player_list.iter() {
+            let entry = chunk_player_list.entry(player).or_insert_with(|| {
+                send_list.push(peer);
+                chunk_rev
+            });
+            if *entry < chunk_rev {
+                send_list.push(peer);
+                *entry = chunk_rev;
+            }
+        }
+        if send_list.is_empty() {
+            continue;
+        }
+        // serialize chunk once and send to all players
+        send_chunk_to_players(engine, position, loaded_chunk, &send_list);
+    }
+}
+
+fn send_chunk_to_players(engine: &GameServer, pos: AbsChunkPos, chunk: &Chunk<ServerData>, peers: &[PeerAddress]) {
+    let mut builder = TypedBuilder::<rpc::chunk_data_stream_packet::Owned>::new_default();
+    let mut root = builder.init_root();
+    let mut position = root.reborrow().init_position();
+    position.set_x(pos.x);
+    position.set_y(pos.y);
+    position.set_z(pos.z);
+    chunk.write_full(&mut root.reborrow().init_data());
+    let mut buffer = Vec::new();
+    capnp::serialize::write_message(&mut buffer, builder.borrow_inner()).unwrap();
+    let buffer = Bytes::from(buffer);
+
+    // TODO: error handling, throttling
+    let peers: SmallVec<[_; 8]> = peers.into();
+    let _ = engine.network_thread.schedule_task(move |rstate| {
+        Box::pin(async move {
+            let mut state = rstate.borrow_mut();
+            for addr in peers {
+                let my_buffer = buffer.clone();
+                let Some(peer) = state.find_connected_client_mut(addr) else {
+                    bail!("Cannot find connected client {addr:?} anymore");
+                };
+                if peer.chunk_stream.is_none() {
+                    peer.chunk_stream = Some(
+                        peer.open_stream(NetworkStreamHeader::Standard(StandardTypes::ChunkData))
+                            .unwrap(),
+                    );
+                }
+                let chunk_stream = peer.chunk_stream.as_mut().unwrap();
+                chunk_stream.tx.send(my_buffer)?;
+            }
+            Ok(())
+        })
+    });
 }

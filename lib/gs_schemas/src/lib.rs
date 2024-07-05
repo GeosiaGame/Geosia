@@ -30,7 +30,7 @@ pub trait GsExtraData: Send + Sync + 'static {
     type GroupData: Default + Clone + Send + Sync + 'static;
 
     /// The associated game side.
-    fn side() -> GameSide;
+    const SIDE: GameSide;
 }
 
 /// The side of a network connection a game instance resides on (server or client).
