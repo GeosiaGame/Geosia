@@ -138,7 +138,7 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
             .cartesian_product(-WORLD_SIZE_XZ..=WORLD_SIZE_XZ)
             .map(|((x, y), z)| AbsChunkPos::new(x, y, z))
             .collect_vec();
-        persistence_layer.request_load(&*chunk_positions);
+        persistence_layer.request_load(&chunk_positions);
         for chunk in persistence_layer
             .try_dequeue_responses(chunk_positions.len())
             .into_iter()

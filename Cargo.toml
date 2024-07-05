@@ -19,41 +19,41 @@ gs_common = { path = "crates/gs_common", version = "0.0.0" }
 gs_schemas = { version = "0.0.1", path = "lib/gs_schemas" }
 
 # Remote
-anyhow = "1.0.71"
-arc-swap = "1.7.0"
-bitflags = { version = "2.3.3", features = ["bytemuck", "serde"] }
+anyhow = "1.0.86"
+arc-swap = "1.7.1"
+bitflags = { version = "2.6.0", features = ["bytemuck", "serde"] }
 bitvec = { version = "1.0.1", features = ["serde"] }
-bytemuck = { version = "1.13.1", features = ["extern_crate_alloc", "extern_crate_std", "min_const_generics", "derive", "zeroable_maybe_uninit", "zeroable_atomics"] }
+bytemuck = { version = "1.16.1", features = ["extern_crate_alloc", "extern_crate_std", "min_const_generics", "derive", "zeroable_maybe_uninit", "zeroable_atomics"] }
 capnp = "0.19.6"
 capnp-futures = "0.19.0"
 capnp-rpc = "0.19.2"
 capnpc = "0.19.0"
-clap = { version = "4.3.19", features = ["derive"] }
-either = "1.8.1"
-futures = "0.3.28"
+clap = { version = "4.5.8", features = ["derive"] }
+either = "1.13.0"
+futures = "0.3.30"
 glam = { version = "0.27.0", features = ["bytemuck", "serde"] } # Keep in sync with bevy
-hashbrown = { version = "0.14", features = ["serde"] }
-image = "0.25" # Keep in sync with bevy
+hashbrown = { version = "0.14.5", features = ["serde"] }
+image = "0.25.1" # Keep in sync with bevy
 itertools = "0.13.0"
 kstring = { version = "2.0.0", features = ["serde"] }
 lru = "0.12.3"
 noise = "0.9.0"
-once_cell = "1.18.0"
-quinn = "0.11.1"
+once_cell = "1.19.0"
+quinn = "0.11.2"
 rand = "0.8.5"
 rand_pcg = "0.3.1"
 rand_xoshiro = "0.6.0"
-rgb = { version = "0.8.36", features = ["serde"] }
-serde = { version = "1.0.164", features = ["derive"] }
-smallvec = { version = "1.10.0", features = ["serde", "const_generics", "const_new", "write", "union"] }
+rgb = { version = "0.8.40", features = ["serde"] }
+serde = { version = "1.0.203", features = ["derive"] }
+smallvec = { version = "1.13.2", features = ["serde", "const_generics", "const_new", "write", "union"] }
 smart-default = "0.7.1"
 static_assertions = "1.1.0"
-thiserror = "1.0.40"
-thread_local = "1.1.7"
-tokio = { version = "1.29.1", features = ["sync", "rt", "net", "rt-multi-thread", "io-util", "time", "macros"] }
-tokio-util = { version = "0.7.9", features = ["compat", "io-util"] }
+thiserror = "1.0.61"
+thread_local = "1.1.8"
+tokio = { version = "1.38.0", features = ["sync", "rt", "net", "rt-multi-thread", "io-util", "time", "macros"] }
+tokio-util = { version = "0.7.11", features = ["compat", "io-util"] }
 tracing = "0.1.40"
-uuid = { version = "1.8.0", features = ["fast-rng", "serde", "bytemuck", "v4", "v6"] }
+uuid = { version = "1.9.1", features = ["fast-rng", "serde", "bytemuck", "v4", "v6"] }
 voronoice = "0.2.0"
 zorder = "0.2.2"
 
@@ -66,7 +66,7 @@ quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
 [workspace.dependencies.bevy]
-version = "0.14.0-rc.4"
+version = "0.14.0"
 default-features = false
 # Extra features are used in gs_client on top of these common ones
 features = [
@@ -89,7 +89,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_math]
-version = "0.14.0-rc.4"
+version = "0.14.0"
 default-features = false
 features = [
     "serialize",            # Support for `serde` Serialize/Deserialize
@@ -115,4 +115,4 @@ lto = "thin"
 incremental = false
 
 [patch.crates-io]
-bevy_egui = { git = "https://github.com/Friz64/bevy_egui.git", rev = "b25bf5bdf1ea88a21a1ddb93f13234d1fdee40f8" }
+bevy_egui = { git = "https://github.com/Friz64/bevy_egui.git", rev = "7eb1191ddf1cc358c9d502d39d215f6f2ed732a1" }

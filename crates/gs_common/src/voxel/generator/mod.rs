@@ -824,7 +824,7 @@ impl StdGenerator {
 
             let distance_from_midpoint =
                 (point - (first + second) / 2.0).dot(second - first) / (second - first).length();
-            let weight = fade((distance_from_midpoint / BIOME_BLEND_RADIUS).max(-1.0).min(1.0) * 0.5 + 0.5);
+            let weight = fade((distance_from_midpoint / BIOME_BLEND_RADIUS).clamp(-1.0, 1.0) * 0.5 + 0.5);
 
             first_node.1 *= 1.0 - weight;
             second_node.1 *= weight;
@@ -898,6 +898,7 @@ impl StdGenerator {
     }
 }
 
+#[allow(dead_code)]
 fn is_inside(point: DVec2, polygon: &[DVec2]) -> bool {
     let len = polygon.len();
     for i in 0..len {
@@ -910,7 +911,7 @@ fn is_inside(point: DVec2, polygon: &[DVec2]) -> bool {
             return false;
         }
     }
-    return true;
+    true
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, Default, PartialEq, Debug)]

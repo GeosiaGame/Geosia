@@ -29,7 +29,6 @@ tracing.workspace = true
 voronoice.workspace = true
 # Remote, bevy plugins
 bevy_egui.workspace = true
-log = "0.4.21"
 
 [dependencies.bevy]
 workspace = true
