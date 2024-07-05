@@ -94,6 +94,8 @@ struct GameBootstrapData @0xb0778941893c57e5 {
     universeId @0 :Uuid;
     # Name->ID mappings for the block registry.
     blockRegistry @1 :RegistryIdMappingBundle;
+    # Name->ID mappings for the biome registry.
+    biomeRegistry @2 :RegistryIdMappingBundle;
 }
 
 struct FullChunkData {

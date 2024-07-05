@@ -133,12 +133,13 @@ fn kickoff_game_transition(world: &mut World) {
             })));
 
             let block_registry = Arc::clone(&client_data.shared_registries.block_types);
+            let biome_registry = Arc::clone(&client_data.shared_registries.biome_types);
 
             world.insert_resource(client_data);
             world.insert_resource(ClientNetworkThreadHolder(Arc::clone(&net_thread)));
             world.insert_resource(GameClientControlCommandReceiver(SyncCell::new(control_rx)));
 
-            VoxelUniverseBuilder::<ClientData>::new(world, block_registry)
+            VoxelUniverseBuilder::<ClientData>::new(world, block_registry, biome_registry)
                 .unwrap()
                 .with_network_client(&net_thread)
                 .unwrap()
