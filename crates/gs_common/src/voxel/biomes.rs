@@ -105,10 +105,10 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                     .unwrap();
 
                 if context.ground_y == pos.y {
-                    if pos.y >= 80 {
-                        return Some(BlockEntry::new(i_snow_grass, 0));
+                    return if pos.y >= 80 {
+                        Some(BlockEntry::new(i_snow_grass, 0))
                     } else {
-                        return Some(BlockEntry::new(i_grass, 0));
+                        Some(BlockEntry::new(i_grass, 0))
                     }
                 } else if pos.y <= context.ground_y && pos.y > context.ground_y - 5 {
                     return Some(BlockEntry::new(i_dirt, 0));
@@ -150,10 +150,10 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                     .unwrap();
 
                 if context.ground_y == pos.y {
-                    if pos.y >= 80 {
-                        return Some(BlockEntry::new(i_snow_grass, 0));
+                    return if pos.y >= 80 {
+                        Some(BlockEntry::new(i_snow_grass, 0))
                     } else {
-                        return Some(BlockEntry::new(i_grass, 0));
+                        Some(BlockEntry::new(i_grass, 0))
                     }
                 } else if context.ground_y >= pos.y && pos.y > context.ground_y - 5 {
                     return Some(BlockEntry::new(i_dirt, 0));
@@ -203,8 +203,8 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 }
                 None
             },
-            surface_noise: |point, noise| noise.get_2d(point.to_array()) * -7.5 + 1.0,
-            blend_influence: 10.0,
+            surface_noise: |point, noise| noise.get_2d((point / 25.0).to_array()) * -7.5 + 1.0,
+            blend_influence: 1.0,
             block_influence: 1.0,
             can_generate: true,
         })

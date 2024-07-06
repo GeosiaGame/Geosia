@@ -84,7 +84,7 @@ uuid = { version = "1.9.1", features = [
     "v4",
     "v6",
 ] }
-voronoice = "0.2.0"
+spade = { version = "2.9.0", features = ["serde"] }
 zorder = "0.2.2"
 
 # Remote, bevy plugins

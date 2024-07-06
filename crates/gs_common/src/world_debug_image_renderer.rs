@@ -44,12 +44,17 @@ pub fn draw_debug_maps(
     let mut temperature_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
     let mut moisture_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
 
-    let mut original_cells_img = image::DynamicImage::new_rgba8(width_u32, height_u32);
+    let mut original_cells_img = image::DynamicImage::new_rgba8(width_u32 * 2, height_u32 * 2);
 
     for (x, z) in iproduct!(0..width_u32, 0..height_u32) {
         let mapped_x = x as i32 - (width / 2) as i32;
         let mapped_z = z as i32 - (length / 2) as i32;
 
+        // draw the world's borders on the voronoi cells image
+        if x == 0 || x == width_u32 - 1 || z == 0 || z == width_u32 - 1 {
+            original_cells_img.put_pixel(x, z, Rgba([0, 0, 255, 255]));
+        }
+        
         let point = [mapped_x, mapped_z];
         let biomes = generator.get_biomes_at_point(&point);
         if biomes.is_some() {
@@ -126,27 +131,22 @@ pub fn draw_debug_maps(
         let point_v_0 = edge.v0.as_ref().unwrap().borrow().point;
         let point_v_1 = edge.v1.as_ref().unwrap().borrow().point;
         let point_d_0 = edge.d0.as_ref().unwrap().borrow().point;
-        let point_d_1 = edge.d1.as_ref().unwrap().borrow().point;
+        let mut point_d_1 = edge.d1.as_ref().unwrap().borrow().point;
+        if point_d_1.x > width as f64 * 1.5 {
+            point_d_1 = point_d_0;
+        }
         let mut f = 0.0;
         while f <= 1.0 {
             let current_v = point_v_0.lerp(point_v_1, f);
             let current_d = point_d_0.lerp(point_d_1, f);
             original_cells_img.put_pixel(
-                (current_v.x.round() as i32 + width as i32 / 2)
-                    .min(width as i32 - 1)
-                    .max(0) as u32,
-                (current_v.y.round() as i32 + length as i32 / 2)
-                    .min(length as i32 - 1)
-                    .max(0) as u32,
+                (current_v.x.round() as i32 + width as i32 / 2 + 64).clamp(0, width as i32 * 2 - 1) as u32,
+                (current_v.y.round() as i32 + length as i32 / 2 + 64).clamp(0, length as i32 * 2 - 1) as u32,
                 Rgba([255, 0, 0, 255]),
             );
             original_cells_img.put_pixel(
-                (current_d.x.round() as i32 + width as i32 / 2)
-                    .min(width as i32 - 1)
-                    .max(0) as u32,
-                (current_d.y.round() as i32 + length as i32 / 2)
-                    .min(length as i32 - 1)
-                    .max(0) as u32,
+                (current_d.x.round() as i32 + width as i32 / 2 + 64).clamp(0, width as i32 * 2 - 1) as u32,
+                (current_d.y.round() as i32 + length as i32 / 2 + 64).clamp(0, length as i32 * 2 - 1) as u32,
                 Rgba([0, 255, 0, 255]),
             );
             f += 0.001;
