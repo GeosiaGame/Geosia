@@ -3046,6 +3046,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_math",
+ "bevy_reflect",
  "bitflags 2.6.0",
  "bitvec",
  "bytemuck",

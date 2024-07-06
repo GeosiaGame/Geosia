@@ -23,7 +23,14 @@ anyhow = "1.0.86"
 arc-swap = "1.7.1"
 bitflags = { version = "2.6.0", features = ["bytemuck", "serde"] }
 bitvec = { version = "1.0.1", features = ["serde"] }
-bytemuck = { version = "1.16.1", features = ["extern_crate_alloc", "extern_crate_std", "min_const_generics", "derive", "zeroable_maybe_uninit", "zeroable_atomics"] }
+bytemuck = { version = "1.16.1", features = [
+    "extern_crate_alloc",
+    "extern_crate_std",
+    "min_const_generics",
+    "derive",
+    "zeroable_maybe_uninit",
+    "zeroable_atomics",
+] }
 capnp = "0.19.6"
 capnp-futures = "0.19.0"
 capnp-rpc = "0.19.2"
@@ -31,7 +38,10 @@ capnpc = "0.19.0"
 clap = { version = "4.5.8", features = ["derive"] }
 either = "1.13.0"
 futures = "0.3.30"
-glam = { version = "0.27.0", features = ["bytemuck", "serde"] } # Keep in sync with bevy
+glam = { version = "0.27.0", features = [
+    "bytemuck",
+    "serde",
+] } # Keep in sync with bevy
 hashbrown = { version = "0.14.5", features = ["serde"] }
 image = "0.25.1" # Keep in sync with bevy
 itertools = "0.13.0"
@@ -45,15 +55,35 @@ rand_pcg = "0.3.1"
 rand_xoshiro = "0.6.0"
 rgb = { version = "0.8.40", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
-smallvec = { version = "1.13.2", features = ["serde", "const_generics", "const_new", "write", "union"] }
+smallvec = { version = "1.13.2", features = [
+    "serde",
+    "const_generics",
+    "const_new",
+    "write",
+    "union",
+] }
 smart-default = "0.7.1"
 static_assertions = "1.1.0"
 thiserror = "1.0.61"
 thread_local = "1.1.8"
-tokio = { version = "1.38.0", features = ["sync", "rt", "net", "rt-multi-thread", "io-util", "time", "macros"] }
+tokio = { version = "1.38.0", features = [
+    "sync",
+    "rt",
+    "net",
+    "rt-multi-thread",
+    "io-util",
+    "time",
+    "macros",
+] }
 tokio-util = { version = "0.7.11", features = ["compat", "io-util"] }
 tracing = "0.1.40"
-uuid = { version = "1.9.1", features = ["fast-rng", "serde", "bytemuck", "v4", "v6"] }
+uuid = { version = "1.9.1", features = [
+    "fast-rng",
+    "serde",
+    "bytemuck",
+    "v4",
+    "v6",
+] }
 voronoice = "0.2.0"
 zorder = "0.2.2"
 
@@ -71,20 +101,20 @@ default-features = false
 # Extra features are used in gs_client on top of these common ones
 features = [
     # Default Bevy functionality:
-    "bevy_asset",         # Assets management
-    "animation",          # Animation support
+    "bevy_asset",            # Assets management
+    "animation",             # Animation support
     "android_shared_stdcxx", # For Android builds, use shared C++ library
     "multi_threaded",
     "bevy_state",
 
     # Extra Bevy functionality:
-    "serialize",            # Support for `serde` Serialize/Deserialize
+    "serialize", # Support for `serde` Serialize/Deserialize
 
     # Development/Debug features:
     # "dynamic_linking", # Dynamic linking for faster compile-times
-    "trace",           # Enable tracing for performance measurement
+    # "trace", # Enable tracing for performance measurement
     # "detailed_trace",  # Make traces more verbose
-    "trace_tracy",     # Tracing using `tracy`
+    # "trace_tracy",     # Tracing using `tracy`
     # "trace_chrome",    # Tracing using the Chrome format
 ]
 
@@ -92,8 +122,12 @@ features = [
 version = "0.14.0"
 default-features = false
 features = [
-    "serialize",            # Support for `serde` Serialize/Deserialize
+    "serialize", # Support for `serde` Serialize/Deserialize
 ]
+
+[workspace.dependencies.bevy_reflect]
+version = "0.14.0"
+features = ["smallvec", "glam", "uuid"]
 
 [profile.dev]
 opt-level = 1

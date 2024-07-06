@@ -61,3 +61,6 @@ features = [
     # Development/Debug features:
     # "wgpu_trace",      # WGPU/rendering tracing
 ]
+
+[features]
+trace_tracy = ["gs_common/trace_tracy", "bevy/trace_tracy"]

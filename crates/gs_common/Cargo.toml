@@ -38,3 +38,6 @@ tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 voronoice.workspace = true
+
+[features]
+trace_tracy = ["bevy/trace_tracy"]
