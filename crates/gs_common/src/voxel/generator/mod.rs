@@ -3,10 +3,12 @@
 pub mod flat;
 
 use std::ops::{Add, AddAssign, Sub, SubAssign};
+use std::sync::Arc;
 use std::{cell::RefCell, cmp::Ordering, collections::VecDeque, mem::MaybeUninit, ops::Deref, rc::Rc};
 
 use bevy::utils::hashbrown::HashMap;
 use bevy_math::{DVec2, IVec2, IVec3};
+use gs_schemas::voxel::voxeltypes::EMPTY_BLOCK_NAME;
 use gs_schemas::{
     coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIMZ},
     dependencies::{
@@ -20,8 +22,8 @@ use gs_schemas::{
             BiomeDefinition, BiomeEntry, BiomeRegistry, Noises, VOID_BIOME_NAME,
         },
         chunk::Chunk,
-        chunk_storage::{ChunkStorage, PaletteStorage},
-        generation::{fbm_noise::Fbm, positional_random::PositionalRandomFactory, Context, Noise4DTo2D},
+        chunk_storage::ChunkStorage,
+        generation::{fbm_noise::Fbm, positional_random::PositionalRandomFactory, Context, NoiseNDTo2D},
         voxeltypes::{BlockEntry, BlockRegistry},
     },
     GsExtraData,
@@ -57,14 +59,14 @@ const BIOME_BLEND_RADIUS: f64 = 16.0;
 /// A chunk generator
 pub trait VoxelGenerator<ExtraData: GsExtraData>: Send + Sync {
     /// Generates a single chunk at the given coordinates, with the given pre-filled extra data.
-    fn generate_chunk(&self, position: AbsChunkPos, extra_data: ExtraData::ChunkData) -> Chunk<ExtraData>;
+    fn generate_chunk(&mut self, position: AbsChunkPos, extra_data: ExtraData::ChunkData) -> Chunk<ExtraData>;
 }
 
 // TODO: move to a separate module
 /// Standard world generator implementation.
-pub struct StdGenerator<'a> {
-    biome_registry: &'a BiomeRegistry,
-    block_registry: &'a BlockRegistry,
+pub struct StdGenerator {
+    biome_registry: Arc<BiomeRegistry>,
+    block_registry: Arc<BlockRegistry>,
 
     seed: u64,
     size_chunks_xz: i32,
@@ -82,82 +84,16 @@ pub struct StdGenerator<'a> {
     corner_map: Vec<Vec<usize>>,
 }
 
-impl<'a> StdGenerator<'a> {
-    /// create a new StdGenerator.
-    pub fn new(
-        seed: u64,
-        size_chunks_xz: i32,
-        biome_registry: &'a BiomeRegistry,
-        block_registry: &'a BlockRegistry,
-    ) -> Self {
-        let seed_int = seed as u32;
-        let mut value = Self {
-            biome_registry,
-            block_registry,
-
-            seed,
-            size_chunks_xz,
-
-            random: Xoshiro128StarStar::seed_from_u64(seed),
-            biome_map: BiomeMap::default(),
-            noises: Noises {
-                base_terrain_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int).set_octaves(vec![-4.0, 1.0, 1.0, 0.0])),
-                elevation_noise: Box::new(
-                    Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(1347)).set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
-                ),
-                temperature_noise: Box::new(
-                    Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(2349)).set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
-                ),
-                moisture_noise: Box::new(
-                    Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(3243)).set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
-                ),
-            },
-
-            delaunay: DelaunayTriangulation::new(),
-            centers: Vec::new(),
-            corners: Vec::new(),
-            edges: Vec::new(),
-
-            center_lookup: HashMap::new(),
-            corner_map: Vec::new(),
-        };
-
-        // initialize generatable biomes
-        let mut biomes: Vec<(RegistryId, BiomeDefinition)> = Vec::new();
-        for (id, _name, def) in biome_registry.iter() {
-            if def.can_generate {
-                biomes.push((id, def.to_owned()));
-            }
-        }
-        value.biome_map.generatable_biomes = biomes;
-        value
-    }
-
-    /// Generate the biome map for the world.
-    pub fn generate_world_biomes(&mut self) {
-        /*
-        let total = Instant::now();
-        info!("starting biome generation");
-
-        let start = Instant::now();
-        // TODO adapt into new system
-        self.calculate_downslopes();
-        self.calculate_watersheds(biome_registry);
-        self.create_rivers(biome_registry); // stack overflow???
-        let duration = start.elapsed();
-        info!("moisture calculations took {:?}", duration);
-
-        let start = Instant::now();
-        let duration = start.elapsed();
-        info!("biome map lookup took {:?}", duration);
-
-        let duration = total.elapsed();
-        info!("biome generation took {:?} total", duration);
-        */
-    }
-
+impl<ED: GsExtraData> VoxelGenerator<ED> for StdGenerator {
     /// Generate a single chunk's blocks for the world.
-    pub fn generate_chunk(&mut self, c_pos: AbsChunkPos, chunk: &mut PaletteStorage<BlockEntry>) {
+    fn generate_chunk(&mut self, position: AbsChunkPos, extra_data: <ED as GsExtraData>::ChunkData) -> Chunk<ED> {
+        let air = self
+            .block_registry
+            .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
+            .unwrap()
+            .0;
+        let mut chunk = Chunk::new(BlockEntry::new(air, 0), extra_data);
+
         let range = Uniform::new_inclusive(-BIOME_SIZEF, BIOME_SIZEF);
         let void_id = self
             .biome_registry
@@ -165,7 +101,7 @@ impl<'a> StdGenerator<'a> {
             .unwrap()
             .0;
 
-        let point: IVec3 = <IVec3>::from(c_pos) * IVec3::splat(CHUNK_DIM);
+        let point: IVec3 = <IVec3>::from(position) * IVec3::splat(CHUNK_DIM);
         let point = DVec2Wrapper::new((point.x + CHUNK_DIM / 2) as f64, (point.z + CHUNK_DIM / 2) as f64);
 
         let seed_bytes_be = self.seed.to_be_bytes();
@@ -197,8 +133,7 @@ impl<'a> StdGenerator<'a> {
         let vertex_point = if let Some(closest_vertex) = nearby.next() {
             closest_vertex.fix()
         } else {
-            self
-                .delaunay
+            self.delaunay
                 .insert(offset_point)
                 .expect(format!("failed to insert point {:?} into delaunay triangulation", offset_point).as_str())
         };
@@ -214,17 +149,20 @@ impl<'a> StdGenerator<'a> {
                 let ix = (i % CHUNK_DIMZ) as i32;
                 let iz = ((i / CHUNK_DIMZ) % CHUNK_DIMZ) as i32;
                 self.find_biomes_at_point(
-                    DVec2::new((ix + c_pos.x * CHUNK_DIM) as f64, (iz + c_pos.z * CHUNK_DIM) as f64),
+                    DVec2::new(
+                        (ix + position.x * CHUNK_DIM) as f64,
+                        (iz + position.z * CHUNK_DIM) as f64,
+                    ),
                     void_id,
                 );
 
-                self.get_biomes_at_point(&[ix + c_pos.x * CHUNK_DIM, iz + c_pos.z * CHUNK_DIM])
+                self.get_biomes_at_point(&[ix + position.x * CHUNK_DIM, iz + position.z * CHUNK_DIM])
                     .unwrap_or(&SmallVec::<[BiomeEntry; EXPECTED_BIOME_COUNT]>::new())
                     .clone_into(&mut blended[(ix + iz * CHUNK_DIM) as usize]);
                 let p = Self::elevation_noise(
                     IVec2::new(ix, iz),
-                    IVec2::new(c_pos.x, c_pos.z),
-                    self.biome_registry,
+                    IVec2::new(position.x, position.z),
+                    &self.biome_registry,
                     &blended,
                     &mut self.noises,
                 )
@@ -239,12 +177,12 @@ impl<'a> StdGenerator<'a> {
         for (pos_x, pos_y, pos_z) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM, 0..CHUNK_DIM) {
             let b_pos = InChunkPos::try_new(pos_x, pos_y, pos_z).unwrap();
 
-            let g_pos = <IVec3>::from(b_pos) + (<IVec3>::from(c_pos) * CHUNK_DIM);
+            let g_pos = <IVec3>::from(b_pos) + (<IVec3>::from(position) * CHUNK_DIM);
             let height = vparams[(pos_x + pos_z * CHUNK_DIM) as usize];
 
             let mut biomes: SmallVec<[(&BiomeDefinition, f64); 3]> = SmallVec::new();
             for b in blended[(pos_x + pos_z * CHUNK_DIM) as usize].iter() {
-                let e = b.lookup(self.biome_registry).unwrap();
+                let e = b.lookup(&self.biome_registry).unwrap();
                 let w = b.weight * e.block_influence;
                 biomes.push((e, w));
             }
@@ -260,17 +198,91 @@ impl<'a> StdGenerator<'a> {
             for (biome, _) in biomes.iter() {
                 let ctx = Context {
                     seed: self.seed,
-                    chunk,
+                    chunk: &chunk.blocks,
                     random: PositionalRandomFactory::default(),
                     ground_y: height,
                     sea_level: 0, /* hardcoded for now... */
                 };
-                let result = (biome.rule_source)(&g_pos, &ctx, self.block_registry);
+                let result = (biome.rule_source)(&g_pos, &ctx, &self.block_registry);
                 if let Some(result) = result {
-                    chunk.put(b_pos, result);
+                    chunk.blocks.put(b_pos, result);
                 }
             }
         }
+        chunk
+    }
+}
+
+impl StdGenerator {
+    /// create a new StdGenerator.
+    pub fn new(
+        seed: u64,
+        size_chunks_xz: i32,
+        biome_registry: Arc<BiomeRegistry>,
+        block_registry: Arc<BlockRegistry>,
+    ) -> Self {
+        let seed_int = seed as u32;
+
+        let mut value = Self {
+            biome_registry,
+            block_registry,
+
+            seed,
+            size_chunks_xz,
+
+            random: Xoshiro128StarStar::seed_from_u64(seed),
+            biome_map: BiomeMap::default(),
+            noises: Noises {
+                base_terrain_noise: Fbm::<OpenSimplex>::new(seed_int).set_octaves(vec![-4.0, 1.0, 1.0, 0.0]),
+                elevation_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(1347))
+                    .set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
+                temperature_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(2349))
+                    .set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
+                moisture_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(3243))
+                    .set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
+            },
+
+            delaunay: DelaunayTriangulation::new(),
+            centers: Vec::new(),
+            corners: Vec::new(),
+            edges: Vec::new(),
+
+            center_lookup: HashMap::new(),
+            corner_map: Vec::new(),
+        };
+
+        // initialize generatable biomes
+        let mut biomes: Vec<(RegistryId, BiomeDefinition)> = Vec::new();
+        for (id, _name, def) in value.biome_registry.iter() {
+            if def.can_generate {
+                biomes.push((id, def.to_owned()));
+            }
+        }
+        value.biome_map.generatable_biomes = biomes;
+        value
+    }
+
+    /// Generate the biome map for the world.
+    pub fn generate_world_biomes(&mut self) {
+        /*
+        let total = Instant::now();
+        info!("starting biome generation");
+
+        let start = Instant::now();
+        // TODO adapt into new system
+        self.calculate_downslopes();
+        self.calculate_watersheds(biome_registry);
+        self.create_rivers(biome_registry); // stack overflow???
+        let duration = start.elapsed();
+        info!("moisture calculations took {:?}", duration);
+
+        let start = Instant::now();
+        let duration = start.elapsed();
+        info!("biome map lookup took {:?}", duration);
+
+        let duration = total.elapsed();
+        info!("biome generation took {:?} total", duration);
+        */
     }
 
     fn elevation_noise(
@@ -470,9 +482,21 @@ impl<'a> StdGenerator<'a> {
     fn make_noise(noises: &Noises, point: DVec2) -> NoiseValues {
         let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
         let point = [point.x / scale_factor, point.y / scale_factor];
-        let elevation = Self::map_range((-1.5, 1.5), (0.0, 5.0), noises.elevation_noise.get_2d(point));
-        let temperature = Self::map_range((-1.5, 1.5), (0.0, 5.0), noises.temperature_noise.get_2d(point));
-        let moisture: f64 = Self::map_range((-1.5, 1.5), (0.0, 5.0), noises.moisture_noise.get_2d(point));
+        let elevation = Self::map_range(
+            (-1.5, 1.5),
+            (0.0, 5.0),
+            <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(&noises.elevation_noise, point),
+        );
+        let temperature = Self::map_range(
+            (-1.5, 1.5),
+            (0.0, 5.0),
+            <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(&noises.temperature_noise, point),
+        );
+        let moisture: f64 = Self::map_range(
+            (-1.5, 1.5),
+            (0.0, 5.0),
+            <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(&noises.moisture_noise, point),
+        );
 
         NoiseValues {
             elevation,
@@ -646,7 +670,6 @@ impl<'a> StdGenerator<'a> {
                 let r = &mut self.corners[r];
                 r.watershed_size += 1;
             }
-
         }
     }
 
@@ -940,7 +963,7 @@ struct NoiseValues {
 }
 
 /// Center of a voronoi cell, corner of a delaunay triangle
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Center {
     /// Center of the cell
     pub point: DVec2,
@@ -974,26 +997,23 @@ impl Center {
     }
 
     fn get_neighbors<'a>(&'a self, generator: &'a StdGenerator) -> impl Iterator<Item = &Center> + Clone + '_ {
-        (0..self.neighbors.len())
-            .map(move |s| &generator.centers[s])
+        (0..self.neighbors.len()).map(move |s| &generator.centers[s])
     }
 
     fn get_borders<'a>(&'a self, generator: &'a StdGenerator) -> impl Iterator<Item = &Edge> + Clone + '_ {
-        (0..self.borders.len())
-            .map(move |s| &generator.edges[s])
+        (0..self.borders.len()).map(move |s| &generator.edges[s])
     }
 
     fn get_corners<'a>(&'a self, generator: &'a StdGenerator) -> impl Iterator<Item = &Corner> + Clone + '_ {
-        (0..self.corners.len())
-            .map(move |s| &generator.corners[s])
+        (0..self.corners.len()).map(move |s| &generator.corners[s])
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 struct PointEdge(DVec2, DVec2);
 
 /// Edge of a voronoi cell & delaunay triangle
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Edge {
     /// Delaunay edge start (center)
     pub d0: Option<usize>,
@@ -1060,14 +1080,26 @@ impl Edge {
     /// get v0 as a reference.
     pub fn v0<'a>(&'a self, generator: &'a StdGenerator) -> Option<Corner> {
         match self.v0 {
-            Some(d) => if generator.corners.len() > d { Some(generator.corners[d].clone()) } else { None },
+            Some(d) => {
+                if generator.corners.len() > d {
+                    Some(generator.corners[d].clone())
+                } else {
+                    None
+                }
+            }
             None => None,
         }
     }
     /// get v0 as a mutable reference.
     pub fn v0_mut<'a>(&'a self, generator: &'a mut StdGenerator) -> Option<&'a mut Corner> {
         match self.v0 {
-            Some(d) => if generator.corners.len() > d { Some(&mut generator.corners[d]) } else { None },
+            Some(d) => {
+                if generator.corners.len() > d {
+                    Some(&mut generator.corners[d])
+                } else {
+                    None
+                }
+            }
             None => None,
         }
     }
@@ -1088,7 +1120,7 @@ impl Edge {
 }
 
 /// Corner of a voronoi cell, center of a delaunay triangle
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Corner {
     /// Location of the corner
     pub point: DVec2,
@@ -1139,18 +1171,15 @@ impl Corner {
     }
 
     fn get_touches<'a>(&'a self, generator: &'a StdGenerator) -> impl Iterator<Item = &Center> + Clone + '_ {
-        (0..self.touches.len())
-            .map(|s| &generator.centers[s])
+        (0..self.touches.len()).map(|s| &generator.centers[s])
     }
 
     fn get_protrudes<'a>(&'a self, generator: &'a StdGenerator) -> impl Iterator<Item = &Edge> + Clone + '_ {
-        (0..self.protrudes.len())
-            .map(|s| &generator.edges[s])
+        (0..self.protrudes.len()).map(|s| &generator.edges[s])
     }
 
     fn get_adjacent<'a>(&'a self, generator: &'a StdGenerator) -> impl Iterator<Item = &Corner> + Clone + '_ {
-        (0..self.adjacent.len())
-            .map(|s| &generator.corners[s])
+        (0..self.adjacent.len()).map(|s| &generator.corners[s])
     }
 
     fn get_downslope<'a>(&'a self, generator: &'a StdGenerator) -> Option<&Corner> {

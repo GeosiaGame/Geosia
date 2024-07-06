@@ -39,12 +39,12 @@ where
 const CONVERT_NOISE_SCALE: f64 = 1.0;
 
 /// Get a point of 4D "torus" noise as if it were a plane of 2D noise
-pub trait Noise4DTo2D<const T: usize> {
+pub trait NoiseNDTo2D<const T: usize> {
     /// get the noise value as a 2D point.
     fn get_2d(&self, point: [f64; 2]) -> f64;
 }
 
-impl<T> Noise4DTo2D<4> for T
+impl<T> NoiseNDTo2D<4> for T
 where
     T: NoiseFn<f64, 4> + ?Sized,
 {
@@ -60,7 +60,7 @@ where
     }
 }
 
-impl<T> Noise4DTo2D<3> for T
+impl<T> NoiseNDTo2D<3> for T
 where
     T: NoiseFn<f64, 3> + ?Sized,
 {
@@ -71,7 +71,7 @@ where
     }
 }
 
-impl<T> Noise4DTo2D<2> for T
+impl<T> NoiseNDTo2D<2> for T
 where
     T: NoiseFn<f64, 2> + ?Sized,
 {

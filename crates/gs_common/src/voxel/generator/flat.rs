@@ -55,7 +55,7 @@ impl FlatGenerator {
 
 impl<ED: GsExtraData> VoxelGenerator<ED> for FlatGenerator {
     fn generate_chunk(
-        &self,
+        &mut self,
         position: gs_schemas::coordinates::AbsChunkPos,
         extra_data: <ED as GsExtraData>::ChunkData,
     ) -> Chunk<ED> {
