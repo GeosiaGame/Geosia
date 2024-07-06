@@ -11,7 +11,7 @@ use image::{GenericImage, Rgba};
 
 use crate::{
     voxel::{
-        generator::StdGenerator,
+        generator::multi_noise::MultiNoiseGenerator,
         persistence::{memory::MemoryPersistenceLayer, ChunkPersistenceLayer},
     },
     ServerData,
@@ -24,7 +24,7 @@ fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {
 /// Make a bevy image out of the voronoi diagram.
 #[allow(dead_code)]
 pub fn draw_debug_maps(
-    generator: &StdGenerator,
+    generator: &MultiNoiseGenerator,
     biome_registry: &BiomeRegistry,
     block_registry: &BlockRegistry,
     persistence: &mut MemoryPersistenceLayer<ServerData>,

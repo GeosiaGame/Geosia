@@ -36,7 +36,7 @@ use crate::config::{GameConfig, GameConfigHandle};
 use crate::network::server::{LocalConnectionPipe, NetworkServerPlugin, NetworkThreadServerState};
 use crate::network::thread::NetworkThread;
 use crate::prelude::*;
-use crate::voxel::generator::{StdGenerator, WORLD_SIZE_XZ};
+use crate::voxel::generator::multi_noise::{MultiNoiseGenerator, WORLD_SIZE_XZ};
 use crate::voxel::persistence::memory::MemoryPersistenceLayer;
 use crate::voxel::plugin::VoxelUniversePlugin;
 
@@ -261,7 +261,7 @@ impl GameServer {
         let block_registry = Arc::clone(&engine.server_data.shared_registries.block_types);
         let biome_registry = Arc::clone(&engine.server_data.shared_registries.biome_types);
 
-        let generator = StdGenerator::new(
+        let generator = MultiNoiseGenerator::new(
             123456789,
             WORLD_SIZE_XZ * 2,
             Arc::clone(&biome_registry),
