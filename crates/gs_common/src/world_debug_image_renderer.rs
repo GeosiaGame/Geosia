@@ -52,9 +52,9 @@ pub fn draw_debug_maps(
 
         // draw the world's borders on the voronoi cells image
         if x == 0 || x == width_u32 - 1 || z == 0 || z == width_u32 - 1 {
-            original_cells_img.put_pixel(x, z, Rgba([0, 0, 255, 255]));
+            original_cells_img.put_pixel(x + 64, z + 64, Rgba([0, 0, 255, 255]));
         }
-        
+
         let point = [mapped_x, mapped_z];
         let biomes = generator.get_biomes_at_point(&point);
         if biomes.is_some() {
@@ -127,14 +127,10 @@ pub fn draw_debug_maps(
     }
 
     for edge in generator.edges().iter() {
-        let edge = edge.borrow();
-        let point_v_0 = edge.v0.as_ref().unwrap().borrow().point;
-        let point_v_1 = edge.v1.as_ref().unwrap().borrow().point;
-        let point_d_0 = edge.d0.as_ref().unwrap().borrow().point;
-        let mut point_d_1 = edge.d1.as_ref().unwrap().borrow().point;
-        if point_d_1.x > width as f64 * 1.5 {
-            point_d_1 = point_d_0;
-        }
+        let point_v_0 = edge.v0(generator).unwrap().point;
+        let point_v_1 = edge.v1(generator).unwrap().point;
+        let point_d_0 = edge.d0(generator).unwrap().point;
+        let point_d_1 = edge.d1(generator).unwrap().point;
         let mut f = 0.0;
         while f <= 1.0 {
             let current_v = point_v_0.lerp(point_v_1, f);
