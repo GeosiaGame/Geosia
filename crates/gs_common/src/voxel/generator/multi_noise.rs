@@ -1,7 +1,7 @@
 //! Standard multi noise world generator
 
 use std::ops::{Add, AddAssign, Sub, SubAssign};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::{cell::RefCell, cmp::Ordering, collections::VecDeque, mem::MaybeUninit, ops::Deref, rc::Rc};
 
 use bevy::utils::hashbrown::HashMap;
@@ -32,7 +32,7 @@ use rand_xoshiro::Xoshiro128StarStar;
 use serde::{Deserialize, Serialize};
 use spade::handles::FixedVertexHandle;
 use spade::{DelaunayTriangulation, FloatTriangulation, HasPosition, Point2, Triangulation};
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME, RIVER_BIOME_NAME};
 use crate::voxel::generator::VoxelGenerator;
@@ -63,29 +63,23 @@ pub struct MultiNoiseGenerator {
     seed: u64,
     size_chunks_xz: i32,
 
-    random: Xoshiro128StarStar,
-    biome_map: BiomeMap,
+    random: Mutex<Xoshiro128StarStar>,
+    biome_map: Mutex<BiomeMap>,
     noises: Noises,
 
-    delaunay: DelaunayTriangulation<DVec2Wrapper>,
-    centers: Vec<Center>,
-    corners: Vec<Corner>,
-    edges: Vec<Edge>,
+    delaunay: Mutex<DelaunayTriangulation<DVec2Wrapper>>,
+    centers: Mutex<Vec<Center>>,
+    corners: Mutex<Vec<Corner>>,
+    edges: Mutex<Vec<Edge>>,
 
-    center_lookup: HashMap<[i32; 2], usize>,
-    corner_map: Vec<Vec<usize>>,
+    center_lookup: Mutex<HashMap<[i32; 2], usize>>,
+    corner_map: Mutex<Vec<Vec<usize>>>,
 }
 
 impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
     /// Generate a single chunk's blocks for the world.
-    fn generate_chunk(&mut self, position: AbsChunkPos, extra_data: <ED as GsExtraData>::ChunkData) -> Chunk<ED> {
-        let air = self
-            .block_registry
-            .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
-            .unwrap()
-            .0;
-        let mut chunk = Chunk::new(BlockEntry::new(air, 0), extra_data);
-
+    fn generate_chunk(&self, position: AbsChunkPos, extra_data: <ED as GsExtraData>::ChunkData) -> Chunk<ED> {
+        info!("generating chunk at {position:?}");
         let range = Uniform::new_inclusive(-BIOME_SIZEF, BIOME_SIZEF);
         let void_id = self
             .biome_registry
@@ -108,8 +102,8 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
         let mut rand = Xoshiro128StarStar::from_seed(seed);
         let offset_point = point + DVec2Wrapper::new(rand.sample(range), rand.sample(range)) + POINT_OFFSET_VEC;
 
-        let mut nearby = self
-            .delaunay
+        let mut delaunay = self.delaunay.lock().unwrap();
+        let mut nearby = delaunay
             .get_vertices_in_circle(offset_point.into(), BIOME_SIZEF2)
             .sorted_by(|a, b| {
                 let dist_a = a.position().distance_2(offset_point.into()).sqrt();
@@ -125,12 +119,12 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
         let vertex_point = if let Some(closest_vertex) = nearby.next() {
             closest_vertex.fix()
         } else {
-            self.delaunay
+            delaunay
                 .insert(offset_point)
                 .expect(format!("failed to insert point {:?} into delaunay triangulation", offset_point).as_str())
         };
 
-        let center = self.make_edge_center_corner(vertex_point);
+        let center = self.make_edge_center_corner(vertex_point, delaunay);
         self.assign_biome(center);
 
         let mut blended = vec![SmallVec::new(); CHUNK_DIM2Z];
@@ -149,22 +143,29 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
                 );
 
                 self.get_biomes_at_point(&[ix + position.x * CHUNK_DIM, iz + position.z * CHUNK_DIM])
-                    .unwrap_or(&SmallVec::<[BiomeEntry; EXPECTED_BIOME_COUNT]>::new())
+                    .unwrap_or(SmallVec::<[BiomeEntry; EXPECTED_BIOME_COUNT]>::new())
                     .clone_into(&mut blended[(ix + iz * CHUNK_DIM) as usize]);
                 let p = Self::elevation_noise(
                     IVec2::new(ix, iz),
                     IVec2::new(position.x, position.z),
                     &self.biome_registry,
                     &blended,
-                    &mut self.noises,
+                    &self.noises,
                 )
-                    .round() as i32;
+                .round() as i32;
                 unsafe {
                     std::ptr::write(v.as_mut_ptr(), p);
                 }
             }
             unsafe { std::mem::transmute(vparams) }
         };
+
+        let air = self
+            .block_registry
+            .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
+            .unwrap()
+            .0;
+        let mut chunk = Chunk::new(BlockEntry::new(air, 0), extra_data);
 
         for (pos_x, pos_y, pos_z) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM, 0..CHUNK_DIM) {
             let b_pos = InChunkPos::try_new(pos_x, pos_y, pos_z).unwrap();
@@ -222,8 +223,8 @@ impl MultiNoiseGenerator {
             seed,
             size_chunks_xz,
 
-            random: Xoshiro128StarStar::seed_from_u64(seed),
-            biome_map: BiomeMap::default(),
+            random: Mutex::new(Xoshiro128StarStar::seed_from_u64(seed)),
+            biome_map: Mutex::new(BiomeMap::default()),
             noises: Noises {
                 base_terrain_noise: Fbm::<OpenSimplex>::new(seed_int).set_octaves(vec![-4.0, 1.0, 1.0, 0.0]),
                 elevation_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(1347))
@@ -234,13 +235,13 @@ impl MultiNoiseGenerator {
                     .set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
             },
 
-            delaunay: DelaunayTriangulation::new(),
-            centers: Vec::new(),
-            corners: Vec::new(),
-            edges: Vec::new(),
+            delaunay: Mutex::new(DelaunayTriangulation::new()),
+            centers: Mutex::new(Vec::new()),
+            corners: Mutex::new(Vec::new()),
+            edges: Mutex::new(Vec::new()),
 
-            center_lookup: HashMap::new(),
-            corner_map: Vec::new(),
+            center_lookup: Mutex::new(HashMap::new()),
+            corner_map: Mutex::new(Vec::new()),
         };
 
         // initialize generatable biomes
@@ -250,7 +251,7 @@ impl MultiNoiseGenerator {
                 biomes.push((id, def.to_owned()));
             }
         }
-        value.biome_map.generatable_biomes = biomes;
+        value.biome_map.get_mut().unwrap().generatable_biomes = biomes;
         value
     }
 
@@ -282,9 +283,9 @@ impl MultiNoiseGenerator {
         chunk_pos: IVec2,
         biome_registry: &BiomeRegistry,
         blended: &[SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>],
-        noises: &mut Noises,
+        noises: &Noises,
     ) -> f64 {
-        let mut nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)(p, &mut noises.base_terrain_noise) + 1.0) / 2.0;
+        let nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)(p, &noises.base_terrain_noise) + 1.0) / 2.0;
         let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
         let blend = &blended[(in_chunk_pos.x + in_chunk_pos.y * CHUNK_DIM) as usize];
         let global_pos = DVec2::new(
@@ -309,14 +310,17 @@ impl MultiNoiseGenerator {
             v.push(x.unwrap());
         }
     }
-    fn make_corner(&mut self, point: DVec2) -> usize {
+    fn make_corner(&self, point: DVec2) -> usize {
+        let mut corners = self.corners.lock().unwrap();
+        let mut corner_map = self.corner_map.lock().unwrap();
+
         let mut bucket = point.x.abs() as usize;
         while bucket <= point.x.abs() as usize + 2 {
-            if self.corner_map.get(bucket).is_none() {
+            if corner_map.get(bucket).is_none() {
                 break;
             }
-            for q in &self.corner_map[bucket] {
-                if point.distance(self.corners[*q].point) < 1e-6 {
+            for q in &corner_map[bucket] {
+                if point.distance(corners[*q].point) < 1e-6 {
                     return *q;
                 }
             }
@@ -324,89 +328,109 @@ impl MultiNoiseGenerator {
         }
 
         let bucket = point.x.abs() as usize + 1;
-        while self.corner_map.get(bucket).is_none() {
-            self.corner_map.push(Vec::new());
+        while corner_map.get(bucket).is_none() {
+            corner_map.push(Vec::new());
         }
         let q = Corner::new(point);
         //q.border = q.point.x == -x_size/2.0 || q.point.x == x_size/2.0
         //            || q.point.y == -y_size/2.0 || q.point.y == y_size/2.0;
-        let index = self.corners.len();
-        self.corners.push(q);
-        self.corner_map[bucket].push(index);
+        let index = corners.len();
+        corners.push(q);
+        corner_map[bucket].push(index);
+
         index
     }
-    fn make_centers_corners_for_edge(&mut self, edge: &Edge, index: usize) {
+    fn make_centers_corners_for_edge(&self, edge: &Edge, index: usize) {
+        let mut centers = self.centers.lock().unwrap();
+        let mut corners = self.corners.lock().unwrap();
+
         // Centers point to edges. Corners point to edges.
-        if let Some(d0) = edge.d0_mut(self) {
+        if let Some(d0) = edge.d0 {
+            let d0 = &mut centers[d0];
             d0.borders.push(index);
         }
-        if let Some(d1) = edge.d1_mut(self) {
+        if let Some(d1) = edge.d1 {
+            let d1 = &mut centers[d1];
             d1.borders.push(index);
         }
-        if let Some(v0) = edge.v0_mut(self) {
+        if let Some(v0) = edge.v0 {
+            let v0 = &mut corners[v0];
             v0.protrudes.push(index);
         }
-        if let Some(v1) = edge.v1_mut(self) {
+        if let Some(v1) = edge.v1 {
+            let v1 = &mut corners[v1];
             v1.protrudes.push(index);
         }
 
         // Centers point to centers.
         if let (Some(i0), Some(i1)) = (edge.d0, edge.d1) {
-            let d0 = &mut self.centers[i0];
+            let d0 = &mut centers[i0];
             Self::add_to_list(&mut d0.neighbors, &Some(i1));
-            let d1 = &mut self.centers[i1];
+            let d1 = &mut centers[i1];
             Self::add_to_list(&mut d1.neighbors, &Some(i0));
         }
 
         // Corners point to corners
         if let (Some(i0), Some(i1)) = (edge.v0, edge.v0) {
-            let v0 = &mut self.corners[i0];
+            let v0 = &mut corners[i0];
             Self::add_to_list(&mut v0.adjacent, &Some(i1));
-            let v1 = &mut self.corners[i1];
+            let v1 = &mut corners[i1];
             Self::add_to_list(&mut v1.adjacent, &Some(i0));
         }
 
         // Centers point to corners
-        if let Some(d0) = edge.d0_mut(self) {
+        if let Some(d0) = edge.d0 {
+            let d0 = &mut centers[d0];
             Self::add_to_list(&mut d0.corners, &edge.v0);
             Self::add_to_list(&mut d0.corners, &edge.v1);
         }
 
         // Centers point to corners
-        if let Some(d1) = edge.d1_mut(self) {
+        if let Some(d1) = edge.d1 {
+            let d1 = &mut centers[d1];
             Self::add_to_list(&mut d1.corners, &edge.v0);
             Self::add_to_list(&mut d1.corners, &edge.v1);
         }
 
         // Corners point to centers
-        if let Some(v0) = edge.v0_mut(self) {
+        if let Some(v0) = edge.v0 {
+            let v0 = &mut corners[v0];
             Self::add_to_list(&mut v0.touches, &edge.d0);
             Self::add_to_list(&mut v0.touches, &edge.d1);
         }
-        if let Some(v1) = edge.v1_mut(self) {
+        if let Some(v1) = edge.v1 {
+            let v1 = &mut corners[v1];
             Self::add_to_list(&mut v1.touches, &edge.d0);
             Self::add_to_list(&mut v1.touches, &edge.d1);
         }
     }
 
-    fn make_edge_center_corner(&mut self, handle: FixedVertexHandle) -> usize {
-        let point = self.delaunay.vertex(handle);
+    fn make_edge_center_corner(
+        &self,
+        handle: FixedVertexHandle,
+        delaunay: MutexGuard<DelaunayTriangulation<DVec2Wrapper>>,
+    ) -> usize {
+        let mut centers = self.centers.lock().unwrap();
+        let mut center_lookup = self.center_lookup.lock().unwrap();
+        let mut edges = self.edges.lock().unwrap();
+
+        let point = delaunay.vertex(handle);
         let point: DVec2 = *<DVec2Wrapper>::from(point.position());
         let center_lookup_pos = [point.x.round() as i32, point.y.round() as i32];
-        let center = if self.center_lookup.contains_key(&center_lookup_pos) {
-            return *self.center_lookup.get(&center_lookup_pos).unwrap();
+        let center = if center_lookup.contains_key(&center_lookup_pos) {
+            return *center_lookup.get(&center_lookup_pos).unwrap();
         } else {
             let center = Center::new(point);
-            let index = self.centers.len();
-            self.centers.push(center);
-            self.center_lookup.insert(center_lookup_pos, index);
+            let index = centers.len();
+            centers.push(center);
+            center_lookup.insert(center_lookup_pos, index);
             index
         };
 
-        let edges = Self::make_edges(&self.delaunay, handle);
-        for (delaunay_edge, voronoi_edge) in edges {
+        let map_edges = Self::make_edges(&delaunay, handle);
+        for (delaunay_edge, voronoi_edge) in map_edges {
             let midpoint = voronoi_edge.0.lerp(voronoi_edge.1, 0.5);
-            for edge in &self.edges {
+            for edge in edges.iter() {
                 if (midpoint - edge.midpoint).length() < 1e-3 {
                     continue;
                 }
@@ -419,26 +443,28 @@ impl MultiNoiseGenerator {
             edge.v0 = Some(self.make_corner(voronoi_edge.0));
             edge.v1 = Some(self.make_corner(voronoi_edge.1));
             let d0_pos = [delaunay_edge.0.x.round() as i32, delaunay_edge.0.y.round() as i32];
-            edge.d0 = self.center_lookup.get(&d0_pos).map(|i| *i).or_else(|| {
+            edge.d0 = center_lookup.get(&d0_pos).copied().or_else(|| {
                 let center = Center::new(delaunay_edge.0);
-                let index = self.centers.len();
-                self.centers.push(center);
-                self.center_lookup.insert(d0_pos, index);
+                let index = centers.len();
+                centers.push(center);
+                center_lookup.insert(d0_pos, index);
                 Some(index)
             });
             let d1_pos = [delaunay_edge.1.x.round() as i32, delaunay_edge.1.y.round() as i32];
-            edge.d1 = self.center_lookup.get(&d1_pos).map(|i| *i).or_else(|| {
+            edge.d1 = center_lookup.get(&d1_pos).copied().or_else(|| {
                 let center = Center::new(delaunay_edge.1);
-                let index = self.centers.len();
-                self.centers.push(center);
-                self.center_lookup.insert(d1_pos, index);
+                let index = centers.len();
+                centers.push(center);
+                center_lookup.insert(d1_pos, index);
                 Some(index)
             });
 
-            let index = self.edges.len();
+            let index = edges.len();
             self.make_centers_corners_for_edge(&edge, index);
-            self.edges.push(edge);
+            edges.push(edge);
         }
+        drop(centers);
+
         self.assign_noise_and_ocean(center);
 
         return center;
@@ -503,10 +529,11 @@ impl MultiNoiseGenerator {
     /// map. In the first pass, mark the edges of the map as ocean;
     /// in the second pass, mark any water-containing polygon
     /// connected to an ocean as ocean.
-    fn assign_noise_and_ocean(&mut self, index: usize) {
+    fn assign_noise_and_ocean(&self, index: usize) {
         let mut queue = VecDeque::new();
 
-        let centers = &mut self.centers;
+        let mut centers = self.centers.lock().unwrap();
+        let mut corners = self.corners.lock().unwrap();
         {
             let center = &mut centers[index];
             // assign noise parameters based on node position
@@ -514,7 +541,7 @@ impl MultiNoiseGenerator {
             let mut num_water = 0;
 
             for q in &center.corners {
-                let q = &self.corners[*q];
+                let q = &corners[*q];
                 if q.border {
                     center.ocean = true;
                     center.water = true;
@@ -566,7 +593,7 @@ impl MultiNoiseGenerator {
         // ocean, then it's ocean; if all are land, then it's land;
         // otherwise it's coast.
         for q in &centers[index].corners {
-            let q = &mut self.corners[*q];
+            let q = &mut corners[*q];
             q.noise = Self::make_noise(&self.noises, q.point);
             let mut num_ocean = 0;
             let mut num_land = 0;
@@ -585,14 +612,15 @@ impl MultiNoiseGenerator {
         }
     }
 
-    fn calculate_downslopes(&mut self) {
-        let corners = self.corners.clone();
+    fn calculate_downslopes(&self) {
+        let mut corners = self.corners.lock().unwrap();
+        let corners_clone = corners.clone();
         let mut r;
-        for (ir, q) in self.corners.iter_mut().enumerate() {
+        for (ir, q) in corners.iter_mut().enumerate() {
             r = ir;
             for i in &q.adjacent {
-                let s = &corners[*i];
-                if s.noise.elevation <= corners[r].noise.elevation {
+                let s = &corners_clone[*i];
+                if s.noise.elevation <= corners_clone[r].noise.elevation {
                     r = *i;
                 }
             }
@@ -606,12 +634,20 @@ impl MultiNoiseGenerator {
     /// more useful to compute them on polygon centers so that every
     /// polygon can be marked as being in one watershed.
     #[allow(clippy::assigning_clones)] // false positive, "fixing" this causes a borrow checker error
-    fn calculate_watersheds(&mut self, biome_registry: &BiomeRegistry) {
-        let (ocean_id, _) = biome_registry.lookup_name_to_object(OCEAN_BIOME_NAME.as_ref()).unwrap();
-        let (beach_id, _) = biome_registry.lookup_name_to_object(BEACH_BIOME_NAME.as_ref()).unwrap();
+    fn calculate_watersheds(&self) {
+        let mut corners = self.corners.lock().unwrap();
+
+        let (ocean_id, _) = self
+            .biome_registry
+            .lookup_name_to_object(OCEAN_BIOME_NAME.as_ref())
+            .unwrap();
+        let (beach_id, _) = self
+            .biome_registry
+            .lookup_name_to_object(BEACH_BIOME_NAME.as_ref())
+            .unwrap();
 
         // Initially the watershed pointer points downslope one step.
-        for (i, q) in self.corners.iter_mut().enumerate() {
+        for (i, q) in corners.iter_mut().enumerate() {
             q.watershed = Some(i);
             if q.biome != Some(ocean_id) && q.biome != Some(beach_id) {
                 q.watershed = q.downslope;
@@ -624,21 +660,21 @@ impl MultiNoiseGenerator {
         // a coast.  TODO: can run faster by looking at
         // p.watershed.watershed instead of p.downslope.watershed.
         for _ in 0..100 {
-            let corners = self.corners.clone();
+            let corners_clone = corners.clone();
             let mut changed = false;
-            for (i, q) in self.corners.iter_mut().enumerate() {
+            for (i, q) in corners.iter_mut().enumerate() {
                 // why does this stack overflow???
                 if q.watershed == Some(i) {
                     continue;
                 }
                 let downslope = q.watershed.unwrap();
-                let downslope = &corners[downslope];
+                let downslope = &corners_clone[downslope];
                 if !q.ocean && !q.coast && !downslope.coast && {
                     let r = downslope.watershed.unwrap();
-                    let r = &corners[r];
+                    let r = &corners_clone[r];
                     !r.ocean
                 } {
-                    let downslope_watershed = corners[q.downslope.unwrap()].watershed.unwrap();
+                    let downslope_watershed = corners_clone[q.downslope.unwrap()].watershed.unwrap();
                     q.watershed = Some(downslope_watershed);
                     changed = true;
                 }
@@ -649,28 +685,34 @@ impl MultiNoiseGenerator {
         }
 
         // How big is each watershed?
-        for i in 0..self.corners.len() {
+        for i in 0..corners.len() {
             if {
-                let q = &self.corners[i];
+                let q = &corners[i];
                 let r = q.watershed.unwrap();
                 r == q.watershed.unwrap()
             } {
-                let q = &mut self.corners[i];
+                let q = &mut corners[i];
                 q.watershed_size += 1;
             } else {
-                let r = self.corners[i].watershed.unwrap();
-                let r = &mut self.corners[r];
+                let r = corners[i].watershed.unwrap();
+                let r = &mut corners[r];
                 r.watershed_size += 1;
             }
         }
     }
 
-    fn create_rivers(&mut self, biome_registry: &BiomeRegistry) {
-        let (river_id, _) = biome_registry.lookup_name_to_object(RIVER_BIOME_NAME.as_ref()).unwrap();
+    fn create_rivers(&self) {
+        let mut corners = self.corners.lock().unwrap();
+        let mut edges = self.edges.lock().unwrap();
+
+        let (river_id, _) = self
+            .biome_registry
+            .lookup_name_to_object(RIVER_BIOME_NAME.as_ref())
+            .unwrap();
 
         for _ in 0..(self.size_chunks_xz / 2) {
-            let mut index = self.random.gen_range(0..self.corners.len());
-            let mut qo = &self.corners[index];
+            let mut index = self.random.lock().unwrap().gen_range(0..corners.len());
+            let mut qo = &corners[index];
             if qo.ocean || qo.noise.elevation < 1.0 || qo.noise.elevation > 3.5 {
                 continue;
             }
@@ -681,28 +723,33 @@ impl MultiNoiseGenerator {
                 }
                 let edge_i = self.lookup_edge_from_corner(index, downslope).unwrap();
 
-                let edge = &mut self.edges[edge_i];
+                let edge = &mut edges[edge_i];
                 edge.river += 1;
-                let q = &mut self.corners[index];
+                let q = &mut corners[index];
                 q.river += 1;
 
                 index = q.downslope.unwrap();
-                let downslope = &mut self.corners[index];
+                let downslope = &mut corners[index];
                 downslope.river += 1;
                 edge.biome = Some(river_id);
 
-                qo = &self.corners[index];
+                qo = &corners[index];
             }
         }
     }
 
-    fn assign_biome(&mut self, center: usize) {
+    fn assign_biome(&self, center: usize) {
         // go over all centers and assign biomes to them based on noise & other parameters.
-        let center = &mut self.centers[center];
+        let mut centers = self.centers.lock().unwrap();
+        let mut corners = self.corners.lock().unwrap();
+        let mut edges = self.edges.lock().unwrap();
+
+        let center = &mut centers[center];
+        let biome_map = self.biome_map.lock().unwrap();
 
         // first assign the corners' biomes
         for corner in &center.corners {
-            let corner = &mut self.corners[*corner];
+            let corner = &mut corners[*corner];
             if corner.biome.is_some() {
                 continue;
             }
@@ -732,7 +779,7 @@ impl MultiNoiseGenerator {
                 );
                 continue;
             }
-            for (id, biome) in &self.biome_map.generatable_biomes {
+            for (id, biome) in &biome_map.generatable_biomes {
                 if biome.elevation.contains(corner.noise.elevation)
                     && biome.temperature.contains(corner.noise.temperature)
                     && biome.moisture.contains(corner.noise.moisture)
@@ -744,11 +791,11 @@ impl MultiNoiseGenerator {
         }
         // then the edges' biomes
         for edge in &center.borders {
-            let edge = &mut self.edges[*edge];
+            let edge = &mut edges[*edge];
             if edge.biome.is_some() {
                 continue;
             }
-            for (id, biome) in &self.biome_map.generatable_biomes {
+            for (id, biome) in &biome_map.generatable_biomes {
                 if biome.elevation.contains(edge.noise.elevation)
                     && biome.temperature.contains(edge.noise.temperature)
                     && biome.moisture.contains(edge.noise.moisture)
@@ -789,7 +836,7 @@ impl MultiNoiseGenerator {
             return;
         }
         let mut found = false;
-        for (id, biome) in &self.biome_map.generatable_biomes {
+        for (id, biome) in &biome_map.generatable_biomes {
             if biome.elevation.contains(center.noise.elevation)
                 && biome.temperature.contains(center.noise.temperature)
                 && biome.moisture.contains(center.noise.moisture)
@@ -804,8 +851,12 @@ impl MultiNoiseGenerator {
                 "found no biome for point {:?}, noise values: {:?}. Picking randomly.",
                 center.point, center.noise
             );
-            let index = self.random.gen_range(0..self.biome_map.generatable_biomes.len());
-            center.biome = Some(self.biome_map.generatable_biomes[index].0);
+            let index = self
+                .random
+                .lock()
+                .unwrap()
+                .gen_range(0..biome_map.generatable_biomes.len());
+            center.biome = Some(biome_map.generatable_biomes[index].0);
             warn!(
                 "picked {}",
                 self.biome_registry.lookup_id_to_object(center.biome.unwrap()).unwrap()
@@ -814,8 +865,10 @@ impl MultiNoiseGenerator {
     }
 
     fn lookup_edge_from_corner(&self, q: usize, s: usize) -> Option<usize> {
-        let q_c = &self.corners[q];
-        for (edge, i) in q_c.get_protrudes(self).zip(&q_c.protrudes) {
+        let edges = self.edges.lock().unwrap();
+        let q_c = &self.corners.lock().unwrap()[q];
+        for i in &q_c.protrudes {
+            let edge = &edges[*i];
             if edge.v0.is_some() && edge.v0.unwrap() == s {
                 return Some(*i);
             }
@@ -826,9 +879,11 @@ impl MultiNoiseGenerator {
         None
     }
 
-    fn find_biomes_at_point(&mut self, point: DVec2, default: RegistryId) {
+    fn find_biomes_at_point(&self, point: DVec2, default: RegistryId) {
         let p = [point.x.round() as i32, point.y.round() as i32];
-        if self.biome_map.biome_map.contains_key(&p) {
+
+        let mut biome_map = self.biome_map.lock().unwrap();
+        if biome_map.biome_map.contains_key(&p) {
             return;
         }
 
@@ -845,7 +900,10 @@ impl MultiNoiseGenerator {
         };
         let fade = |t: f64| -> f64 { t * t * (3.0 - 2.0 * t) };
 
-        let mut sorted = self.centers.clone();
+        let mut sorted = {
+            let centers = self.centers.lock().unwrap();
+            centers.clone()
+        };
         sorted.sort_by(distance_ordering);
 
         let closest = &sorted[0];
@@ -895,20 +953,22 @@ impl MultiNoiseGenerator {
             }
         }
 
-        self.biome_map.biome_map.insert(p, to_blend);
-        self.biome_map
+        biome_map.biome_map.insert(p, to_blend);
+        biome_map
             .noise_map
             .insert(p, (point_elevation, point_temperature, point_moisture));
     }
 
     /// Get the biomes at the given point from the biome map.
-    pub fn get_biomes_at_point(&self, point: &[i32; 2]) -> Option<&SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>> {
-        self.biome_map.biome_map.get(point)
+    pub fn get_biomes_at_point(&self, point: &[i32; 2]) -> Option<SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>> {
+        let biome_map = self.biome_map.lock().unwrap();
+        biome_map.biome_map.get(point).cloned()
     }
 
     /// Get the noise values at the given point from the biome map.
-    pub fn get_noises_at_point(&self, point: &[i32; 2]) -> Option<&(f64, f64, f64)> {
-        self.biome_map.noise_map.get(point)
+    pub fn get_noises_at_point(&self, point: &[i32; 2]) -> Option<(f64, f64, f64)> {
+        let biome_map = self.biome_map.lock().unwrap();
+        biome_map.noise_map.get(point).cloned()
     }
 
     fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {
@@ -916,8 +976,18 @@ impl MultiNoiseGenerator {
     }
 
     /// Get all voronoi edges this map contains.
-    pub fn edges(&self) -> &[Edge] {
-        &self.edges
+    pub fn edges(&self) -> Vec<Edge> {
+        vec![] //self.edges.try_lock().unwrap().to_vec()
+    }
+
+    /// Get all voronoi centers this map contains.
+    pub fn centers(&self) -> Vec<Center> {
+        vec![] //self.centers.try_lock().unwrap().to_vec()
+    }
+
+    /// Get all voronoi corners this map contains.
+    pub fn corners(&self) -> Vec<Corner> {
+        vec![] //self.corners.try_lock().unwrap().to_vec()
     }
 }
 
@@ -977,18 +1047,6 @@ impl Center {
             corners: Vec::new(),
         }
     }
-
-    fn get_neighbors<'a>(&'a self, generator: &'a MultiNoiseGenerator) -> impl Iterator<Item = &Center> + Clone + '_ {
-        (0..self.neighbors.len()).map(move |s| &generator.centers[s])
-    }
-
-    fn get_borders<'a>(&'a self, generator: &'a MultiNoiseGenerator) -> impl Iterator<Item = &Edge> + Clone + '_ {
-        (0..self.borders.len()).map(move |s| &generator.edges[s])
-    }
-
-    fn get_corners<'a>(&'a self, generator: &'a MultiNoiseGenerator) -> impl Iterator<Item = &Corner> + Clone + '_ {
-        (0..self.corners.len()).map(move |s| &generator.corners[s])
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
@@ -1027,76 +1085,6 @@ impl Edge {
             biome: None,
 
             river: 0,
-        }
-    }
-
-    /// get d0 as a reference.
-    pub fn d0<'a>(&'a self, generator: &'a MultiNoiseGenerator) -> Option<&Center> {
-        match self.d0 {
-            Some(d) => Some(&generator.centers[d]),
-            None => None,
-        }
-    }
-    /// get d0 as a mutable reference.
-    pub fn d0_mut<'a>(&'a self, generator: &'a mut MultiNoiseGenerator) -> Option<&'a mut Center> {
-        match self.d0 {
-            Some(d) => Some(&mut generator.centers[d]),
-            None => None,
-        }
-    }
-    /// get d1 as a reference.
-    pub fn d1<'a>(&'a self, generator: &'a MultiNoiseGenerator) -> Option<&Center> {
-        match self.d1 {
-            Some(d) => Some(&generator.centers[d]),
-            None => None,
-        }
-    }
-    /// get d1 as a mutable reference.
-    pub fn d1_mut<'a>(&'a self, generator: &'a mut MultiNoiseGenerator) -> Option<&'a mut Center> {
-        match self.d1 {
-            Some(d) => Some(&mut generator.centers[d]),
-            None => None,
-        }
-    }
-
-    /// get v0 as a reference.
-    pub fn v0<'a>(&'a self, generator: &'a MultiNoiseGenerator) -> Option<Corner> {
-        match self.v0 {
-            Some(d) => {
-                if generator.corners.len() > d {
-                    Some(generator.corners[d].clone())
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
-    /// get v0 as a mutable reference.
-    pub fn v0_mut<'a>(&'a self, generator: &'a mut MultiNoiseGenerator) -> Option<&'a mut Corner> {
-        match self.v0 {
-            Some(d) => {
-                if generator.corners.len() > d {
-                    Some(&mut generator.corners[d])
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
-    /// get v1 as a reference.
-    pub fn v1<'a>(&'a self, generator: &'a MultiNoiseGenerator) -> Option<&Corner> {
-        match self.v1 {
-            Some(d) => Some(&generator.corners[d]),
-            None => None,
-        }
-    }
-    /// get v1 as a mutable reference.
-    pub fn v1_mut<'a>(&'a self, generator: &'a mut MultiNoiseGenerator) -> Option<&'a mut Corner> {
-        match self.v1 {
-            Some(d) => Some(&mut generator.corners[d]),
-            None => None,
         }
     }
 }
@@ -1149,44 +1137,6 @@ impl Corner {
             touches: Vec::new(),
             protrudes: Vec::new(),
             adjacent: Vec::new(),
-        }
-    }
-
-    fn get_touches<'a>(&'a self, generator: &'a MultiNoiseGenerator) -> impl Iterator<Item = &Center> + Clone + '_ {
-        (0..self.touches.len()).map(|s| &generator.centers[s])
-    }
-
-    fn get_protrudes<'a>(&'a self, generator: &'a MultiNoiseGenerator) -> impl Iterator<Item = &Edge> + Clone + '_ {
-        (0..self.protrudes.len()).map(|s| &generator.edges[s])
-    }
-
-    fn get_adjacent<'a>(&'a self, generator: &'a MultiNoiseGenerator) -> impl Iterator<Item = &Corner> + Clone + '_ {
-        (0..self.adjacent.len()).map(|s| &generator.corners[s])
-    }
-
-    fn get_downslope<'a>(&'a self, generator: &'a MultiNoiseGenerator) -> Option<&Corner> {
-        match self.downslope {
-            Some(d) => Some(&generator.corners[d]),
-            None => None,
-        }
-    }
-    fn get_downslope_mut<'a>(&'a self, generator: &'a mut MultiNoiseGenerator) -> Option<&mut Corner> {
-        match self.downslope {
-            Some(d) => Some(&mut generator.corners[d]),
-            None => None,
-        }
-    }
-
-    fn get_watershed<'a>(&'a self, generator: &'a MultiNoiseGenerator) -> Option<&Corner> {
-        match self.watershed {
-            Some(d) => Some(&generator.corners[d]),
-            None => None,
-        }
-    }
-    fn get_watershed_mut<'a>(&'a self, generator: &'a mut MultiNoiseGenerator) -> Option<&mut Corner> {
-        match self.watershed {
-            Some(d) => Some(&mut generator.corners[d]),
-            None => None,
         }
     }
 }

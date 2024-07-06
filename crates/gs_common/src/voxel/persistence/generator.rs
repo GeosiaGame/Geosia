@@ -14,7 +14,7 @@ use crate::voxel::persistence::{ChunkPersistenceLayer, ChunkPersistenceLayerStat
 /// Asynchronous persistence layer wrapping a generator.
 pub struct GeneratorPersistenceLayer<ExtraData: GsExtraData> {
     // TODO: remove mutex, generator must be parallel
-    generator: Arc<Mutex<dyn VoxelGenerator<ExtraData>>>,
+    generator: Arc<dyn VoxelGenerator<ExtraData>>,
     extra_data: ExtraData::ChunkData,
     live_tasks: HashMap<AbsChunkPos, Task<ChunkProviderResult<ExtraData>>>,
     // counts unfinished tasks
@@ -30,7 +30,7 @@ impl Drop for CounterDecrOnDrop {
 
 impl<ExtraData: GsExtraData> GeneratorPersistenceLayer<ExtraData> {
     /// Constructs a new persistence layer using the given generator and cloneable `extra_data`.
-    pub fn new(generator: Arc<Mutex<dyn VoxelGenerator<ExtraData>>>, extra_data: ExtraData::ChunkData) -> Self {
+    pub fn new(generator: Arc<dyn VoxelGenerator<ExtraData>>, extra_data: ExtraData::ChunkData) -> Self {
         Self {
             generator,
             extra_data,
@@ -50,10 +50,7 @@ impl<ExtraData: GsExtraData> ChunkPersistenceLayer<ExtraData> for GeneratorPersi
             let extra_data = self.extra_data.clone();
             let task = AsyncComputeTaskPool::get().spawn(async move {
                 let _counter = counter; // decrement on drop()
-                let chunk = (*gen)
-                    .lock()
-                    .expect("Failed to lock generator")
-                    .generate_chunk(pos, extra_data);
+                let chunk = gen.generate_chunk(pos, extra_data);
                 (pos, Ok(MutWatcher::new(chunk)))
             });
             let _ = self.live_tasks.try_insert(pos, task);

@@ -267,7 +267,7 @@ impl GameServer {
             Arc::clone(&biome_registry),
             Arc::clone(&block_registry),
         );
-        let gen_world = GeneratorPersistenceLayer::new(Arc::new(Mutex::new(generator)), default());
+        let gen_world = GeneratorPersistenceLayer::new(Arc::new(generator), default());
         let persistence = MemoryPersistenceLayer::new(Box::new(gen_world));
 
         fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {

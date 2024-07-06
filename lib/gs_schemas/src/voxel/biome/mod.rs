@@ -64,7 +64,7 @@ pub struct BiomeDefinition {
     /// The block placement rule source for this biome.
     pub rule_source: fn(pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>,
     /// The noise function for this biome.
-    pub surface_noise: fn(pos: DVec2, noise: &mut Fbm<OpenSimplex>) -> f64,
+    pub surface_noise: fn(pos: DVec2, noise: &Fbm<OpenSimplex>) -> f64,
     /// The strength of this biome in the blending step.
     pub blend_influence: f64,
     /// The strength of this biome in the block placement step.

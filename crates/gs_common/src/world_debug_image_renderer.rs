@@ -126,11 +126,13 @@ pub fn draw_debug_maps(
         }
     }
 
+    let centers = generator.centers();
+    let corners = generator.corners();
     for edge in generator.edges().iter() {
-        let point_v_0 = edge.v0(generator).unwrap().point;
-        let point_v_1 = edge.v1(generator).unwrap().point;
-        let point_d_0 = edge.d0(generator).unwrap().point;
-        let point_d_1 = edge.d1(generator).unwrap().point;
+        let point_v_0 = corners[edge.v0.unwrap()].point;
+        let point_v_1 = corners[edge.v1.unwrap()].point;
+        let point_d_0 = centers[edge.d0.unwrap()].point;
+        let point_d_1 = centers[edge.d1.unwrap()].point;
         let mut f = 0.0;
         while f <= 1.0 {
             let current_v = point_v_0.lerp(point_v_1, f);
