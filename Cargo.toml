@@ -91,7 +91,7 @@ zorder = "0.2.2"
 bevy_egui = "0.27.0"
 
 # Remote, testing
-criterion = { version = "0.5.1", features = ["html_reports", "real_blackbox"] }
+criterion = { version = "0.5.1", features = ["html_reports"] }
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
