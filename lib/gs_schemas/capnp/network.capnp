@@ -81,8 +81,10 @@ interface AuthenticatedServerConnection @0xcc65c2f3643e6ae0 {
 struct ChunkDataStreamPacket {
     # Game tick on which this chunk was updated.
     tick @0 :UInt64;
+    # Revision number of the chunk, used by MutWatcher deserialization.
+    revision @1 :UInt64;
     # AbsChunkPos of the chunk.
-    position @1 :GameTypes.IVec3;
+    position @2 :GameTypes.IVec3;
     # Serialized chunk data.
-    data @2 :GameTypes.FullChunkData;
+    data @3 :GameTypes.FullChunkData;
 }

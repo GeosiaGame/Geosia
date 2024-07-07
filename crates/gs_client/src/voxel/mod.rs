@@ -16,7 +16,7 @@ use gs_schemas::schemas::network_capnp as rpc;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
 use meshgen::mesh_from_chunk;
-use smallvec::SmallVec;
+use smallvec::{smallvec, SmallVec};
 use tokio_util::bytes::Bytes;
 
 use crate::ClientData;
@@ -30,10 +30,17 @@ pub type ClientChunkGroup = ChunkGroup<ClientData>;
 /// Client VoxelUniverse
 pub type ClientVoxelUniverse = VoxelUniverse<ClientData>;
 
+/// Keeps track of the render entities associated with a chunk
+#[derive(Clone, Default)]
+struct ChunkMeshState {
+    meshes: SmallVec<[Handle<Mesh>; 4]>,
+    entities: SmallVec<[Entity; 4]>,
+}
+
 /// Client-only per-chunk data storage
 #[derive(Clone, Default)]
 pub struct ClientChunkData {
-    mesh: Option<MutWatcher<Handle<Mesh>>>,
+    mesh: Option<MutWatcher<ChunkMeshState>>,
 }
 
 /// Client-only per-chunk-group data storage
@@ -101,7 +108,7 @@ fn handle_chunk_packet(raw_packet: Bytes, voxels: &mut ClientVoxelUniverse) -> R
     let cpos_r = root.reborrow().get_position()?;
     let pos = AbsChunkPos::new(cpos_r.get_x(), cpos_r.get_y(), cpos_r.get_z());
     let data_r = root.reborrow().get_data()?;
-    let revision: RevisionNumber = root.get_tick().try_into()?;
+    let revision: RevisionNumber = root.get_revision().try_into()?;
     let chunk = ClientChunk::read_full(&data_r, default())?;
 
     voxels
@@ -156,16 +163,21 @@ fn client_chunk_mesher_system(
             }
         };
         let mesh = meshes.add(chunk_mesh);
-        info!(position = %pos, "Spawning new chunk mesh");
+        trace!(position = %pos, "Spawning new chunk mesh");
 
-        commands.spawn(PbrBundle {
-            mesh: mesh.clone(),
-            material: voxel_material.clone(),
-            transform: Transform::from_translation(AbsBlockPos::from(pos).as_vec3()),
-            ..default()
+        let entity = commands
+            .spawn(PbrBundle {
+                mesh: mesh.clone(),
+                material: voxel_material.clone(),
+                transform: Transform::from_translation(AbsBlockPos::from(pos).as_vec3()),
+                ..default()
+            })
+            .id();
+
+        let mesh = chunk.new_with_same_revision(ChunkMeshState {
+            meshes: smallvec![mesh],
+            entities: smallvec![entity],
         });
-
-        let mesh = chunk.new_with_same_revision(mesh);
 
         new_entries.push((pos, mesh));
     }
@@ -181,8 +193,14 @@ fn client_chunk_mesher_system(
             .replace(mesh);
         if let Some(old_mesh) = old_mesh {
             let old_mesh = old_mesh.into_inner();
-            meshes.remove(old_mesh.id());
-            // TODO remove pbrbundle
+            for mesh in old_mesh.meshes.iter() {
+                meshes.remove(mesh);
+            }
+            for &entity in old_mesh.entities.iter() {
+                if let Some(entity) = commands.get_entity(entity) {
+                    entity.despawn_recursive();
+                }
+            }
         }
     }
 }
