@@ -88,7 +88,7 @@ voronoice = "0.2.0"
 zorder = "0.2.2"
 
 # Remote, bevy plugins
-bevy_egui = "0.27.0"
+bevy_egui = "0.28.0"
 
 # Remote, testing
 criterion = { version = "0.5.1", features = ["html_reports"] }
@@ -147,6 +147,3 @@ opt-level = 3
 codegen-units = 1
 lto = "thin"
 incremental = false
-
-[patch.crates-io]
-bevy_egui = { git = "https://github.com/Friz64/bevy_egui.git", rev = "7eb1191ddf1cc358c9d502d39d215f6f2ed732a1" }
