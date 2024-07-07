@@ -169,7 +169,7 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
 
         // TODO: make the player load the chunks
         self.bundle.world_scope(|w| {
-            w.spawn((VoxelPosition(AbsBlockPos::ZERO), ChunkLoader { radius: 8 }));
+            w.spawn((VoxelPosition(AbsBlockPos::ZERO), ChunkLoader { radius: 2 }));
         });
 
         self.bundle.insert(PersistentVoxelStorage::<ED> {
