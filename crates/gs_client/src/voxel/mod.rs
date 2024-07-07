@@ -7,16 +7,14 @@ use capnp::message::TypedReader;
 use gs_common::network::transport::RPC_LOCAL_READER_OPTIONS;
 use gs_common::prelude::*;
 use gs_common::voxel::plugin::{
-    BlockRegistryHolder, NetworkVoxelClient, VoxelUniverseBuilder, CHUNK_PACKET_QUEUE_LENGTH,
+    BlockRegistryHolder, NetworkVoxelClient, VoxelUniverse, VoxelUniverseBuilder, CHUNK_PACKET_QUEUE_LENGTH,
 };
 use gs_common::InGameSystemSet;
-use gs_schemas::coordinates::{AbsChunkPos, RelChunkPos};
-use gs_schemas::dependencies::itertools::iproduct;
-use gs_schemas::mutwatcher::MutWatcher;
+use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos};
+use gs_schemas::mutwatcher::{MutWatcher, RevisionNumber};
 use gs_schemas::schemas::network_capnp as rpc;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
-use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use meshgen::mesh_from_chunk;
 use smallvec::SmallVec;
 use tokio_util::bytes::Bytes;
@@ -29,11 +27,13 @@ pub mod meshgen;
 pub type ClientChunk = Chunk<ClientData>;
 /// Client ChunkGroup type
 pub type ClientChunkGroup = ChunkGroup<ClientData>;
+/// Client VoxelUniverse
+pub type ClientVoxelUniverse = VoxelUniverse<ClientData>;
 
 /// Client-only per-chunk data storage
 #[derive(Clone, Default)]
 pub struct ClientChunkData {
-    //
+    mesh: Option<MutWatcher<Handle<Mesh>>>,
 }
 
 /// Client-only per-chunk-group data storage
@@ -52,19 +52,30 @@ impl<'world> ClientVoxelUniverseBuilder for VoxelUniverseBuilder<'world, ClientD
     fn with_client_chunk_system(mut self) -> Self {
         self.bundle.world_scope(|world| {
             let fixed_pre_update = FixedPreUpdate.intern();
+            let fixed_update = FixedUpdate.intern();
             let mut schedules = world.resource_mut::<Schedules>();
             schedules
                 .get_mut(fixed_pre_update)
                 .unwrap()
-                .add_systems((chunk_packet_receiver_system).in_set(InGameSystemSet));
+                .add_systems((client_chunk_packet_receiver_system).in_set(InGameSystemSet));
+            schedules
+                .get_mut(fixed_update)
+                .unwrap()
+                .add_systems((client_chunk_mesher_system).in_set(InGameSystemSet));
         });
         self
     }
 }
 
-fn chunk_packet_receiver_system(world: &mut World) {
-    let mut nvc = world.query::<&mut NetworkVoxelClient<ClientData>>();
-    let mut nvc = nvc.get_single_mut(world).unwrap();
+fn client_chunk_packet_receiver_system(
+    mut nvc_q: Query<&mut NetworkVoxelClient<ClientData>>,
+    mut voxel_q: Query<&mut ClientVoxelUniverse>,
+) {
+    let mut voxels = voxel_q
+        .get_single_mut()
+        .context("Missing universe while handling chunk packet, did the game already shut down?")
+        .unwrap();
+    let mut nvc = nvc_q.single_mut();
     let mut batch: SmallVec<[Bytes; CHUNK_PACKET_QUEUE_LENGTH]> = SmallVec::new();
     for _ in 0..CHUNK_PACKET_QUEUE_LENGTH {
         if let Ok(packet) = nvc.chunk_packet_receiver.try_recv() {
@@ -74,14 +85,15 @@ fn chunk_packet_receiver_system(world: &mut World) {
         }
     }
 
+    let voxels = &mut *voxels;
     for raw_packet in batch {
-        if let Err(e) = handle_chunk_packet(raw_packet, world) {
+        if let Err(e) = handle_chunk_packet(raw_packet, voxels) {
             error!("Error while processing received chunk packet: {e}");
         }
     }
 }
 
-fn handle_chunk_packet(raw_packet: Bytes, world: &mut World) -> Result<()> {
+fn handle_chunk_packet(raw_packet: Bytes, voxels: &mut ClientVoxelUniverse) -> Result<()> {
     let mut slice = &raw_packet as &[u8];
     let msg = capnp::serialize::read_message_from_flat_slice(&mut slice, RPC_LOCAL_READER_OPTIONS)?;
     let typed_reader = TypedReader::<_, rpc::chunk_data_stream_packet::Owned>::new(msg);
@@ -89,51 +101,88 @@ fn handle_chunk_packet(raw_packet: Bytes, world: &mut World) -> Result<()> {
     let cpos_r = root.reborrow().get_position()?;
     let pos = AbsChunkPos::new(cpos_r.get_x(), cpos_r.get_y(), cpos_r.get_z());
     let data_r = root.reborrow().get_data()?;
+    let revision: RevisionNumber = root.get_tick().try_into()?;
+    let chunk = ClientChunk::read_full(&data_r, default())?;
 
-    {
-        /*let universe = world.query::<>();
-        let Some(universe) = universe else {
-            warn!("Missing voxel universe while processing chunk data packet, did the game already shut down?");
-            return Ok(());
-        };*/
-        // TODO: actually add the chunk to the universe chunk loader
-        let block_registry = Arc::clone(&world.resource::<BlockRegistryHolder>().0);
-        let empty = block_registry
-            .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
-            .context("no empty block")?
-            .0;
+    voxels
+        .loaded_chunks_mut()
+        .chunks
+        .insert(pos, MutWatcher::new_saved(chunk, revision));
 
-        // Just add the chunk mesh directly right now for testing
-        let mut test_chunks = ClientChunkGroup::new();
-        for (cx, cy, cz) in iproduct!(-1..=1, -1..=1, -1..=1) {
-            let cpos = RelChunkPos::new(cx, cy, cz) + pos;
-            let chunk = ClientChunk::new(BlockEntry::new(empty, 0), Default::default());
-            test_chunks.chunks.insert(cpos, MutWatcher::new(chunk));
-        }
-        let mid_chunk = ClientChunk::read_full(&data_r, Default::default())?;
-        test_chunks.chunks.insert(pos, MutWatcher::new(mid_chunk));
+    Ok(())
+}
 
-        let white_material = world.resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
+fn client_chunk_mesher_system(
+    mut voxel_q: Query<&mut ClientVoxelUniverse>,
+    block_registry: Res<BlockRegistryHolder>,
+    mut voxel_material: Local<Option<Handle<StandardMaterial>>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut commands: Commands,
+) {
+    let Ok(mut voxels) = voxel_q.get_single_mut() else {
+        return;
+    };
+    let voxels = &mut *voxels;
+
+    let voxel_material = voxel_material.get_or_insert_with(|| {
+        materials.add(StandardMaterial {
             base_color: tailwind::GRAY_500.into(),
+            ..default()
+        })
+    });
+
+    // Schedule new meshes for all outdated chunks
+    let mut new_entries = Vec::new();
+    let loaded_chunks = voxels.loaded_chunks();
+    for (&pos, chunk) in loaded_chunks.chunks.iter() {
+        let old_mesh = chunk.extra_data.mesh.as_ref();
+        let needs_mesh = if let Some(old_mesh) = old_mesh {
+            old_mesh.is_older_than(chunk)
+        } else {
+            true
+        };
+        if !needs_mesh {
+            continue;
+        }
+        let Some(neighbors) = loaded_chunks.get_neighborhood_around(pos).transpose_option() else {
+            continue;
+        };
+        let chunk_mesh = match mesh_from_chunk(&block_registry, &neighbors) {
+            Ok(mesh) => mesh,
+            Err(e) => {
+                error!(position = %pos, error = %e, "Could not mesh chunk");
+                continue;
+            }
+        };
+        let mesh = meshes.add(chunk_mesh);
+        info!(position = %pos, "Spawning new chunk mesh");
+
+        commands.spawn(PbrBundle {
+            mesh: mesh.clone(),
+            material: voxel_material.clone(),
+            transform: Transform::from_translation(AbsBlockPos::from(pos).as_vec3()),
             ..default()
         });
 
-        for (pos, _) in test_chunks.chunks.iter() {
-            let chunks = &test_chunks.get_neighborhood_around(*pos).transpose_option();
-            if let Some(chunks) = chunks {
-                let chunk_mesh = mesh_from_chunk(&block_registry, chunks).unwrap();
+        let mesh = chunk.new_with_same_revision(mesh);
 
-                let mesh = world.resource_mut::<Assets<Mesh>>().add(chunk_mesh);
-
-                world.spawn(PbrBundle {
-                    mesh,
-                    material: white_material.clone(),
-                    transform: Transform::from_xyz(0.0, 0.0, 0.0),
-                    ..default()
-                });
-            }
+        new_entries.push((pos, mesh));
+    }
+    let loaded_chunks = voxels.loaded_chunks_mut();
+    for (pos, mesh) in new_entries.into_iter() {
+        let old_mesh = loaded_chunks
+            .chunks
+            .get_mut(&pos)
+            .unwrap()
+            .mutate_without_revision()
+            .extra_data
+            .mesh
+            .replace(mesh);
+        if let Some(old_mesh) = old_mesh {
+            let old_mesh = old_mesh.into_inner();
+            meshes.remove(old_mesh.id());
+            // TODO remove pbrbundle
         }
     }
-
-    Ok(())
 }
