@@ -261,12 +261,7 @@ impl GameServer {
         let block_registry = Arc::clone(&engine.server_data.shared_registries.block_types);
         let biome_registry = Arc::clone(&engine.server_data.shared_registries.biome_types);
 
-        let generator = MultiNoiseGenerator::new(
-            123456789,
-            WORLD_SIZE_XZ * 2,
-            Arc::clone(&biome_registry),
-            Arc::clone(&block_registry),
-        );
+        let generator = MultiNoiseGenerator::new(123456789, Arc::clone(&biome_registry), Arc::clone(&block_registry));
         let gen_world = GeneratorPersistenceLayer::new(Arc::new(generator), default());
         let persistence = MemoryPersistenceLayer::new(Box::new(gen_world));
 
