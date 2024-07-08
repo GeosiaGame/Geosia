@@ -4,7 +4,7 @@ use anyhow::Context;
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy::render::render_asset::RenderAssetUsages;
-use gs_schemas::coordinates::{AbsBlockPos, RelBlockPos, CHUNK_DIM};
+use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, RelBlockPos, CHUNK_DIM};
 use gs_schemas::dependencies::itertools::iproduct;
 use gs_schemas::direction::ALL_DIRECTIONS;
 use gs_schemas::voxel::chunk_storage::ChunkStorage;
@@ -35,6 +35,7 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
     #[inline(always)]
     fn get_block(chunks: &ChunkRefNeighborhood<ClientData>, position: AbsBlockPos) -> BlockEntry {
         let (chunk_pos, in_pos) = position.split_chunk_component();
+        let chunk_pos = chunk_pos + (chunks.center_coord() - AbsChunkPos::ZERO);
         chunks.get(chunk_pos).unwrap().blocks.get_copy(in_pos)
     }
 
@@ -44,9 +45,9 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
     let mut color_buf: Vec<[f32; 4]> = Vec::with_capacity(6144);
     let mut ibuf: Vec<u32> = Vec::with_capacity(6144);
 
-    let block_origin = AbsBlockPos::from(chunks.center_coord());
     for (cell_y, cell_z, cell_x) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM, 0..CHUNK_DIM) {
-        let ipos: AbsBlockPos = block_origin + RelBlockPos::new(cell_x, cell_y, cell_z);
+        // Assume the chunk is at (0,0,0), mesh is translated using transforms elsewhere
+        let ipos = AbsBlockPos::new(cell_x, cell_y, cell_z);
         let ventry = get_block(chunks, ipos);
         let vdef = registry.lookup_id_to_object(ventry.id).context("invalid block")?;
         let vstdmeta = StandardShapeMetadata::from_meta(ventry.metadata);

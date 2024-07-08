@@ -3,7 +3,7 @@
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, Deref};
 
-use bevy_math::{IVec3, UVec3};
+use bevy_math::prelude::*;
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -30,20 +30,159 @@ pub const MAX_BLOCK_POS: i32 = 1 << 30;
 /// [`MAX_BLOCK_POS`] converted to the unit of chunks.
 pub const MAX_CHUNK_POS: i32 = MAX_BLOCK_POS / CHUNK_DIM;
 
-/// Converts a 3d vector of ints to a YZX Z-order curve packed 128-bit integer by interleaving the bits.
+// xxx yyy zzz -> zyxzyxzyx bit pattern
+// reference for tests
+/// Slower reference implementation of zpack_3d, public for benchmark purposes
+pub fn zpack_3d_naive(vec: IVec3) -> u128 {
+    let vec = vec.as_uvec3();
+    let x = vec.x;
+    let y = vec.y;
+    let z = vec.z;
+    let mut out = 0u128;
+    for bit in 0..32 {
+        let bit_mask = 1 << bit;
+        let z_set = (z & bit_mask) != 0;
+        let y_set = (y & bit_mask) != 0;
+        let x_set = (x & bit_mask) != 0;
+        if x_set {
+            out |= 1u128 << (3 * bit);
+        }
+        if y_set {
+            out |= 1u128 << (3 * bit + 1);
+        }
+        if z_set {
+            out |= 1u128 << (3 * bit + 2);
+        }
+    }
+    out
+}
+
+const fn bit_repeat(pattern: u128, len: u32) -> u128 {
+    if len >= 128 || len == 0 {
+        pattern
+    } else {
+        bit_repeat(pattern | (pattern << len), len * 2)
+    }
+}
+
+/// Converts a 3d vector of ints to a XYZ Z-order curve packed 128-bit integer by interleaving the bits.
+/// `X[0th bit]`` maps to the least significant bit of the output, followed by `Y[0]`` and then `Z[0]``.
 /// Provides spatial locality for sorted coordinates.
 /// See [Z-order curves](https://en.wikipedia.org/wiki/Z-order_curve).
 #[inline]
 pub fn zpack_3d(vec: IVec3) -> u128 {
-    let uvec = vec.as_uvec3();
-    zorder::index_of([uvec.y, uvec.z, uvec.x])
+    // Manual optimization, because using the zcurve crate is too slow in debug mode.
+    const BIT96: u128 = (1u128 << 97) - 1;
+    let vec = vec.as_uvec3();
+    let mut x = vec.x as u128;
+    let mut y = vec.y as u128;
+    let mut z = vec.z as u128;
+    // 0x0000_0000_0000_0000_ABCD_EFGH to
+    // 0x0000_0000_ABCD_EFGH_ABCD_EFGH to
+    // 0x0000_0000_ABCD_0000_0000_EFGH
+    x = (x | x.wrapping_shl(32)) & 0x0000_0000_FFFF_0000_0000_FFFF;
+    y = (y | y.wrapping_shl(32)) & 0x0000_0000_FFFF_0000_0000_FFFF;
+    z = (z | z.wrapping_shl(32)) & 0x0000_0000_FFFF_0000_0000_FFFF;
+    // 0x0000_0000_ABCD_0000_0000_EFGH to
+    // 0x0000_ABCD_ABCD_0000_EFGH_EFGH to
+    // 0x0000_AB00_00CD_0000_EF00_00GH to
+    x = (x | x.wrapping_shl(16)) & const { BIT96 & bit_repeat(0x00_00_FF, 24) };
+    y = (y | y.wrapping_shl(16)) & const { BIT96 & bit_repeat(0x00_00_FF, 24) };
+    z = (z | z.wrapping_shl(16)) & const { BIT96 & bit_repeat(0x00_00_FF, 24) };
+    // 0x00A0_0B00_C00D_00E0_0F00_G00H ...
+    x = (x | x.wrapping_shl(8)) & const { BIT96 & bit_repeat(0x00F, 12) };
+    y = (y | y.wrapping_shl(8)) & const { BIT96 & bit_repeat(0x00F, 12) };
+    z = (z | z.wrapping_shl(8)) & const { BIT96 & bit_repeat(0x00F, 12) };
+    x = (x | x.wrapping_shl(4)) & const { BIT96 & bit_repeat(0b00_00_11, 6) };
+    y = (y | y.wrapping_shl(4)) & const { BIT96 & bit_repeat(0b00_00_11, 6) };
+    z = (z | z.wrapping_shl(4)) & const { BIT96 & bit_repeat(0b00_00_11, 6) };
+    x = (x | x.wrapping_shl(2)) & const { BIT96 & bit_repeat(0b001, 3) };
+    y = (y | y.wrapping_shl(2)) & const { BIT96 & bit_repeat(0b001, 3) };
+    z = (z | z.wrapping_shl(2)) & const { BIT96 & bit_repeat(0b001, 3) };
+
+    z.wrapping_shl(2) | y.wrapping_shl(1) | x
 }
 
-/// Restores a 3d vector of ints from a YZX Z-order curve packed 128-bit integer by interleaving the bits.
+#[test]
+fn test_bit_repeat() {
+    fn check(line: u32, a: u128, b: u128) {
+        assert_eq!(a, b, "[line {line}] \n{a:032x} != \n{b:032x}");
+    }
+    check(line!(), bit_repeat(0x0, 1), 0);
+    check(line!(), bit_repeat(0x1, 1), u128::MAX);
+    check(line!(), bit_repeat(0x0, 32), 0);
+    check(line!(), bit_repeat(0x01, 32), 0x00000001_00000001_00000001_00000001);
+    check(line!(), bit_repeat(0x10, 32), 0x00000010_00000010_00000010_00000010);
+    check(line!(), bit_repeat(0x1000, 32), 0x00001000_00001000_00001000_00001000);
+    check(
+        line!(),
+        bit_repeat(0x10000000, 32),
+        0x10000000_10000000_10000000_10000000,
+    );
+}
+
+#[test]
+fn test_zpack_3d() {
+    use itertools::iproduct;
+    let list = [
+        0,
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256,
+        512,
+        1024,
+        65536,
+        1 << 30,
+        1 << 31,
+        -1,
+        -2,
+        -4,
+        -8,
+        -16,
+        -32,
+        -64,
+        -128,
+        7,
+        321,
+        -127,
+        i32::MIN,
+        i32::MAX,
+    ];
+    for (x, y, z) in iproduct!(list, list, list) {
+        let v = IVec3::new(x, y, z);
+        let naive = zpack_3d_naive(v);
+        let fast = zpack_3d(v);
+        assert_eq!(
+            naive, fast,
+            "zpack of {v} is not valid.\n    x: {x:032b}\n    y: {y:032b}\n    z: {z:032b}\nnaive: {naive:0128b} ({nones} ones)\n fast: {fast:0128b} ({fones} ones)\n",
+            x = v.x as u32,
+            y = v.y as u32,
+            z = v.z as u32,
+            nones = naive.count_ones(),
+            fones = fast.count_ones(),
+        );
+    }
+}
+
+#[test]
+fn zpack_back_and_forth() {
+    let v = IVec3::new(1, 2, 3);
+    let packed = zpack_3d(v);
+    let unpacked = zunpack_3d(packed);
+    assert_eq!(unpacked, v);
+}
+
+/// Restores a 3d vector of ints from a XYZ Z-order curve packed 128-bit integer by interleaving the bits.
 /// See [`zpack_3d`].
 #[inline]
 pub fn zunpack_3d(idx: u128) -> IVec3 {
-    let [y, z, x] = zorder::coord_of(idx);
+    let [x, y, z] = zorder::coord_of(idx);
     UVec3::new(x, y, z).as_ivec3()
 }
 
@@ -204,6 +343,13 @@ macro_rules! impl_rel_abs_pair {
             #[inline]
             fn sub(self, rhs: $Rel) -> Self::Output {
                 $Abs(self.0 - rhs.0)
+            }
+        }
+        impl std::ops::Sub<$Abs> for $Abs {
+            type Output = $Rel;
+            #[inline]
+            fn sub(self, rhs: $Abs) -> Self::Output {
+                $Rel(self.0 - rhs.0)
             }
         }
     };
@@ -432,14 +578,21 @@ impl AbsChunkPos {
     /// Converts the chunk position to a Z-curve index. See [`zpack_3d`].
     #[inline]
     pub fn as_zpack(self) -> u128 {
-        zpack_3d(self.0)
+        zpack_3d(self.0.xzy())
     }
 
     /// Converts the chunk position from a Z-curve index. See [`zunpack_3d`].
     #[inline]
     pub fn from_zpack(idx: u128) -> Self {
-        Self(zunpack_3d(idx))
+        Self(zunpack_3d(idx).xzy())
     }
+}
+
+#[test]
+fn zpack_chunk_back_and_forth() {
+    let pos = AbsChunkPos::new(1, 2, 3);
+    let packed = pos.as_zpack();
+    assert_eq!(pos, AbsChunkPos::from_zpack(packed));
 }
 
 impl Display for AbsChunkPos {
@@ -515,14 +668,21 @@ impl AbsBlockPos {
     /// Converts the block position to a Z-curve index. See [`zpack_3d`].
     #[inline]
     pub fn as_zpack(self) -> u128 {
-        zpack_3d(self.0)
+        zpack_3d(self.0.xzy())
     }
 
     /// Converts the block position from a Z-curve index. See [`zunpack_3d`].
     #[inline]
     pub fn from_zpack(idx: u128) -> Self {
-        Self(zunpack_3d(idx))
+        Self(zunpack_3d(idx).xzy())
     }
+}
+
+#[test]
+fn zpack_block_back_and_forth() {
+    let pos = AbsChunkPos::new(1, 2, 3);
+    let packed = pos.as_zpack();
+    assert_eq!(pos, AbsChunkPos::from_zpack(packed));
 }
 
 impl Display for AbsBlockPos {

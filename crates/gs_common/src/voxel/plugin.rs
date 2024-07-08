@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use capnp::message::TypedBuilder;
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, AbsChunkRange, RelChunkPos};
 use gs_schemas::dependencies::itertools::Itertools;
-use gs_schemas::mutwatcher::RevisionNumber;
+use gs_schemas::mutwatcher::{MutWatcher, RevisionNumber};
 use gs_schemas::schemas::network_capnp::stream_header::StandardTypes;
 use gs_schemas::schemas::NetworkStreamHeader;
 use gs_schemas::voxel::biome::BiomeRegistry;
@@ -351,13 +351,22 @@ fn server_system_process_chunk_sending(
             continue;
         }
         // serialize chunk once and send to all players
-        send_chunk_to_players(engine, position, loaded_chunk, &send_list);
+        // TODO: tick counter system
+        send_chunk_to_players(0, engine, position, loaded_chunk, &send_list);
     }
 }
 
-fn send_chunk_to_players(engine: &GameServer, pos: AbsChunkPos, chunk: &Chunk<ServerData>, peers: &[PeerAddress]) {
+fn send_chunk_to_players(
+    tick: u64,
+    engine: &GameServer,
+    pos: AbsChunkPos,
+    chunk: &MutWatcher<Chunk<ServerData>>,
+    peers: &[PeerAddress],
+) {
     let mut builder = TypedBuilder::<rpc::chunk_data_stream_packet::Owned>::new_default();
     let mut root = builder.init_root();
+    root.set_tick(tick);
+    root.set_revision(chunk.local_revision().into());
     let mut position = root.reborrow().init_position();
     position.set_x(pos.x);
     position.set_y(pos.y);

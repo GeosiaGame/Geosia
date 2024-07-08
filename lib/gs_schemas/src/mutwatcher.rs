@@ -1,7 +1,7 @@
 //! A simple mutation watcher, that allows detecting revision changes of the object held inside.
 //! Designed for a multiplayer context, allowing local predicted changes.
 
-use std::{num::NonZeroU64, ops::Deref};
+use std::{cmp::Ordering, num::NonZeroU64, ops::Deref};
 
 use crate::GameSide;
 
@@ -51,6 +51,20 @@ impl<T> MutWatcher<T> {
         }
     }
 
+    /// Constructs a [`MutWatcher`] with the same revision state as this one, but a different inner object.
+    pub fn new_with_same_revision<U>(&self, inner: U) -> MutWatcher<U> {
+        MutWatcher::<U> {
+            current_revision: self.current_revision,
+            predicted_revision: self.predicted_revision,
+            inner,
+        }
+    }
+
+    /// Extracts the inner stored value.
+    pub fn into_inner(self) -> T {
+        self.inner
+    }
+
     /// Accesses the inner value without mutating.
     #[inline]
     pub fn read(&self) -> &T {
@@ -73,6 +87,40 @@ impl<T> MutWatcher<T> {
     #[inline]
     pub fn local_revision(&self) -> RevisionNumber {
         self.predicted_revision.unwrap_or(self.current_revision)
+    }
+
+    /// Checks if the current state of this cell is a prediction.
+    #[inline]
+    pub fn is_prediction(&self) -> bool {
+        self.predicted_revision.is_some()
+    }
+
+    /// Compares the revisions of two different cells.
+    /// For the same local revision number, a non-predicted revision is newer than a predicted revision.
+    /// Returns self <=> other.
+    #[inline]
+    pub fn compare_revisions<U>(&self, other: &MutWatcher<U>) -> Ordering {
+        match self.local_revision().cmp(&other.local_revision()) {
+            Ordering::Greater => Ordering::Greater,
+            Ordering::Equal => match (self.is_prediction(), other.is_prediction()) {
+                (false, false) | (true, true) => Ordering::Equal,
+                (false, true) => Ordering::Greater,
+                (true, false) => Ordering::Less,
+            },
+            Ordering::Less => Ordering::Less,
+        }
+    }
+
+    /// Checks if the revision of this cell is newer than the other cell's revision.
+    #[inline]
+    pub fn is_newer_than<U>(&self, other: &MutWatcher<U>) -> bool {
+        self.compare_revisions(other) == Ordering::Greater
+    }
+
+    /// Checks if the revision of this cell is newer than the other cell's revision.
+    #[inline]
+    pub fn is_older_than<U>(&self, other: &MutWatcher<U>) -> bool {
+        self.compare_revisions(other) == Ordering::Less
     }
 
     /// Grants mutable access to the inner value and increases the current revision.
