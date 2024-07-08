@@ -13,7 +13,6 @@ pub mod network;
 pub mod prelude;
 pub mod promises;
 pub mod voxel;
-mod world_debug_image_renderer;
 
 use std::thread::JoinHandle;
 use std::time::Duration;

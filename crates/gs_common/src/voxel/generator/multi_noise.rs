@@ -91,7 +91,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
             position = DVec2::new(BIOME_SIZE * position.x + noise, BIOME_SIZE * position.y + noise);
             let point = delaunay
                 .insert(DVec2Wrapper(position))
-                .expect(format!("failed to insert point {position:?} into delaunay triangulation").as_str());
+                .unwrap_or_else(|_| panic!("failed to insert point {position:?} into delaunay triangulation"));
             if x == 0 && z == 0 {
                 vertex_point = Some(point);
             } else {
@@ -236,29 +236,6 @@ impl MultiNoiseGenerator {
         }
     }
 
-    /// Generate the biome map for the world.
-    pub fn generate_world_biomes(&mut self) {
-        /*
-        let total = Instant::now();
-        info!("starting biome generation");
-
-        let start = Instant::now();
-        // TODO adapt into new system
-        self.calculate_downslopes();
-        self.calculate_watersheds(biome_registry);
-        self.create_rivers(biome_registry); // stack overflow???
-        let duration = start.elapsed();
-        info!("moisture calculations took {:?}", duration);
-
-        let start = Instant::now();
-        let duration = start.elapsed();
-        info!("biome map lookup took {:?}", duration);
-
-        let duration = total.elapsed();
-        info!("biome generation took {:?} total", duration);
-        */
-    }
-
     fn elevation_noise(
         in_chunk_pos: IVec2,
         chunk_pos: IVec2,
@@ -319,8 +296,8 @@ impl MultiNoiseGenerator {
         &self,
         edge: &Edge,
         index: usize,
-        centers: &mut Vec<Center>,
-        corners: &mut Vec<Corner>,
+        centers: &mut [Center],
+        corners: &mut [Corner],
     ) {
         // Centers point to edges. Corners point to edges.
         if let Some(d0) = edge.d0 {
@@ -407,7 +384,7 @@ impl MultiNoiseGenerator {
             index
         };
 
-        let map_edges = Self::make_edges(&delaunay, handle);
+        let map_edges = Self::make_edges(delaunay, handle);
         for (delaunay_edge, voronoi_edge) in map_edges {
             let mut edge = Edge::new();
             edge.midpoint = voronoi_edge.0.lerp(voronoi_edge.1, 0.5);
@@ -439,7 +416,7 @@ impl MultiNoiseGenerator {
             edges.push(edge);
         }
 
-        return center;
+        center
     }
 
     /// returns: \[(delaunay edges, voronoi edges)\]
@@ -489,7 +466,7 @@ impl MultiNoiseGenerator {
         }
     }
 
-    fn assign_biome(&self, center: usize, centers: &mut Vec<Center>, rand: &mut Xoshiro128StarStar) {
+    fn assign_biome(&self, center: usize, centers: &mut [Center], rand: &mut Xoshiro128StarStar) {
         // go over all centers and assign biomes to them based on noise & other parameters.
         let center = &mut centers[center];
         if center.biome.is_some() {
@@ -550,7 +527,7 @@ impl MultiNoiseGenerator {
         &self,
         point: DVec2,
         default: RegistryId,
-        centers: &Vec<Center>,
+        centers: &[Center],
     ) -> (SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>, (f64, f64, f64)) {
         let distance_ordering = |a: &Center, b: &Center| -> Ordering {
             let dist_a = point.distance(a.point);
@@ -565,7 +542,7 @@ impl MultiNoiseGenerator {
         };
         let fade = |t: f64| -> f64 { t * t * (3.0 - 2.0 * t) };
 
-        let mut sorted = centers.clone();
+        let mut sorted = centers.to_vec();
         sorted.sort_by(distance_ordering);
 
         let closest = &sorted[0];
@@ -616,33 +593,6 @@ impl MultiNoiseGenerator {
         }
 
         (to_blend, (point_elevation, point_temperature, point_moisture))
-    }
-
-    /// Get the biomes at the given point from the biome map.
-    pub fn get_biomes_at_point(&self, point: &[i32; 2]) -> Option<SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>> {
-        //self.biome_map.lock().unwrap().biome_map.get(point).cloned()
-        None
-    }
-
-    /// Get the noise values at the given point from the biome map.
-    pub fn get_noises_at_point(&self, point: &[i32; 2]) -> Option<(f64, f64, f64)> {
-        //self.biome_map.lock().unwrap().noise_map.get(point).cloned()
-        None
-    }
-
-    /// Get all voronoi edges this map contains.
-    pub fn edges(&self) -> Vec<Edge> {
-        vec![] //self.edges.try_lock().unwrap().to_vec()
-    }
-
-    /// Get all voronoi centers this map contains.
-    pub fn centers(&self) -> Vec<Center> {
-        vec![] //self.centers.try_lock().unwrap().to_vec()
-    }
-
-    /// Get all voronoi corners this map contains.
-    pub fn corners(&self) -> Vec<Corner> {
-        vec![] //self.corners.try_lock().unwrap().to_vec()
     }
 }
 
@@ -818,13 +768,13 @@ impl From<Point2<f64>> for DVec2Wrapper {
         DVec2Wrapper::new(value.x, value.y)
     }
 }
-impl Into<Point2<f64>> for DVec2Wrapper {
-    fn into(self) -> Point2<f64> {
-        Point2::new(self.x, self.y)
+impl From<DVec2Wrapper> for Point2<f64> {
+    fn from(value: DVec2Wrapper) -> Self {
+        Point2::new(value.x, value.y)
     }
 }
-impl Into<DVec2> for DVec2Wrapper {
-    fn into(self) -> DVec2 {
-        *self
+impl From<DVec2Wrapper> for DVec2 {
+    fn from(value: DVec2Wrapper) -> Self {
+        value.0
     }
 }
