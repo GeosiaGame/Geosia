@@ -1,3 +1,4 @@
+use bevy_math::FloatExt;
 use gs_schemas::{
     coordinates::{AbsBlockPos, AbsChunkPos, InChunkPos, CHUNK_DIM},
     dependencies::itertools::{iproduct, Itertools},
@@ -16,10 +17,6 @@ use crate::{
     },
     ServerData,
 };
-
-fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {
-    to_range.0 + (s - from_range.0) * (to_range.1 - to_range.0) / (from_range.1 - from_range.0)
-}
 
 /// Make a bevy image out of the voronoi diagram.
 #[allow(dead_code)]
@@ -90,9 +87,9 @@ pub fn draw_debug_maps(
 
         let noises = generator.get_noises_at_point(&point);
         if let Some(noises) = noises {
-            let elevation = map_range((0.0, 5.0), (0.0, 255.0), noises.0) as u8;
-            let temperature = map_range((0.0, 5.0), (0.0, 255.0), noises.1) as u8;
-            let moisture = map_range((0.0, 5.0), (0.0, 255.0), noises.2) as u8;
+            let elevation = noises.0.remap(0.0, 5.0, 0.0, 255.0) as u8;
+            let temperature = noises.1.remap(0.0, 5.0, 0.0, 255.0) as u8;
+            let moisture = noises.2.remap(0.0, 5.0, 0.0, 255.0) as u8;
             noise_img.put_pixel(x, z, Rgba([elevation, temperature, moisture, 255]));
 
             elevation_img.put_pixel(x, z, Rgba([elevation, elevation, elevation, 255]));

@@ -1,15 +1,12 @@
 //! Standard multi noise world generator
 
-use std::iter::once;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::sync::Arc;
 use std::{cell::RefCell, cmp::Ordering, mem::MaybeUninit, ops::Deref, rc::Rc};
 
-use bevy_math::{DVec2, IVec2, IVec3, Vec3Swizzles};
-use gs_schemas::coordinates::CHUNK_DIM3V;
-use gs_schemas::voxel::voxeltypes::EMPTY_BLOCK_NAME;
+use bevy_math::{DVec2, FloatExt, IVec2, IVec3, Vec3Swizzles};
 use gs_schemas::{
-    coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIMZ},
+    coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIM3V, CHUNK_DIMF, CHUNK_DIMZ},
     dependencies::{
         itertools::{iproduct, Itertools},
         smallvec::SmallVec,
@@ -23,39 +20,28 @@ use gs_schemas::{
         chunk::Chunk,
         chunk_storage::ChunkStorage,
         generation::{fbm_noise::Fbm, positional_random::PositionalRandomFactory, Context, NoiseNDTo2D},
-        voxeltypes::{BlockEntry, BlockRegistry},
+        voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME},
     },
     GsExtraData,
 };
 use hashbrown::HashMap;
 use noise::OpenSimplex;
-use rand::{distributions::Uniform, Rng, SeedableRng};
+use rand::{Rng, SeedableRng};
 use rand_xoshiro::Xoshiro128StarStar;
 use serde::{Deserialize, Serialize};
 use spade::handles::FixedVertexHandle;
 use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
-use tracing::{info, warn};
+use tracing::warn;
 
 use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME};
 use crate::voxel::generator::VoxelGenerator;
 
-/// World size of the +X & +Z axis, in chunks.
-pub const WORLD_SIZE_XZ: i32 = 16;
-/// World size of the +Y axis, in chunks.
-pub const WORLD_SIZE_Y: i32 = 1;
-/// Biome size in blocks.
-pub const BIOME_SIZE: i32 = 64;
-/// Biome size in blocks, as a float.
-pub const BIOME_SIZEF: f64 = BIOME_SIZE as f64;
-/// Square biome size as a float.
-pub const BIOME_SIZEF2: f64 = BIOME_SIZEF * BIOME_SIZEF;
+/// Biome size in chunks
+///
+/// Warning: decimal values break blending.
+pub const BIOME_SIZE: f64 = 1.0;
 
-const POINT_OFFSET: f64 = 64.0;
-const POINT_OFFSET_VEC: DVec2Wrapper = DVec2Wrapper(DVec2::splat(POINT_OFFSET));
-
-const LAKE_TRESHOLD: f64 = 0.3;
-
-const BIOME_BLEND_RADIUS: f64 = 4.0;
+const BIOME_BLEND_RADIUS: f64 = 32.0;
 
 /// Standard world generator implementation
 pub struct MultiNoiseGenerator {
@@ -99,8 +85,10 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
         let mut points = Vec::new();
         for (x, z) in iproduct!(-2..=2, -2..=2) {
             let mut position: DVec2 = (point.xz() + IVec2::new(x * CHUNK_DIM, z * CHUNK_DIM)).into();
-            let noise = 0.75 * <OpenSimplex as NoiseNDTo2D<4>>::get_2d(&self.point_offset_noise, position.to_array());
-            position = DVec2::new(position.x + noise, position.y + noise);
+            let noise = CHUNK_DIMF
+                * 0.75
+                * <OpenSimplex as NoiseNDTo2D<4>>::get_2d(&self.point_offset_noise, (position * BIOME_SIZE).to_array());
+            position = DVec2::new(BIOME_SIZE * position.x + noise, BIOME_SIZE * position.y + noise);
             let point = delaunay
                 .insert(DVec2Wrapper(position))
                 .expect(format!("failed to insert point {position:?} into delaunay triangulation").as_str());
@@ -111,7 +99,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
             }
         }
         for point in points {
-            self.make_edge_center_corner(
+            let center = self.make_edge_center_corner(
                 point,
                 &delaunay,
                 &mut centers,
@@ -120,6 +108,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
                 &mut corner_map,
                 &mut edges,
             );
+            self.assign_biome(center, &mut centers, &mut rand);
         }
 
         let center = self.make_edge_center_corner(
@@ -303,8 +292,8 @@ impl MultiNoiseGenerator {
         }
     }
     fn make_corner(&self, point: DVec2, corners: &mut Vec<Corner>, corner_map: &mut HashMap<[i32; 2], usize>) -> usize {
-        let mut x = point.x.round() as i32;
-        let mut y = point.y.round() as i32;
+        let x = point.x.round() as i32;
+        let y = point.y.round() as i32;
         for (x, y) in iproduct!(
             x.wrapping_sub(2)..=x.wrapping_add(2),
             y.wrapping_sub(2)..=y.wrapping_add(2)
@@ -483,21 +472,15 @@ impl MultiNoiseGenerator {
     fn make_noise(noises: &Noises, point: DVec2) -> NoiseValues {
         let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
         let point = [point.x / scale_factor, point.y / scale_factor];
-        let elevation = Self::map_range(
-            (-1.5, 1.5),
-            (0.0, 5.0),
-            <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(&noises.elevation_noise, point),
-        );
-        let temperature = Self::map_range(
-            (-1.5, 1.5),
-            (0.0, 5.0),
-            <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(&noises.temperature_noise, point),
-        );
-        let moisture: f64 = Self::map_range(
-            (-1.5, 1.5),
-            (0.0, 5.0),
-            <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(&noises.moisture_noise, point),
-        );
+        let elevation = <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(&noises.elevation_noise, point)
+            .remap(-1.5, 1.5, 0.0, 5.0)
+            .clamp(0.0, 5.0);
+        let temperature = <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(&noises.temperature_noise, point)
+            .remap(-1.5, 1.5, 0.0, 5.0)
+            .clamp(0.0, 5.0);
+        let moisture: f64 = <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(&noises.moisture_noise, point)
+            .remap(-1.5, 1.5, 0.0, 5.0)
+            .clamp(0.0, 5.0);
 
         NoiseValues {
             elevation,
@@ -645,10 +628,6 @@ impl MultiNoiseGenerator {
     pub fn get_noises_at_point(&self, point: &[i32; 2]) -> Option<(f64, f64, f64)> {
         //self.biome_map.lock().unwrap().noise_map.get(point).cloned()
         None
-    }
-
-    fn map_range(from_range: (f64, f64), to_range: (f64, f64), s: f64) -> f64 {
-        to_range.0 + (s - from_range.0) * (to_range.1 - to_range.0) / (from_range.1 - from_range.0)
     }
 
     /// Get all voronoi edges this map contains.

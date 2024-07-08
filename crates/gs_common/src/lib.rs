@@ -36,7 +36,7 @@ use crate::config::{GameConfig, GameConfigHandle};
 use crate::network::server::{LocalConnectionPipe, NetworkServerPlugin, NetworkThreadServerState};
 use crate::network::thread::NetworkThread;
 use crate::prelude::*;
-use crate::voxel::generator::multi_noise::{MultiNoiseGenerator, WORLD_SIZE_XZ};
+use crate::voxel::generator::multi_noise::MultiNoiseGenerator;
 use crate::voxel::persistence::memory::MemoryPersistenceLayer;
 use crate::voxel::plugin::VoxelUniversePlugin;
 
