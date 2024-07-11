@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 
 use bevy_math::DVec2;
-use noise::NoiseFn;
+use noise::OpenSimplex;
 use rgb::RGBA8;
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +12,7 @@ use super::{
     generation::Context,
     voxeltypes::{BlockEntry, BlockRegistry},
 };
+use crate::voxel::generation::fbm_noise::Fbm;
 use crate::{
     range::Range,
     registry::{Registry, RegistryId, RegistryName, RegistryObject},
@@ -63,7 +64,7 @@ pub struct BiomeDefinition {
     /// The block placement rule source for this biome.
     pub rule_source: fn(pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>,
     /// The noise function for this biome.
-    pub surface_noise: fn(pos: DVec2, noise: &mut Box<dyn NoiseFn<f64, 4>>) -> f64,
+    pub surface_noise: fn(pos: DVec2, noise: &Fbm<OpenSimplex>) -> f64,
     /// The strength of this biome in the blending step.
     pub blend_influence: f64,
     /// The strength of this biome in the block placement step.
@@ -101,15 +102,16 @@ impl RegistryObject for BiomeDefinition {
 }
 
 /// Different noise layers for biome generation.
+#[derive(Clone)]
 pub struct Noises {
     /// Base noise from which all other noises are derived from
-    pub base_terrain_noise: Box<dyn NoiseFn<f64, 4>>,
+    pub base_terrain_noise: Fbm<OpenSimplex>,
     /// Height noise (0~5)
-    pub elevation_noise: Box<dyn NoiseFn<f64, 4>>,
+    pub elevation_noise: Fbm<OpenSimplex>,
     /// Temperature noise (0~5)
-    pub temperature_noise: Box<dyn NoiseFn<f64, 4>>,
+    pub temperature_noise: Fbm<OpenSimplex>,
     /// Moisture noise (0~5)
-    pub moisture_noise: Box<dyn NoiseFn<f64, 4>>,
+    pub moisture_noise: Fbm<OpenSimplex>,
 }
 
 /// Name of the default void biome.

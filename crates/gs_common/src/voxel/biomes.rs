@@ -1,16 +1,18 @@
 //! The builtin biome types.
 //! Most of this will be moved to a "base" mod at some point in the future.
 
+use gs_schemas::voxel::generation::fbm_noise::Fbm;
 use gs_schemas::{
     dependencies::rgb::RGBA8,
     range::range,
     registry::RegistryName,
     voxel::{
         biome::{BiomeDefinition, BiomeRegistry, VOID_BIOME_NAME},
-        generation::{Context, Noise4DTo2D},
+        generation::{Context, NoiseNDTo2D},
         voxeltypes::{BlockEntry, BlockRegistry},
     },
 };
+use noise::OpenSimplex;
 
 use super::blocks::{
     DIRT_BLOCK_NAME, GRASS_BLOCK_NAME, SAND_BLOCK_NAME, SNOWY_GRASS_BLOCK_NAME, STONE_BLOCK_NAME, WATER_BLOCK_NAME,
@@ -77,8 +79,8 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             surface_noise: |point, noise| {
                 let new_point = point * 1.5;
 
-                let mut value = noise.get_2d(new_point.to_array()) * 0.75;
-                value += noise.get_2d((new_point * 2.0).to_array()) * 0.25;
+                let mut value = <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(noise, new_point.to_array()) * 0.75;
+                value += <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(noise, (new_point * 2.0).to_array()) * 0.25;
                 value *= 5.0;
                 value += 10.0;
                 value
@@ -105,11 +107,11 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                     .unwrap();
 
                 if context.ground_y == pos.y {
-                    if pos.y >= 80 {
-                        return Some(BlockEntry::new(i_snow_grass, 0));
+                    return if pos.y >= 80 {
+                        Some(BlockEntry::new(i_snow_grass, 0))
                     } else {
-                        return Some(BlockEntry::new(i_grass, 0));
-                    }
+                        Some(BlockEntry::new(i_grass, 0))
+                    };
                 } else if pos.y <= context.ground_y && pos.y > context.ground_y - 5 {
                     return Some(BlockEntry::new(i_dirt, 0));
                 } else if context.ground_y > pos.y {
@@ -121,9 +123,9 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 let new_point = point / 3.0;
                 let new_point_arr = new_point.to_array();
 
-                let mut value = noise.get_2d(new_point_arr) * 0.6;
-                value += noise.get_2d((new_point * 1.5).to_array()) * 0.25;
-                value += noise.get_2d((new_point * 3.0).to_array()) * 0.15;
+                let mut value = <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(noise, new_point_arr) * 0.6;
+                value += <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(noise, (new_point * 1.5).to_array()) * 0.25;
+                value += <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(noise, (new_point * 3.0).to_array()) * 0.15;
                 value *= 8.0;
                 value += 15.0;
                 value
@@ -150,11 +152,11 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                     .unwrap();
 
                 if context.ground_y == pos.y {
-                    if pos.y >= 80 {
-                        return Some(BlockEntry::new(i_snow_grass, 0));
+                    return if pos.y >= 80 {
+                        Some(BlockEntry::new(i_snow_grass, 0))
                     } else {
-                        return Some(BlockEntry::new(i_grass, 0));
-                    }
+                        Some(BlockEntry::new(i_grass, 0))
+                    };
                 } else if context.ground_y >= pos.y && pos.y > context.ground_y - 5 {
                     return Some(BlockEntry::new(i_dirt, 0));
                 } else if context.ground_y > pos.y {
@@ -165,7 +167,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             surface_noise: |point, noise| {
                 let new_point = point / 4.0;
                 let new_point_arr = new_point.to_array();
-                let h_n = |p| (noise.get_2d(p) + 1.0) / 2.0;
+                let h_n = |p| (<Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(noise, p) + 1.0) / 2.0;
                 let h_rn = |p| (0.5 - (0.5 - h_n(p)).abs()) * 2.0;
 
                 let h0 = 0.50 * h_rn(new_point_arr);
@@ -203,8 +205,10 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 }
                 None
             },
-            surface_noise: |point, noise| noise.get_2d(point.to_array()) * -7.5 + 1.0,
-            blend_influence: 10.0,
+            surface_noise: |point, noise| {
+                <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(noise, (point / 25.0).to_array()) * -7.5 + 1.0
+            },
+            blend_influence: 1.0,
             block_influence: 1.0,
             can_generate: true,
         })
@@ -228,7 +232,9 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 }
                 None
             },
-            surface_noise: |point, noise| noise.get_2d(point.to_array()) * 1.0 + 1.0,
+            surface_noise: |point, noise| {
+                <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(noise, point.to_array()) * 1.0 + 1.0
+            },
             blend_influence: 1.0,
             block_influence: 1.0,
             can_generate: false,
@@ -256,7 +262,9 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 }
                 None
             },
-            surface_noise: |point, noise| noise.get_2d(point.to_array()) * -1.5 + 1.0,
+            surface_noise: |point, noise| {
+                <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(noise, point.to_array()) * -1.5 + 1.0
+            },
             blend_influence: 1.0,
             block_influence: 1.0,
             can_generate: false,

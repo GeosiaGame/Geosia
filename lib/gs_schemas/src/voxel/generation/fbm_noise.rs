@@ -2,6 +2,7 @@
 
 use bevy_math::{DVec2, DVec3, DVec4};
 use noise::{NoiseFn, Seedable};
+use serde::{Deserialize, Serialize};
 
 /// Noise function that outputs fBm (fractal Brownian motion) noise.
 ///
@@ -19,7 +20,7 @@ use noise::{NoiseFn, Seedable};
 /// and ever-decreasing amplitude.
 ///
 /// fBm is commonly referred to as Perlin noise.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Fbm<T> {
     /// All frequency octaves to generate the noise with.
     ///

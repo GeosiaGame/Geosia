@@ -14,6 +14,8 @@ pub const BLOCK_DIM: f32 = 0.5;
 /// Length of a side of a chunk in blocks
 pub const CHUNK_DIM: i32 = 32;
 /// Length of a side of a chunk in blocks
+pub const CHUNK_DIMD: f64 = CHUNK_DIM as f64;
+/// Length of a side of a chunk in blocks
 pub const CHUNK_DIMZ: usize = CHUNK_DIM as usize;
 /// Number of blocks on the face of a chunk
 pub const CHUNK_DIM2: i32 = CHUNK_DIM * CHUNK_DIM;

@@ -13,7 +13,6 @@ pub mod network;
 pub mod prelude;
 pub mod promises;
 pub mod voxel;
-mod world_debug_image_renderer;
 
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -27,11 +26,8 @@ use bevy::time::TimePlugin;
 use bevy::utils::synccell::SyncCell;
 use gs_schemas::registries::GameRegistries;
 use gs_schemas::registry::Registry;
-use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use gs_schemas::{GameSide, GsExtraData};
 use smallvec::SmallVec;
-use voxel::blocks::{GRASS_BLOCK_NAME, STONE_BLOCK_NAME};
-use voxel::generator::flat::{FlatGenerator, FlatLayer};
 use voxel::persistence::generator::GeneratorPersistenceLayer;
 use voxel::plugin::VoxelUniverseBuilder;
 
@@ -39,6 +35,7 @@ use crate::config::{GameConfig, GameConfigHandle};
 use crate::network::server::{LocalConnectionPipe, NetworkServerPlugin, NetworkThreadServerState};
 use crate::network::thread::NetworkThread;
 use crate::prelude::*;
+use crate::voxel::generator::multi_noise::MultiNoiseGenerator;
 use crate::voxel::persistence::memory::MemoryPersistenceLayer;
 use crate::voxel::plugin::VoxelUniversePlugin;
 
@@ -263,55 +260,9 @@ impl GameServer {
         let block_registry = Arc::clone(&engine.server_data.shared_registries.block_types);
         let biome_registry = Arc::clone(&engine.server_data.shared_registries.biome_types);
 
-        let air = block_registry
-            .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
-            .unwrap()
-            .0;
-        let stone = block_registry
-            .lookup_name_to_object(STONE_BLOCK_NAME.as_ref())
-            .unwrap()
-            .0;
-        let grass = block_registry
-            .lookup_name_to_object(GRASS_BLOCK_NAME.as_ref())
-            .unwrap()
-            .0;
-        // let mut generator = StdGenerator::new(123456789, WORLD_SIZE_XZ * 2, WORLD_SIZE_XZ as u32 * 4);
-        // generator.generate_world_biomes(&biome_registry);
-        // let world_size_blocks = generator.size_blocks_xz() as usize;
-        let generator = FlatGenerator::new(
-            -1,
-            vec![
-                FlatLayer {
-                    block_type: BlockEntry::new(air, 0),
-                    thickness: 1,
-                },
-                FlatLayer {
-                    block_type: BlockEntry::new(stone, 0),
-                    thickness: 20,
-                },
-                FlatLayer {
-                    block_type: BlockEntry::new(grass, 0),
-                    thickness: 1,
-                },
-                FlatLayer {
-                    block_type: BlockEntry::new(air, 0),
-                    thickness: 1,
-                },
-            ],
-        )
-        .unwrap();
+        let generator = MultiNoiseGenerator::new(123456789, Arc::clone(&biome_registry), Arc::clone(&block_registry));
         let gen_world = GeneratorPersistenceLayer::new(Arc::new(generator), default());
         let persistence = MemoryPersistenceLayer::new(Box::new(gen_world));
-
-        // world_debug_image_renderer::draw_debug_maps(
-        //     &generator,
-        //     &biome_registry,
-        //     &block_registry,
-        //     &mut persistence,
-        //     world_size_blocks,
-        //     world_size_blocks,
-        //     WORLD_SIZE_Y * CHUNK_DIM,
-        // );
 
         fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {
             app.configure_sets(schedule, InGameSystemSet);
