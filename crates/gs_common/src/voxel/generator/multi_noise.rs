@@ -6,7 +6,7 @@ use std::{cell::RefCell, cmp::Ordering, mem::MaybeUninit, ops::Deref, rc::Rc};
 
 use bevy_math::{DVec2, FloatExt, IVec2, IVec3, Vec3Swizzles};
 use gs_schemas::{
-    coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIM3V, CHUNK_DIMF, CHUNK_DIMZ},
+    coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIM3V, CHUNK_DIMD, CHUNK_DIMZ},
     dependencies::{
         itertools::{iproduct, Itertools},
         smallvec::SmallVec,
@@ -85,7 +85,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
         let mut points = Vec::new();
         for (x, z) in iproduct!(-2..=2, -2..=2) {
             let mut position: DVec2 = (point.xz() + IVec2::new(x * CHUNK_DIM, z * CHUNK_DIM)).into();
-            let noise = CHUNK_DIMF
+            let noise = CHUNK_DIMD
                 * 0.75
                 * <OpenSimplex as NoiseNDTo2D<4>>::get_2d(&self.point_offset_noise, (position * BIOME_SIZE).to_array());
             position = DVec2::new(BIOME_SIZE * position.x + noise, BIOME_SIZE * position.y + noise);
@@ -292,13 +292,7 @@ impl MultiNoiseGenerator {
         corner_map.insert([x, y], index);
         index
     }
-    fn make_centers_corners_for_edge(
-        &self,
-        edge: &Edge,
-        index: usize,
-        centers: &mut [Center],
-        corners: &mut [Corner],
-    ) {
+    fn make_centers_corners_for_edge(&self, edge: &Edge, index: usize, centers: &mut [Center], corners: &mut [Corner]) {
         // Centers point to edges. Corners point to edges.
         if let Some(d0) = edge.d0 {
             let d0 = &mut centers[d0];
