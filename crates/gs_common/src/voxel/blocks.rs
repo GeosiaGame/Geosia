@@ -17,11 +17,11 @@ pub const SNOWY_GRASS_BLOCK_NAME: RegistryName = RegistryName::gs_const("snowy_g
 /// Registry name for water.
 pub const WATER_BLOCK_NAME: RegistryName = RegistryName::gs_const("water");
 /// Registry name for sand.
-pub const SAND_BLOCK_NAME: RegistryName = RegistryName::ocg_const("sand");
+pub const SAND_BLOCK_NAME: RegistryName = RegistryName::gs_const("sand");
 /// Registry name for log.
-pub const LOG_BLOCK_NAME: RegistryName = RegistryName::ocg_const("log");
+pub const LOG_BLOCK_NAME: RegistryName = RegistryName::gs_const("log");
 /// Registry name for leaves.
-pub const LEAVES_BLOCK_NAME: RegistryName = RegistryName::ocg_const("leaves");
+pub const LEAVES_BLOCK_NAME: RegistryName = RegistryName::gs_const("leaves");
 
 /// Installs the base set of blocks into the given block registry.
 pub fn setup_basic_blocks(registry: &mut BlockRegistry) {

@@ -96,6 +96,8 @@ struct GameBootstrapData @0xb0778941893c57e5 {
     blockRegistry @1 :RegistryIdMappingBundle;
     # Name->ID mappings for the biome registry.
     biomeRegistry @2 :RegistryIdMappingBundle;
+    # Name->ID mappings for the decorator registry.
+    decoratorRegistry @3 :RegistryIdMappingBundle;
 }
 
 struct FullChunkData {

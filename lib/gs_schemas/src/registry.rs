@@ -1,6 +1,7 @@
 //! A data structure for keeping track of a stable mapping between: namespaced strings, numerical IDs and objects.
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
+use std::marker::PhantomData;
 use std::num::{NonZeroU32, TryFromIntError};
 use std::str::Utf8Error;
 use std::sync::Arc;
@@ -444,46 +445,34 @@ impl<Object: RegistryObject> Registry<Object> {
 
 /// A registry data set, like tags in *Minecraft*.
 // TODO fix deserialization
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RegistryDataSet<'a, Object: RegistryObject> {
+#[derive(Clone, Debug)]
+pub struct RegistryDataSet<Object: RegistryObject> {
     key: RegistryName,
 
     names: HashSet<RegistryName>,
-    values: Option<Vec<(RegistryId, &'a Object)>>,
+    phantom_data: PhantomData<Object>
 }
 
-impl<'a, Object: RegistryObject> RegistryDataSet<'a, Object> {
+impl<Object: RegistryObject> RegistryDataSet<Object> {
     /// Utility to create a new RegistyDataSet.
-    pub fn new(key: RegistryName, registry: &Registry<Object>, names: HashSet<RegistryName>) -> Self {
-        let mut s = Self {
+    pub fn new(key: RegistryName, names: HashSet<RegistryName>) -> Self {
+        Self {
             key,
             names,
-            values: None,
-        };
-        s.load(registry);
-        s
-    }
-
-    /// load this registry data set from its registry.
-    pub fn load(&mut self, registry: &Registry<Object>) {
-        self.values = Some(
-            self.names
-                .iter()
-                .map(|name| {
-                    registry
-                        .lookup_name_to_object(name.as_ref())
-                        .unwrap_or_else(|| panic!("registry key {name} not found in registry."))
-                })
-                .collect_vec(),
-        );
+            phantom_data: PhantomData
+        }
     }
 
     /// Get the values of this RegistryDataSet, or an error if it isn't loaded yet.
-    pub fn values(&self) -> Result<&[(RegistryId, &'a Object)], RegistryError> {
-        match &self.values {
-            Some(v) => Ok(v),
-            None => Err(RegistryError::DataSetNotFilled { name: self.key.clone() }),
-        }
+    pub fn values<'a>(&'a self, registry: &'a Registry<Object>) -> Vec<(RegistryId, &'a Object)> {
+        self.names
+            .iter()
+            .map(|name| {
+                registry
+                    .lookup_name_to_object(name.as_ref())
+                    .unwrap_or_else(|| panic!("registry key {name} not found in registry."))
+            })
+            .collect_vec()
     }
 
     /// Does this RegistryDataSet contain the given key?
@@ -500,11 +489,8 @@ impl<'a, Object: RegistryObject> RegistryDataSet<'a, Object> {
 
     /// Does this RegistryDataSet contain the given value?
     /// NOTE: only returns true if the set is filled.
-    pub fn contains_value(&self, obj: &Object) -> bool {
-        if let Ok(values) = self.values() {
-            return values.iter().any(|(_, value)| value == obj);
-        }
-        false
+    pub fn contains_value(&self, obj: &Object, registry: &Registry<Object>) -> bool {
+        self.values(registry).iter().any(|(_, value)| *value == obj)
     }
 }
 

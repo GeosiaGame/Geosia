@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use crate::registry::RegistryDeserializationError;
 use crate::voxel::biome::BiomeRegistry;
+use crate::voxel::generation::decorator::DecoratorRegistry;
 use crate::voxel::voxeltypes::BlockRegistry;
 
 /// A struct holding all the relevant shared registries.
@@ -14,6 +15,8 @@ pub struct GameRegistries {
     pub block_types: Arc<BlockRegistry>,
     /// Biome type definitions.
     pub biome_types: Arc<BiomeRegistry>,
+    /// Decorator type definitions.
+    pub decorator_types: Arc<DecoratorRegistry>,
 }
 
 impl GameRegistries {
@@ -23,6 +26,8 @@ impl GameRegistries {
             .serialize_ids(&mut builder.reborrow().init_block_registry());
         self.biome_types
             .serialize_ids(&mut builder.reborrow().init_biome_registry());
+        self.decorator_types
+            .serialize_ids(&mut builder.reborrow().init_decorator_registry());
     }
 
     /// Creates a derivative registry based on serialized bootstrap data.
@@ -36,9 +41,13 @@ impl GameRegistries {
         let biome_types = self
             .biome_types
             .clone_with_serialized_ids(&bundle.get_biome_registry()?)?;
+        let decorator_types = self
+            .decorator_types
+            .clone_with_serialized_ids(&bundle.get_biome_registry()?)?;
         Ok(Self {
             block_types: Arc::new(block_types),
             biome_types: Arc::new(biome_types),
+            decorator_types: Arc::new(decorator_types),
         })
     }
 }

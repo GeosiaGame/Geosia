@@ -4,43 +4,30 @@
 //! Most of this will be moved to a "base" mod at some point in the future.
 
 use bevy_math::IVec3;
-use ocg_schemas::{
-    coordinates::{InChunkPos, CHUNK_DIM},
-    dependencies::itertools::iproduct,
-    registry::{RegistryDataSet, RegistryName},
-    voxel::{
-        biome::{
-            decorator::{BiomeDecoratorDefinition, BiomeDecoratorRegistry},
-            BiomeRegistry,
-        },
-        chunk_storage::ChunkStorage,
-        voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME},
-    },
-};
 use rand::{distributions::Uniform, Rng};
+
 use gs_schemas::coordinates::{CHUNK_DIM, InChunkPos};
 use gs_schemas::dependencies::itertools::iproduct;
 use gs_schemas::registry::{RegistryDataSet, RegistryName};
-use gs_schemas::voxel::biome::BiomeRegistry;
 use gs_schemas::voxel::chunk_storage::ChunkStorage;
 use gs_schemas::voxel::generation::decorator::{DecoratorDefinition, DecoratorRegistry};
 use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
+
 use crate::voxel::biomes::PLAINS_BIOME_NAME;
 use crate::voxel::blocks::{LEAVES_BLOCK_NAME, LOG_BLOCK_NAME};
 
 /// Registry name for tree.
-pub const TREE_DECORATOR_NAME: RegistryName = RegistryName::ocg_const("tree");
+pub const TREE_DECORATOR_NAME: RegistryName = RegistryName::gs_const("tree");
 /// Registry data set key for biomes where trees can appear.
-pub const TREE_BIOMES: RegistryName = RegistryName::ocg_const("tree_biomes");
+pub const TREE_BIOMES: RegistryName = RegistryName::gs_const("tree_biomes");
 
 /// Installs the base set of biome decorators into the given block registry.
-pub fn setup_basic_decorators(registry: &mut DecoratorRegistry, biome_registry: &BiomeRegistry) {
+pub fn setup_basic_decorators(registry: &mut DecoratorRegistry) {
     registry
         .push_object(DecoratorDefinition {
             name: TREE_DECORATOR_NAME,
             biomes: RegistryDataSet::new(
                 TREE_BIOMES,
-                biome_registry,
                 [PLAINS_BIOME_NAME].into_iter().collect(),
             ),
             salt: 124567,

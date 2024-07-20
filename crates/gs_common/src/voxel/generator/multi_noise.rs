@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 use spade::handles::FixedVertexHandle;
 use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 use tracing::warn;
-
+use gs_schemas::voxel::generation::decorator::DecoratorRegistry;
 use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME};
 use crate::voxel::generator::VoxelGenerator;
 
@@ -47,6 +47,7 @@ const BIOME_BLEND_RADIUS: f64 = 32.0;
 pub struct MultiNoiseGenerator {
     biome_registry: Arc<BiomeRegistry>,
     block_registry: Arc<BlockRegistry>,
+    decorator_registry: Arc<DecoratorRegistry>,
 
     seed: u64,
 
@@ -204,7 +205,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
 
 impl MultiNoiseGenerator {
     /// create a new StdGenerator.
-    pub fn new(seed: u64, biome_registry: Arc<BiomeRegistry>, block_registry: Arc<BlockRegistry>) -> Self {
+    pub fn new(seed: u64, biome_registry: Arc<BiomeRegistry>, block_registry: Arc<BlockRegistry>, decorator_registry: Arc<DecoratorRegistry>) -> Self {
         let seed_int = seed as u32;
 
         Self {
@@ -220,6 +221,7 @@ impl MultiNoiseGenerator {
 
             biome_registry,
             block_registry,
+            decorator_registry,
 
             seed,
 

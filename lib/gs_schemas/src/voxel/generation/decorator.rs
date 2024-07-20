@@ -2,7 +2,6 @@
 
 use std::hash::{Hash, Hasher};
 use bevy_math::IVec3;
-use serde::{Deserialize, Serialize};
 use crate::coordinates::AbsChunkPos;
 use crate::registry::{Registry, RegistryDataSet, RegistryName, RegistryObject};
 use crate::voxel::biome::BiomeDefinition;
@@ -30,7 +29,7 @@ pub type CountFunction = fn(&DecoratorDefinition, &Context<'_>, f64, f64, f64) -
 pub type DecoratorRegistry = Registry<DecoratorDefinition>;
 
 /// A definition of a decorator type, specifying properties such as registry name, shape, placement.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct DecoratorDefinition {
     /// The unique registry name
     pub name: RegistryName,
@@ -40,11 +39,9 @@ pub struct DecoratorDefinition {
     pub salt: i32,
     /// The function that dictates how many objects to place at a given noise map position.
     /// params are (self, elevation, temperature, moisture).
-    #[serde(skip)]
     pub count_fn: Option<CountFunction>,
     /// The placer for this definition.
     /// MAKE SURE YOU DO **NOT** GO OVER CHUNK BOUNDARIES.
-    #[serde(skip)]
     pub placer_fn: Option<PlacerFunction>,
 }
 
