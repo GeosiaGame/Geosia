@@ -17,8 +17,6 @@ pub struct Context<'a> {
     pub seed: u64,
     /// The chunk. Unmodifiable through here.
     pub chunk: &'a PaletteStorage<BlockEntry>,
-    /// A positional random factory.
-    pub random: PositionalRandomFactory<rand_xoshiro::Xoshiro512StarStar>,
     /// The ground Y level in this block position.
     pub ground_y: i32,
     /// The sea level for this planet.

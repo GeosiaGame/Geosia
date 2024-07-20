@@ -29,10 +29,13 @@ use noise::OpenSimplex;
 use rand::{Rng, SeedableRng};
 use rand_xoshiro::Xoshiro128StarStar;
 use serde::{Deserialize, Serialize};
+use smallvec::smallvec;
 use spade::handles::FixedVertexHandle;
 use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 use tracing::warn;
-use gs_schemas::voxel::generation::decorator::DecoratorRegistry;
+use gs_schemas::coordinates::AbsBlockPos;
+use gs_schemas::voxel::chunk_storage::PaletteStorage;
+use gs_schemas::voxel::generation::decorator::{DecoratorDefinition, DecoratorEntry, DecoratorRegistry};
 use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME};
 use crate::voxel::generator::VoxelGenerator;
 
@@ -42,6 +45,15 @@ use crate::voxel::generator::VoxelGenerator;
 pub const BIOME_SIZE: f64 = 1.0;
 
 const BIOME_BLEND_RADIUS: f64 = 32.0;
+
+/// The size of a decorator group.
+pub const GROUP_SIZE: i32 = 16;
+/// half of the size of a decorator group.
+pub const GROUP_SIZE_HALF: i32 = GROUP_SIZE / 2;
+/// The area of a decorator group.
+pub const GROUP_SIZE2: i32 = GROUP_SIZE * GROUP_SIZE;
+/// A helper for the maximum size of a decorator group.
+pub const GROUP_SIZEV: IVec2 = IVec2::splat(GROUP_SIZE);
 
 /// Standard world generator implementation
 pub struct MultiNoiseGenerator {
@@ -124,6 +136,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
         self.assign_biome(center, &mut centers, &mut rand);
 
         let mut blended = vec![SmallVec::new(); CHUNK_DIM2Z];
+        let mut noises = smallvec![(0.0, 0.0, 0.0); CHUNK_DIM2Z];
 
         let void_id = self
             .biome_registry
@@ -135,12 +148,13 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
             for (i, v) in vparams[..].iter_mut().enumerate() {
                 let ix = (i % CHUNK_DIMZ) as i32;
                 let iz = ((i / CHUNK_DIMZ) % CHUNK_DIMZ) as i32;
-                let (biomes, _) = self.find_biomes_at_point(
+                let (biomes, noise) = self.find_biomes_at_point(
                     DVec2::new((ix + point.x) as f64, (iz + point.z) as f64),
                     void_id,
                     &centers,
                 );
                 biomes.clone_into(&mut blended[(ix + iz * CHUNK_DIM) as usize]);
+                noise.clone_into(&mut noises[(ix + iz * CHUNK_DIM) as usize]);
 
                 let p = Self::elevation_noise(
                     IVec2::new(ix, iz),
@@ -189,7 +203,6 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
                 let ctx = Context {
                     seed: self.seed,
                     chunk: &chunk.blocks,
-                    random: PositionalRandomFactory::default(),
                     ground_y: height,
                     sea_level: 0, /* hardcoded for now... */
                 };
@@ -199,6 +212,38 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
                 }
             }
         }
+
+        let chunk_dim_2 = CHUNK_DIM * 2;
+        for (dx, dz) in iproduct!(-chunk_dim_2..=chunk_dim_2, -chunk_dim_2..=chunk_dim_2) {
+            let index = (dx + dz * CHUNK_DIM) as usize;
+            let height = vparams[index];
+            let (elevation, temperature, moisture) = noises[index];
+            let context = Context {
+                seed: self.seed,
+                chunk: &chunk.blocks,
+                ground_y: height,
+                sea_level: 0,
+            };
+            Self::place_decorators(
+                &mut chunk.blocks,
+                &context,
+                &mut rand,
+                position,
+                InChunkPos::try_new(
+                    dx * GROUP_SIZE,
+                    (height - position.y * CHUNK_DIM).min(CHUNK_DIM - 1).max(0),
+                    dz * GROUP_SIZE,
+                ).unwrap(),
+                &self.decorator_registry,
+                &self.block_registry,
+
+                height,
+                elevation,
+                temperature,
+                moisture,
+            );
+        }
+
         chunk
     }
 }
@@ -235,6 +280,126 @@ impl MultiNoiseGenerator {
                     .set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
             },
             point_offset_noise: OpenSimplex::new(seed_int.wrapping_mul(5463)),
+        }
+    }
+
+    fn place_decorators<'a>(
+        chunk: &mut PaletteStorage<BlockEntry>,
+        context: &Context<'a>,
+        random: &mut Xoshiro128StarStar,
+
+        chunk_pos: AbsChunkPos,
+        in_chunk_pos: InChunkPos,
+
+        decorator_registry: &DecoratorRegistry,
+        block_registry: &BlockRegistry,
+
+        height: i32,
+        elevation: f64,
+        temperature: f64,
+        moisture: f64,
+    ) {
+        fn decorator_positions_in_chunk(
+            id: RegistryId,
+            decorator: &DecoratorDefinition,
+            ctx: &Context<'_>,
+            global_xz: IVec2,
+
+            rand: &mut Xoshiro128StarStar,
+
+            height: i32,
+            elevation: f64,
+            temperature: f64,
+            moisture: f64,
+        ) -> SmallVec<[DecoratorEntry; 8]> {
+            let count: usize = if let Some(count_fn) = decorator.count_fn {
+                count_fn(decorator, ctx, elevation, temperature, moisture)
+            } else {
+                0
+            };
+
+            // generate random tree positions based on ctx.seed between group_xz +- (8,8)
+            let mut positions = SmallVec::new();
+            if count == 0 {
+                return positions;
+            }
+
+            let range = rand::distributions::Uniform::new(-GROUP_SIZE_HALF, GROUP_SIZE_HALF);
+
+            let mut seen = Vec::new();
+            for _ in 0..count {
+                let x = rand.sample(range);
+                let y = rand.sample(range);
+                let pos = IVec2::new(x + global_xz.x, y + global_xz.y);
+                if seen.contains(&pos) {
+                    continue;
+                }
+                seen.push(pos);
+                positions.push(DecoratorEntry::new(
+                    id,
+                    AbsBlockPos::new(pos.x, height, pos.y),
+                ));
+            }
+            positions
+        }
+
+        fn block_pos_to_decorator_group_pos(p: IVec2) -> IVec2 {
+            p - p.rem_euclid(GROUP_SIZEV) // for both x/z
+        }
+
+        fn decorator_positions_around(
+            id: RegistryId,
+            decorator: &DecoratorDefinition,
+            ctx: &Context<'_>,
+            pos: IVec2,
+
+            rand: &mut Xoshiro128StarStar,
+
+            height: i32,
+            elevation: f64,
+            temperature: f64,
+            moisture: f64,
+        ) -> SmallVec<[DecoratorEntry; 8]> {
+            let min_decor_group_xz = block_pos_to_decorator_group_pos(pos - GROUP_SIZE);
+            let max_decor_group_xz = block_pos_to_decorator_group_pos(pos + GROUP_SIZE);
+            let mut output: SmallVec<[DecoratorEntry; 8]> = SmallVec::new();
+            for tx in min_decor_group_xz.x..=max_decor_group_xz.x {
+                for tz in min_decor_group_xz.y..=max_decor_group_xz.y {
+                    let group_pos = IVec2::new(tx, tz);
+                    let global_pos = pos + group_pos;
+                    output.append(
+                        &mut decorator_positions_in_chunk(id, decorator, ctx, global_pos, rand, height, elevation, temperature, moisture)
+                            .into_iter()
+                            .filter(|entry| {
+                                let distance_x = entry.pos.x - pos.x;
+                                let distance_z = entry.pos.z - pos.y;
+                                distance_x * distance_x + distance_z * distance_z <= GROUP_SIZE2
+                            })
+                            .collect::<SmallVec<[DecoratorEntry; 8]>>(),
+                    );
+                }
+            }
+            output
+        }
+
+        let g_pos = *in_chunk_pos + *chunk_pos * CHUNK_DIM;
+        for (id, decorator) in decorator_registry.get_objects_ids() {
+            let mut positions = decorator_positions_around(id, decorator, context, g_pos.xz(), random, height, elevation, temperature, moisture);
+
+            for entry in positions {
+                let pos = *entry.pos;
+
+                if let Some(placer_fn) = decorator.placer_fn {
+                    placer_fn(
+                        decorator,
+                        chunk,
+                        random,
+                        pos,
+                        chunk_pos,
+                        block_registry,
+                    );
+                }
+            }
         }
     }
 
