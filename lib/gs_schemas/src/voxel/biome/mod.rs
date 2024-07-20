@@ -42,7 +42,7 @@ impl BiomeEntry {
     }
 }
 
-/// A named registry of block definitions.
+/// A named registry of biome definitions.
 pub type BiomeRegistry = Registry<BiomeDefinition>;
 
 /// A definition of a biome type, specifying properties such as registry name, shape, textures.

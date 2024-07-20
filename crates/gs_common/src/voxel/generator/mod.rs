@@ -6,6 +6,7 @@ use gs_schemas::GsExtraData;
 
 pub mod flat;
 pub mod multi_noise;
+pub mod decorator;
 
 /// A chunk generator
 pub trait VoxelGenerator<ExtraData: GsExtraData>: Send + Sync {
