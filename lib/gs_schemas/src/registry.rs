@@ -237,12 +237,6 @@ pub enum RegistryError {
     /// No more unallocated space in the registry. The allocator is a simple bump allocator, so if objects were removed, it might be possible to optimize the registry down to have free space again.
     #[error("No free space in the registry")]
     NoFreeSpace,
-    /// A registry data set isn't loaded yet.
-    #[error("Registry data set is not loaded (yet?).")]
-    DataSetNotFilled {
-        /// The name of the set that isn't loaded.
-        name: RegistryName,
-    },
 }
 
 /// Error type describing what went wrong during registry deserialization.
@@ -445,21 +439,18 @@ impl<Object: RegistryObject> Registry<Object> {
 
 /// A registry data set, like tags in *Minecraft*.
 // TODO fix deserialization
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RegistryDataSet<Object: RegistryObject> {
-    key: RegistryName,
-
     names: HashSet<RegistryName>,
-    phantom_data: PhantomData<Object>
+    phantom_data: PhantomData<Object>,
 }
 
 impl<Object: RegistryObject> RegistryDataSet<Object> {
     /// Utility to create a new RegistyDataSet.
-    pub fn new(key: RegistryName, names: HashSet<RegistryName>) -> Self {
+    pub fn new(names: HashSet<RegistryName>) -> Self {
         Self {
-            key,
             names,
-            phantom_data: PhantomData
+            phantom_data: PhantomData,
         }
     }
 

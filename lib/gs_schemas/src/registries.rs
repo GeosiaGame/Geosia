@@ -43,7 +43,7 @@ impl GameRegistries {
             .clone_with_serialized_ids(&bundle.get_biome_registry()?)?;
         let decorator_types = self
             .decorator_types
-            .clone_with_serialized_ids(&bundle.get_biome_registry()?)?;
+            .clone_with_serialized_ids(&bundle.get_decorator_registry()?)?;
         Ok(Self {
             block_types: Arc::new(block_types),
             biome_types: Arc::new(biome_types),

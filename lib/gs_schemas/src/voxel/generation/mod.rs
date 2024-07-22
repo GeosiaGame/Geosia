@@ -4,12 +4,11 @@ use std::f64::consts::TAU;
 
 use noise::{NoiseFn, Seedable};
 
-use self::positional_random::PositionalRandomFactory;
 use super::{chunk_storage::PaletteStorage, voxeltypes::BlockEntry};
 
+pub mod decorator;
 pub mod fbm_noise;
 pub mod positional_random;
-pub mod decorator;
 
 /// Context data for world generation.
 pub struct Context<'a> {
