@@ -63,6 +63,8 @@ jobs:
         run: cargo "+${{ matrix.rust }}" test --workspace
       - name: Clippy
         run: cargo "+${{ matrix.rust }}" clippy --all-targets
+      - name: Clippy - Server-only build
+        run: cargo "+${{ matrix.rust }}" clippy -p gs_common
       - name: Check formatting
         if: startsWith(matrix.rust, 'nightly')
         run: cargo "+${{ matrix.rust }}" fmt --check --all
