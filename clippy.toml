@@ -2,3 +2,5 @@ disallowed-types = [
     "std::collections::HashMap", "std::collections::hash_map::HashMap", # We use hashbrown HashMaps instead
     "std::collections::HashSet", "std::collections::hash_map::HashSet", # We use hashbrown HashSets instead
 ]
+
+too-many-arguments-threshold = 20

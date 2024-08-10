@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest ]
-        rust: [ stable, nightly-2024-07-04 ]
+        rust: [ stable, nightly-2024-08-10 ]
         include:
           - os: ubuntu-latest
 #          - os: macos-latest
@@ -63,6 +63,8 @@ jobs:
         run: cargo "+${{ matrix.rust }}" test --workspace
       - name: Clippy
         run: cargo "+${{ matrix.rust }}" clippy --all-targets
+      - name: Clippy - Server-only build
+        run: cargo "+${{ matrix.rust }}" clippy -p gs_common
       - name: Check formatting
         if: startsWith(matrix.rust, 'nightly')
         run: cargo "+${{ matrix.rust }}" fmt --check --all
