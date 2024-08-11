@@ -3126,6 +3126,7 @@ dependencies = [
  "capnpc",
  "criterion",
  "either",
+ "futures",
  "hashbrown",
  "itertools 0.13.0",
  "kstring",

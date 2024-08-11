@@ -24,6 +24,7 @@ pub use tokio::sync::oneshot::{
 pub use tokio::sync::watch::{
     channel as async_watch_channel, Receiver as AsyncWatchReceiver, Sender as AsyncWatchSender,
 };
+pub use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, OwnedMutexGuard as AsyncOwnedMutexGuard};
 
 // Common synchronization/cell types
 pub use std::sync::{Arc, Mutex, MutexGuard, Once, OnceLock, RwLock, Weak};

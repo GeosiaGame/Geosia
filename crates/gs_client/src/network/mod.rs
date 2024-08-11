@@ -229,7 +229,7 @@ impl NetworkThreadClientState {
         this.borrow_mut().ready_to_accept_streams = None;
 
         while let Some(stream) = incoming_streams.recv().await {
-            let handler = net_thread.create_stream_handler(Rc::clone(&this), stream);
+            let handler = net_thread.create_stream_handler(Rc::clone(&this), stream.into());
             match handler {
                 Ok(handler) => {
                     spawn_local(handler);
@@ -237,7 +237,7 @@ impl NetworkThreadClientState {
                 Err(stream) => {
                     error!(
                         "No stream handler found for incoming server stream of type {:?}",
-                        stream.header
+                        stream.header()
                     );
                 }
             }
