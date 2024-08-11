@@ -29,7 +29,7 @@ use crate::{prelude::*, GameServer, GameServerResource};
 use crate::{InGameSystemSet, ServerData};
 
 /// The maximum number of stored chunk packets before applying stream backpressure.
-pub const CHUNK_PACKET_QUEUE_LENGTH: usize = 64;
+pub const CHUNK_PACKET_QUEUE_LENGTH: usize = 20;
 
 /// Initializes the settings related to the voxel universe.
 #[derive(Default)]
@@ -410,6 +410,23 @@ fn send_chunk_to_players(
                             Ok(())
                         });
                     }
+                }
+            }
+            while let Some(result) = joiner.join_next().await {
+                match result {
+                    Err(join_error) => {
+                        if join_error.is_cancelled() {
+                            continue;
+                        } else if join_error.is_panic() {
+                            std::panic::resume_unwind(join_error.into_panic())
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    Ok(Err(error)) => {
+                        error!("Error while sending chunk data to player: {error}");
+                    }
+                    Ok(Ok(())) => {}
                 }
             }
             Ok(())
