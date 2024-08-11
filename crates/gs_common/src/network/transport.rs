@@ -5,14 +5,14 @@ use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::VatNetwork;
 use capnp_rpc::RpcSystem;
 use gs_schemas::dependencies::itertools::Itertools;
-use gs_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader};
+use gs_schemas::schemas::{network_capnp as rpc, read_leb128, write_leb128, NetworkStreamHeader};
 use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
 use quinn::{RecvStream, SendStream};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 use rustls::version::TLS13;
 use rustls::{DigitallySignedStruct, Error, SignatureScheme, SupportedProtocolVersion};
-use tokio_util::bytes::Bytes;
+use tokio_util::bytes::{Bytes, BytesMut};
 
 use crate::network::server::{NetworkThreadServerState, Server2ClientEndpoint};
 use crate::network::PeerAddress;
@@ -85,14 +85,35 @@ pub static RPC_CLIENT_READER_OPTIONS: ReaderOptions = ReaderOptions {
 /// Size in bytes of the in-process client-server "socket" buffer.
 const INPROCESS_SOCKET_BUFFER_SIZE: usize = 1024 * 1024;
 
+/// A QUIC network stream for communication asynchronous to the main RPC channel.
+#[derive(Clone)]
+pub struct QuicStream {
+    /// The stream header, determining its type.
+    pub header: NetworkStreamHeader,
+    /// The outgoing QUIC stream handle.
+    pub tx: Arc<AsyncMutex<SendStream>>,
+    /// The incoming QUIC stream handle.
+    pub rx: Arc<AsyncMutex<RecvStream>>,
+}
+
 /// An in-process stream, modelling QUIC streams when using in-process communication.
+#[derive(Clone)]
 pub struct InProcessStream {
     /// The stream header, determining its type.
     pub header: NetworkStreamHeader,
     /// The sender "socket" for this stream side.
     pub tx: AsyncUnboundedSender<Bytes>,
     /// The receiver "socket" for this stream side.
-    pub rx: AsyncUnboundedReceiver<Bytes>,
+    pub rx: Arc<AsyncMutex<AsyncUnboundedReceiver<Bytes>>>,
+}
+
+/// An abstraction over the two stream kinds (in-process and network).
+#[derive(Clone)]
+pub enum TransportStream {
+    /// Remote QUIC stream.
+    Network(QuicStream),
+    /// Local in-process stream.
+    Process(InProcessStream),
 }
 
 impl InProcessStream {
@@ -105,14 +126,69 @@ impl InProcessStream {
             Self {
                 header,
                 tx: tx12,
-                rx: rx21,
+                rx: Arc::new(AsyncMutex::new(rx21)),
             },
             Self {
                 header: header2,
                 tx: tx21,
-                rx: rx12,
+                rx: Arc::new(AsyncMutex::new(rx12)),
             },
         )
+    }
+}
+
+impl From<InProcessStream> for TransportStream {
+    fn from(value: InProcessStream) -> Self {
+        TransportStream::Process(value)
+    }
+}
+
+impl From<QuicStream> for TransportStream {
+    fn from(value: QuicStream) -> Self {
+        TransportStream::Network(value)
+    }
+}
+
+impl TransportStream {
+    /// Returns the header information set at stream opening time.
+    pub fn header(&self) -> &NetworkStreamHeader {
+        match self {
+            TransportStream::Network(quic) => &quic.header,
+            TransportStream::Process(ipc) => &ipc.header,
+        }
+    }
+
+    /// Wraps the given message in a length-prefixed frame if needed and sends it over the stream.
+    pub async fn send(&self, message: Bytes) -> Result<()> {
+        match self {
+            Self::Process(ipc) => {
+                ipc.tx.send(message)?;
+                Ok(())
+            }
+            Self::Network(quic) => {
+                let len_bytes = write_leb128(message.len() as u64);
+                let mut tx = quic.tx.lock().await;
+                tx.write_all(&len_bytes).await?;
+                tx.write_all(&message).await?;
+                Ok(())
+            }
+        }
+    }
+
+    /// Reads an incoming message from this stream. Returns None if no further messages can be read.
+    pub async fn recv(&self) -> Option<Bytes> {
+        match self {
+            Self::Process(ipc) => ipc.rx.lock().await.recv().await,
+            Self::Network(quic) => {
+                let mut rx = quic.rx.lock().await;
+                let len = read_leb128(&mut *rx).await.ok()? as usize;
+                let mut buf = BytesMut::zeroed(len);
+                rx.read_exact(&mut buf).await.ok()?;
+                let buf = buf.freeze();
+                assert_eq!(len, buf.len());
+                Some(buf)
+            }
+        }
     }
 }
 

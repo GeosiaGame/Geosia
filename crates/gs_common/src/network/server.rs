@@ -9,13 +9,15 @@ use bevy::log;
 use bevy::prelude::*;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::{pry, RpcSystem};
+use futures::future::BoxFuture;
+use futures::FutureExt;
 use gs_schemas::dependencies::capnp::capability::Promise;
 use gs_schemas::dependencies::capnp::Error;
 use gs_schemas::dependencies::kstring::KString;
 use gs_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
 };
-use gs_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader, SchemaUuidExt};
+use gs_schemas::schemas::{network_capnp as rpc, write_leb128, NetworkStreamHeader, SchemaUuidExt};
 use quinn::{Connection, EndpointConfig};
 use socket2::{Domain, Socket};
 use tokio::select;
@@ -25,7 +27,8 @@ use uuid::Uuid;
 
 use crate::network::thread::NetworkThreadState;
 use crate::network::transport::{
-    create_local_rpc_server, create_quic_rpc_server, quinn_server_config, InProcessDuplex, InProcessStream,
+    create_local_rpc_server, create_quic_rpc_server, quinn_server_config, InProcessDuplex, InProcessStream, QuicStream,
+    TransportStream,
 };
 use crate::network::PeerAddress;
 use crate::prelude::*;
@@ -43,21 +46,55 @@ pub struct NetworkThreadServerState {
     listeners: HashMap<SocketAddr, JoinHandle<()>>,
 }
 
+enum NetClientConnectionData {
+    Local {
+        stream_sender: AsyncUnboundedSender<InProcessStream>,
+    },
+    Remote {
+        connection: Connection,
+    },
+}
+
 /// Network thread data for a live connected client.
 pub struct ConnectedNetClient {
     shutdown_handle: ShutdownHandle,
-    stream_sender: AsyncUnboundedSender<InProcessStream>,
-
+    data: NetClientConnectionData,
     /// The network stream for chunk data.
-    pub chunk_stream: Option<InProcessStream>,
+    pub chunk_stream: Option<TransportStream>,
 }
 
 impl ConnectedNetClient {
     /// Opens a fresh stream for sending data asynchronously to the main RPC channel.
-    pub fn open_stream(&self, header: NetworkStreamHeader) -> Result<InProcessStream> {
-        let (local, remote) = InProcessStream::new_pair(header);
-        self.stream_sender.send(remote)?;
-        Ok(local)
+    /// Returns a future that actually performs the work to avoid holding the state RefCell borrowed across await points.
+    pub fn open_stream(&self, header: NetworkStreamHeader) -> BoxFuture<'static, Result<TransportStream>> {
+        match &self.data {
+            NetClientConnectionData::Local { stream_sender, .. } => {
+                let stream_sender = stream_sender.clone();
+                (async move {
+                    let (local, remote) = InProcessStream::new_pair(header);
+                    stream_sender.send(remote)?;
+                    Ok(local.into())
+                })
+                .boxed()
+            }
+            NetClientConnectionData::Remote { connection, .. } => {
+                let connection = connection.clone();
+                (async move {
+                    let (mut tx, rx) = connection.open_bi().await?;
+                    let header_bytes = header.write_to_bytes();
+                    let len_bytes = write_leb128(header_bytes.len() as u64);
+                    tx.write_all(&len_bytes).await?;
+                    tx.write_all(&header_bytes).await?;
+                    Ok(QuicStream {
+                        header,
+                        tx: Arc::new(AsyncMutex::new(tx)),
+                        rx: Arc::new(AsyncMutex::new(rx)),
+                    }
+                    .into())
+                })
+                .boxed()
+            }
+        }
     }
 
     /// Gets the shutdown handle for this client's connection handling task set.
@@ -220,7 +257,9 @@ impl NetworkThreadServerState {
             peer,
             ConnectedNetClient {
                 shutdown_handle,
-                stream_sender: spipe.outgoing_streams,
+                data: NetClientConnectionData::Local {
+                    stream_sender: spipe.outgoing_streams,
+                },
                 chunk_stream: None,
             },
         );
@@ -371,7 +410,9 @@ impl NetworkThreadServerState {
             ready_watcher.changed().await?;
         }
         while let Some(stream) = incoming_streams.recv().await {
-            let handler = engine.network_thread.create_stream_handler(Rc::clone(&this), stream);
+            let handler = engine
+                .network_thread
+                .create_stream_handler(Rc::clone(&this), stream.into());
             match handler {
                 Ok(handler) => {
                     tokio::task::spawn_local(handler);
@@ -379,7 +420,7 @@ impl NetworkThreadServerState {
                 Err(stream) => {
                     error!(
                         "No stream handler found for incoming client stream of type {:?}",
-                        stream.header
+                        stream.header()
                     );
                 }
             }
