@@ -21,7 +21,7 @@ use gs_schemas::schemas::{network_capnp as rpc, write_leb128, NetworkStreamHeade
 use quinn::{Connection, EndpointConfig};
 use socket2::{Domain, Socket};
 use tokio::select;
-use tokio::task::{JoinHandle, JoinSet};
+use tokio::task::{spawn_local, JoinHandle, JoinSet};
 use tracing::Instrument;
 use uuid::Uuid;
 
@@ -248,7 +248,7 @@ impl NetworkThreadServerState {
         join_set.spawn_local(rpc_listener);
         join_set.spawn_local(stream_listener);
         let inner_shutdown = shutdown_handle.clone();
-        tokio::task::spawn_local(
+        spawn_local(
             async move { Self::player_handler_task(inner_shutdown, join_set).await }
                 .instrument(info_span!("server-player-handler", address = %peer)),
         );
@@ -315,7 +315,7 @@ impl NetworkThreadServerState {
         }
         for &setup_addr in new_set.difference(&old_set) {
             let listener = Self::remote_listener_task(Rc::clone(this), Arc::clone(engine), setup_addr);
-            let task = tokio::task::spawn_local(async move {
+            let task = spawn_local(async move {
                 if let Err(e) = listener.await {
                     error!("Listening for connections on {setup_addr} failed: {e}");
                 }
@@ -329,6 +329,11 @@ impl NetworkThreadServerState {
         engine: Arc<GameServer>,
         server_addr: SocketAddr,
     ) -> Result<()> {
+        let mut ready_watcher = net_state.borrow().ready_to_accept_streams.subscribe();
+        while !*ready_watcher.borrow_and_update() {
+            ready_watcher.changed().await?;
+        }
+
         let server_config = quinn_server_config();
         let socket = Socket::new(Domain::IPV6, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))?;
         socket.set_only_v6(false)?;
@@ -353,22 +358,22 @@ impl NetworkThreadServerState {
                 local: server_addr,
                 remote: conn_addr,
             };
-            tokio::task::spawn_local(
+            spawn_local(
                 async move {
                     let conn_addr = conn.remote_address();
                     let conn = match conn.await {
                         Ok(conn) => conn,
                         Err(e) => {
-                            warn!(addr = %conn_addr, "Client could not connect: {e}");
+                            warn!(address = %conn_addr, "Client could not connect: {e}");
                             return;
                         }
                     };
-                    info!(addr = %conn_addr, "Accepting remote connection");
+                    info!(address = %conn_addr, "Accepting remote connection");
                     if let Err(e) = Self::remote_connection_task(local_state, local_engine, peer_addr, conn).await {
-                        warn!(addr = %conn_addr, "Client connection handler failed: {e}");
+                        warn!(address = %conn_addr, "Client connection handler failed: {e}");
                     }
                 }
-                .instrument(info_span!("Server peer handler", addr = %conn_addr)),
+                .instrument(info_span!("server-quic-peer", address = %conn_addr)),
             );
         }
 
@@ -379,13 +384,59 @@ impl NetworkThreadServerState {
         net_state: Rc<RefCell<Self>>,
         engine: Arc<GameServer>,
         peer_address: PeerAddress,
-        conn: Connection,
+        connection: Connection,
     ) -> Result<()> {
         trace!("Awaiting the bootstrap bidi RPC channel");
-        let (rpc_tx, rpc_rx) = conn.accept_bi().await?;
-        let rpc = create_quic_rpc_server(net_state, engine, rpc_tx, rpc_rx, peer_address);
+        let (rpc_tx, rpc_rx) = connection.accept_bi().await?;
+        let rpc = create_quic_rpc_server(Rc::clone(&net_state), Arc::clone(&engine), rpc_tx, rpc_rx, peer_address);
         let _disconnector = rpc.get_disconnector();
-        rpc.await.with_context(|| format!("Remote RPC with {peer_address:?}"))
+
+        let mut join_set: JoinSet<Result<()>> = JoinSet::new();
+        join_set.spawn_local(
+            async move { rpc.await.with_context(|| format!("Remote RPC with {peer_address:?}")) }
+                .instrument(info_span!("server-quic-rpc", address = %peer_address)),
+        );
+
+        let stream_this = Rc::clone(&net_state);
+        let stream_engine = Arc::clone(&engine);
+        let stream_conn = connection.clone();
+        join_set.spawn_local(
+            async move { Self::remote_stream_task(stream_this, stream_engine, peer_address, stream_conn).await }
+                .instrument(info_span!("server-quic-stream", address = %peer_address)),
+        );
+
+        let shutdown_handle = ShutdownHandle::new();
+        let inner_shutdown = shutdown_handle.clone();
+        spawn_local(
+            async move { Self::player_handler_task(inner_shutdown, join_set).await }
+                .instrument(info_span!("server-player-handler", address = %peer_address)),
+        );
+
+        net_state.borrow_mut().connected_clients.insert(
+            peer_address,
+            ConnectedNetClient {
+                shutdown_handle,
+                data: NetClientConnectionData::Remote { connection },
+                chunk_stream: None,
+            },
+        );
+
+        info!("Constructed a new remote connection: {peer_address}");
+
+        Ok(())
+    }
+
+    async fn remote_stream_task(
+        _this: Rc<RefCell<Self>>,
+        _engine: Arc<GameServer>,
+        _addr: PeerAddress,
+        connection: Connection,
+    ) -> Result<()> {
+        while let Ok((_tx, _rx)) = connection.accept_bi().await {
+            // TODO
+            error!("Got a stream open request from the client, currently there are no c->s streams");
+        }
+        Ok(())
     }
 
     async fn local_listener_task(
@@ -415,7 +466,7 @@ impl NetworkThreadServerState {
                 .create_stream_handler(Rc::clone(&this), stream.into());
             match handler {
                 Ok(handler) => {
-                    tokio::task::spawn_local(handler);
+                    spawn_local(handler);
                 }
                 Err(stream) => {
                     error!(
@@ -543,6 +594,7 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
         let address = self.peer;
         self.server
             .schedule_bevy(move |world| {
+                info!("Spawning player `{nickname}`@{address} into the world");
                 world.spawn(ConnectedPlayer {
                     nickname: nickname.clone(),
                     address,
