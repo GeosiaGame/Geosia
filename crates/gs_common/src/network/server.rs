@@ -3,6 +3,8 @@
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 
+use bevy::ecs::component::{ComponentHooks, StorageType};
+use bevy::ecs::world::DeferredWorld;
 use bevy::log;
 use bevy::prelude::*;
 use capnp_rpc::rpc_twoparty_capnp::Side;
@@ -14,14 +16,20 @@ use gs_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
 };
 use gs_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader, SchemaUuidExt};
-use tokio::task::JoinHandle;
+use quinn::{Connection, EndpointConfig};
+use socket2::{Domain, Socket};
+use tokio::select;
+use tokio::task::{JoinHandle, JoinSet};
 use tracing::Instrument;
 use uuid::Uuid;
 
 use crate::network::thread::NetworkThreadState;
-use crate::network::transport::{create_local_rpc_server, InProcessDuplex, InProcessStream};
+use crate::network::transport::{
+    create_local_rpc_server, create_quic_rpc_server, quinn_server_config, InProcessDuplex, InProcessStream,
+};
 use crate::network::PeerAddress;
 use crate::prelude::*;
+use crate::promises::ShutdownHandle;
 use crate::{
     GameServer, GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE,
 };
@@ -32,12 +40,12 @@ pub struct NetworkThreadServerState {
     free_local_id: i32,
     connected_clients: HashMap<PeerAddress, ConnectedNetClient>,
     bootstrapped_clients: HashMap<PeerAddress, Rc<RefCell<AuthenticatedServer2ClientEndpoint>>>,
+    listeners: HashMap<SocketAddr, JoinHandle<()>>,
 }
 
 /// Network thread data for a live connected client.
 pub struct ConnectedNetClient {
-    rpc_task: JoinHandle<Result<()>>,
-    stream_task: JoinHandle<Result<()>>,
+    shutdown_handle: ShutdownHandle,
     stream_sender: AsyncUnboundedSender<InProcessStream>,
 
     /// The network stream for chunk data.
@@ -51,10 +59,14 @@ impl ConnectedNetClient {
         self.stream_sender.send(remote)?;
         Ok(local)
     }
+
+    /// Gets the shutdown handle for this client's connection handling task set.
+    pub fn shutdown_handle(&self) -> &ShutdownHandle {
+        &self.shutdown_handle
+    }
 }
 
 /// A reference to a connected and bootstrapped player in the ECS.
-#[derive(Component)]
 pub struct ConnectedPlayer {
     /// The visible player nickname.
     pub nickname: KString,
@@ -63,12 +75,47 @@ pub struct ConnectedPlayer {
 }
 
 /// A table entity keeping lookup information for all connected players.
-#[derive(Component, Default)]
+/// Maintained by hooks on [`ConnectedPlayer`].
+#[derive(Resource, Default)]
 pub struct ConnectedPlayersTable {
-    /// Nickname-indexed players.
-    pub players_by_nickname: BTreeMap<KString, Entity>,
     /// Address-indexed players.
-    pub players_by_address: BTreeMap<PeerAddress, Entity>,
+    players_by_address: BTreeMap<PeerAddress, Entity>,
+}
+
+impl ConnectedPlayersTable {
+    /// Gets the lookup table for player entity IDs by their address.
+    pub fn players_by_address(&self) -> &BTreeMap<PeerAddress, Entity> {
+        &self.players_by_address
+    }
+}
+
+impl Component for ConnectedPlayer {
+    const STORAGE_TYPE: StorageType = StorageType::Table;
+
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_insert(|mut world: DeferredWorld, entity, _component_id| {
+            let player = world.get::<ConnectedPlayer>(entity).unwrap();
+            let addr = player.address;
+            let mut table = world.resource_mut::<ConnectedPlayersTable>();
+            let old = table.players_by_address.insert(addr, entity);
+            if let Some(old) = old {
+                let new_nick = &world.get::<ConnectedPlayer>(entity).unwrap().nickname;
+                let old_nick = world
+                    .get::<ConnectedPlayer>(old)
+                    .map(|p| &p.nickname as &str)
+                    .unwrap_or("<missing nickname>");
+                panic!(
+                    "Attempting to insert a player `{new_nick}` with a duplicate peer address: {addr} of `{old_nick}`"
+                );
+            }
+        });
+        hooks.on_remove(|mut world: DeferredWorld, entity, _component_id| {
+            let player = world.get::<ConnectedPlayer>(entity).unwrap();
+            let addr = player.address;
+            let mut table = world.resource_mut::<ConnectedPlayersTable>();
+            table.players_by_address.remove(&addr);
+        });
+    }
 }
 
 /// A Bevy plugin registering the server-related entities.
@@ -76,7 +123,7 @@ pub struct NetworkServerPlugin;
 
 impl Plugin for NetworkServerPlugin {
     fn build(&self, app: &mut App) {
-        app.world_mut().spawn(ConnectedPlayersTable::default());
+        app.world_mut().insert_resource(ConnectedPlayersTable::default());
     }
 }
 
@@ -97,6 +144,7 @@ impl Default for NetworkThreadServerState {
             free_local_id: Default::default(),
             connected_clients: Default::default(),
             bootstrapped_clients: Default::default(),
+            listeners: Default::default(),
         }
     }
 }
@@ -153,95 +201,152 @@ impl NetworkThreadServerState {
         let (spipe, cpipe) = InProcessDuplex::new_pair();
         let rpc_server = create_local_rpc_server(this_ptr.clone(), Arc::clone(&engine), spipe.rpc_pipe, peer);
         let rpc_listener = Self::local_listener_task(peer, Arc::clone(&engine), rpc_server)
-            .instrument(tracing::info_span!("server-rpc", address = ?peer));
+            .instrument(tracing::info_span!("server-local-rpc", address = %peer));
         let stream_listener =
             Self::local_stream_task(Rc::clone(this_ptr), Arc::clone(&engine), peer, spipe.incoming_streams)
-                .instrument(tracing::info_span!("server-stream", address = ?peer));
+                .instrument(tracing::info_span!("server-local-stream", address = %peer));
 
-        let rpc_task = tokio::task::spawn_local(rpc_listener);
-        let stream_task = tokio::task::spawn_local(stream_listener);
+        let shutdown_handle = ShutdownHandle::new();
+        let mut join_set = JoinSet::new();
+        join_set.spawn_local(rpc_listener);
+        join_set.spawn_local(stream_listener);
+        let inner_shutdown = shutdown_handle.clone();
+        tokio::task::spawn_local(
+            async move { Self::player_handler_task(inner_shutdown, join_set).await }
+                .instrument(info_span!("server-player-handler", address = %peer)),
+        );
+
         this.connected_clients.insert(
             peer,
             ConnectedNetClient {
-                rpc_task,
-                stream_task,
+                shutdown_handle,
                 stream_sender: spipe.outgoing_streams,
                 chunk_stream: None,
             },
         );
 
-        info!("Constructed a new local connection: {peer:?}");
+        info!("Constructed a new local connection: {peer}");
 
         Ok((peer, cpipe))
     }
 
-    async fn update_listeners(this: &Rc<RefCell<Self>>, engine: &Arc<GameServer>, new_listeners: &[SocketAddr]) {
-        let new_set: HashSet<SocketAddr> = HashSet::from_iter(new_listeners.iter().copied());
-        let old_set: HashSet<SocketAddr> = HashSet::from_iter(
-            this.borrow()
-                .connected_clients
-                .keys()
-                .copied()
-                .filter_map(PeerAddress::remote_addr),
-        );
-        for &shutdown_addr in old_set.difference(&new_set) {
-            let addr = PeerAddress::Remote(shutdown_addr);
-
-            // remove from the bevy world
-            engine
-                .schedule_bevy(move |world| {
-                    let mut table = world.query::<(Entity, &ConnectedPlayersTable)>();
-                    let table = table.get_single(world);
-                    match table {
-                        Ok((etable, table)) => {
-                            let (pent, nick) = {
-                                let pent = table.players_by_address.get(&addr);
-                                let Some(&pent) = pent else {
-                                    bail!("Mismatched player table and bevy state for {addr:?}");
-                                };
-                                let Some(player) = world.get::<ConnectedPlayer>(pent) else {
-                                    bail!(
-                                        "Mismatched player table and bevy state for {addr:?} with entity ID {pent:?}"
-                                    );
-                                };
-                                (pent, player.nickname.clone())
-                            };
-                            world.despawn(pent);
-                            // we have to re-borrow here
-                            let mut table = world
-                                .get_mut::<ConnectedPlayersTable>(etable)
-                                .context("Getting ConnectedPlayersTable")?;
-                            table.players_by_address.remove(&addr);
-                            table.players_by_nickname.remove(&nick);
+    async fn player_handler_task(shutdown_handle: ShutdownHandle, mut subsystem_tasks: JoinSet<Result<()>>) {
+        let _guard = shutdown_handle.guard();
+        'task_loop: loop {
+            select! { biased;
+                _shutdown = shutdown_handle.handler_future() => {
+                    subsystem_tasks.abort_all();
+                }
+                result = subsystem_tasks.join_next() => {
+                    let Some(result) = result else {break 'task_loop;};
+                    match result {
+                        Err(join_error) => {
+                            if join_error.is_cancelled() {
+                                continue;
+                            } else if join_error.is_panic() {
+                                std::panic::resume_unwind(join_error.into_panic());
+                            } else {
+                                unreachable!();
+                            }
                         }
-                        Err(e) => {
-                            warn!("Could not remove player connection {addr:?}: {e}");
+                        Ok(Err(e)) => {
+                            error!("Error encountered from a player's network subsystem: {e}");
+                            subsystem_tasks.abort_all();
+                            continue;
+                        }
+                        Ok(Ok(())) => {
+                            continue;
                         }
                     }
-                    Ok(())
-                })
-                .async_log_when_fails("removing disconnected players from the ConnectedPlayersTable");
+                }
+            }
+        }
+    }
 
-            let listener = this.borrow_mut().connected_clients.remove(&addr);
-            let Some(listener) = listener else { continue };
-            listener.rpc_task.abort();
-            listener.stream_task.abort();
-            if let Ok(Err(e)) = listener.rpc_task.await {
-                log::warn!("RPC listener for address {shutdown_addr} finished with an error {e}");
-            }
-            if let Ok(Err(e)) = listener.stream_task.await {
-                log::warn!("Stream listener for address {shutdown_addr} finished with an error {e}");
-            }
+    async fn update_listeners(this: &Rc<RefCell<Self>>, engine: &Arc<GameServer>, new_listeners: &[SocketAddr]) {
+        let new_set: HashSet<SocketAddr> = HashSet::from_iter(new_listeners.iter().copied());
+        let old_set: HashSet<SocketAddr> = HashSet::from_iter(this.borrow().listeners.keys().copied());
+
+        for &shutdown_addr in old_set.difference(&new_set) {
+            let Some(listener) = this.borrow_mut().listeners.remove(&shutdown_addr) else {
+                continue;
+            };
+            listener.abort();
+            let _ = listener.await;
         }
-        for &_setup_addr in new_set.difference(&old_set) {
-            /*
-            let listener = Self::listener_task(PeerAddress::Remote(setup_addr), engine.clone());
-            let task = tokio::task::spawn_local(listener);
-            self.listeners.insert(PeerAddress::Remote(setup_addr), NetListener {
-                task,
+        for &setup_addr in new_set.difference(&old_set) {
+            let listener = Self::remote_listener_task(Rc::clone(this), Arc::clone(engine), setup_addr);
+            let task = tokio::task::spawn_local(async move {
+                if let Err(e) = listener.await {
+                    error!("Listening for connections on {setup_addr} failed: {e}");
+                }
             });
-             */
+            this.borrow_mut().listeners.insert(setup_addr, task);
         }
+    }
+
+    async fn remote_listener_task(
+        net_state: Rc<RefCell<Self>>,
+        engine: Arc<GameServer>,
+        server_addr: SocketAddr,
+    ) -> Result<()> {
+        let server_config = quinn_server_config();
+        let socket = Socket::new(Domain::IPV6, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))?;
+        socket.set_only_v6(false)?;
+        socket.bind(&server_addr.into())?;
+        let endpoint = quinn::Endpoint::new(
+            EndpointConfig::default(),
+            Some(server_config),
+            socket.into(),
+            quinn::default_runtime().unwrap(),
+        )?;
+        info!("Listening for QUIC connections on {}", endpoint.local_addr()?);
+
+        while let Some(conn) = endpoint.accept().await {
+            if !conn.remote_address_validated() {
+                conn.retry()?;
+                continue;
+            }
+            let conn_addr = conn.remote_address();
+            let local_state = Rc::clone(&net_state);
+            let local_engine = Arc::clone(&engine);
+            let peer_addr = PeerAddress::Network {
+                local: server_addr,
+                remote: conn_addr,
+            };
+            tokio::task::spawn_local(
+                async move {
+                    let conn_addr = conn.remote_address();
+                    let conn = match conn.await {
+                        Ok(conn) => conn,
+                        Err(e) => {
+                            warn!(addr = %conn_addr, "Client could not connect: {e}");
+                            return;
+                        }
+                    };
+                    info!(addr = %conn_addr, "Accepting remote connection");
+                    if let Err(e) = Self::remote_connection_task(local_state, local_engine, peer_addr, conn).await {
+                        warn!(addr = %conn_addr, "Client connection handler failed: {e}");
+                    }
+                }
+                .instrument(info_span!("Server peer handler", addr = %conn_addr)),
+            );
+        }
+
+        Ok(())
+    }
+
+    async fn remote_connection_task(
+        net_state: Rc<RefCell<Self>>,
+        engine: Arc<GameServer>,
+        peer_address: PeerAddress,
+        conn: Connection,
+    ) -> Result<()> {
+        trace!("Awaiting the bootstrap bidi RPC channel");
+        let (rpc_tx, rpc_rx) = conn.accept_bi().await?;
+        let rpc = create_quic_rpc_server(net_state, engine, rpc_tx, rpc_rx, peer_address);
+        let _disconnector = rpc.get_disconnector();
+        rpc.await.with_context(|| format!("Remote RPC with {peer_address:?}"))
     }
 
     async fn local_listener_task(
@@ -397,18 +502,10 @@ impl rpc::game_server::Server for Server2ClientEndpoint {
         let address = self.peer;
         self.server
             .schedule_bevy(move |world| {
-                let player = world
-                    .spawn(ConnectedPlayer {
-                        nickname: nickname.clone(),
-                        address,
-                    })
-                    .id();
-                let mut table = world.query::<&mut ConnectedPlayersTable>();
-                let Ok(mut table) = table.get_single_mut(world) else {
-                    bail!("Could not add player connection {address:?} due to missing player table");
-                };
-                table.players_by_address.insert(address, player);
-                table.players_by_nickname.insert(nickname, player);
+                world.spawn(ConnectedPlayer {
+                    nickname: nickname.clone(),
+                    address,
+                });
                 Ok(())
             })
             .async_log_when_fails("Adding player to the connection table");

@@ -19,7 +19,7 @@ use gs_schemas::{GameSide, GsExtraData};
 use smallvec::SmallVec;
 use tokio_util::bytes::Bytes;
 
-use crate::network::server::{ConnectedPlayer, ConnectedPlayersTable};
+use crate::network::server::ConnectedPlayer;
 use crate::network::thread::{NetworkThread, NetworkThreadState};
 use crate::network::transport::InProcessStream;
 use crate::network::PeerAddress;
@@ -309,15 +309,10 @@ fn server_system_process_chunk_loading(
 fn server_system_process_chunk_sending(
     engine: Res<GameServerResource>,
     mut voxel_q: Query<&mut VoxelUniverse<ServerData>>,
-    connected_players_table_q: Query<&ConnectedPlayersTable>,
-    connected_players_q: Query<&ConnectedPlayer>,
+    connected_players_q: Query<(Entity, &ConnectedPlayer)>,
 ) {
     // TODO: send only nearby chunks, not everything. Also don't iterate every chunk every tick.
-    let Ok(player_list) = connected_players_table_q.get_single() else {
-        return;
-    };
-    let player_list = &player_list.players_by_address;
-    if player_list.is_empty() {
+    if connected_players_q.is_empty() {
         return;
     }
 
@@ -337,8 +332,9 @@ fn server_system_process_chunk_sending(
         // remove disconnected players
         chunk_player_list.retain(|&player, _rev| connected_players_q.contains(player));
         // find players with outdated revisions
-        for (&peer, &player) in player_list.iter() {
-            let entry = chunk_player_list.entry(player).or_insert_with(|| {
+        for (pid, player) in connected_players_q.iter() {
+            let peer = player.address;
+            let entry = chunk_player_list.entry(pid).or_insert_with(|| {
                 send_list.push(peer);
                 chunk_rev
             });

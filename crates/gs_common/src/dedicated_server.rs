@@ -1,7 +1,5 @@
 //! The dedicated server main() implementation
 
-use bevy::app::App;
-use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use clap::Parser;
 use rustyline::error::ReadlineError;
@@ -9,7 +7,7 @@ use rustyline::DefaultEditor;
 
 use crate::config::{GameConfig, ServerConfig};
 use crate::prelude::*;
-use crate::{builtin_game_registries, GameServer};
+use crate::GameServer;
 
 #[derive(Parser)]
 #[command(name = "gs_dedi_server", about = "Geosia dedicated server")]
@@ -17,11 +15,8 @@ struct CliOptions {}
 
 /// Starts the dedicated server CLI
 pub fn run_dedicated_server() -> Result<()> {
-    // Set up bevy's logging once per process
-    App::new().add_plugins(LogPlugin::default()).run();
     let _cli = CliOptions::parse();
 
-    let default_registries = builtin_game_registries();
     let game_config = GameConfig {
         server: ServerConfig {
             server_title: String::from("Dedicated server"),
