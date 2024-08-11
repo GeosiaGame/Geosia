@@ -4,7 +4,14 @@ use capnp::message::ReaderOptions;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::VatNetwork;
 use capnp_rpc::RpcSystem;
+use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader};
+use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
+use quinn::{RecvStream, SendStream};
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
+use rustls::version::TLS13;
+use rustls::{DigitallySignedStruct, Error, SignatureScheme, SupportedProtocolVersion};
 use tokio_util::bytes::Bytes;
 
 use crate::network::server::{NetworkThreadServerState, Server2ClientEndpoint};
@@ -12,10 +19,67 @@ use crate::network::PeerAddress;
 use crate::prelude::*;
 use crate::GameServer;
 
+/// The insecure server TLS verifier that does not actually check anything at all.
+#[derive(Debug)]
+pub struct NoopServerTlsVerification(Arc<rustls::crypto::CryptoProvider>);
+
+impl NoopServerTlsVerification {
+    fn new() -> Arc<Self> {
+        Arc::new(Self(Arc::new(rustls::crypto::aws_lc_rs::default_provider())))
+    }
+}
+
+impl ServerCertVerifier for NoopServerTlsVerification {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: UnixTime,
+    ) -> std::result::Result<ServerCertVerified, Error> {
+        Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> std::result::Result<HandshakeSignatureValid, Error> {
+        rustls::crypto::verify_tls12_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> std::result::Result<HandshakeSignatureValid, Error> {
+        rustls::crypto::verify_tls13_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.0.signature_verification_algorithms.supported_schemes()
+    }
+}
+
 /// Capnproto reader options for local connections
 pub static RPC_LOCAL_READER_OPTIONS: ReaderOptions = ReaderOptions {
     traversal_limit_in_words: Some(1024 * 1024 * 1024),
-    nesting_limit: 128,
+    nesting_limit: 48,
+};
+
+/// Capnproto reader options for remote connections accepted on the server
+pub static RPC_SERVER_READER_OPTIONS: ReaderOptions = ReaderOptions {
+    traversal_limit_in_words: Some(32 * 1024 * 1024),
+    nesting_limit: 48,
+};
+
+/// Capnproto reader options for remote server connections on the client
+pub static RPC_CLIENT_READER_OPTIONS: ReaderOptions = ReaderOptions {
+    traversal_limit_in_words: Some(256 * 1024 * 1024),
+    nesting_limit: 48,
 };
 
 /// Size in bytes of the in-process client-server "socket" buffer.
@@ -95,6 +159,47 @@ pub fn create_local_rpc_server(
     let bootstrap_object = Server2ClientEndpoint::new(net_state, server, id);
     let bootstrap_client: rpc::game_server::Client = capnp_rpc::new_client(bootstrap_object);
     RpcSystem::new(Box::new(network), Some(bootstrap_client.clone().client))
+}
+
+/// Create a Future that will handle QUIC messages coming into a [`Server2ClientEndpoint`] and any child RPC objects on the given `server`&`id`.
+pub fn create_quic_rpc_server(
+    net_state: Rc<RefCell<NetworkThreadServerState>>,
+    server: Arc<GameServer>,
+    tx: SendStream,
+    rx: RecvStream,
+    id: PeerAddress,
+) -> RpcSystem<Side> {
+    let network = VatNetwork::new(rx, tx, Side::Server, RPC_SERVER_READER_OPTIONS);
+    let bootstrap_object = Server2ClientEndpoint::new(net_state, server, id);
+    let bootstrap_client: rpc::game_server::Client = capnp_rpc::new_client(bootstrap_object);
+    RpcSystem::new(Box::new(network), Some(bootstrap_client.clone().client))
+}
+
+static ALPN_GEOSIA: &[&[u8]] = &[b"game-geosia/1"];
+static TLS_PROTO_VERSIONS: &[&SupportedProtocolVersion] = &[&TLS13];
+
+/// Makes a simple QUINN endpoint client config object.
+pub fn quinn_client_config() -> quinn::ClientConfig {
+    let mut crypto = rustls::ClientConfig::builder_with_protocol_versions(TLS_PROTO_VERSIONS)
+        .dangerous()
+        .with_custom_certificate_verifier(NoopServerTlsVerification::new())
+        .with_no_client_auth();
+    crypto.alpn_protocols = ALPN_GEOSIA.iter().map(|a| a.to_vec()).collect_vec();
+    quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(crypto).unwrap()))
+}
+
+/// Makes a simple QUINN endpoint server config object.
+pub fn quinn_server_config() -> quinn::ServerConfig {
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
+    let key = PrivateKeyDer::Pkcs8(cert.key_pair.serialize_der().into());
+    let cert = cert.cert.into();
+
+    let mut crypto = rustls::ServerConfig::builder_with_protocol_versions(TLS_PROTO_VERSIONS)
+        .with_no_client_auth()
+        .with_single_cert(vec![cert], key)
+        .unwrap();
+    crypto.alpn_protocols = ALPN_GEOSIA.iter().map(|a| a.to_vec()).collect_vec();
+    quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(crypto).unwrap()))
 }
 
 /// Unit test utilities
@@ -190,7 +295,7 @@ pub mod test {
                             .control_channel
                             .send(GameServerControlCommand::Shutdown(shutdown_tx))
                             .unwrap();
-                        shutdown_rx.await.unwrap();
+                        shutdown_rx.await.unwrap().unwrap();
                     })
                     .await;
             });

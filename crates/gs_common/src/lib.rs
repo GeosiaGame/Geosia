@@ -21,6 +21,7 @@ use std::time::Duration;
 use bevy::app::{AppExit, ScheduleRunnerPlugin};
 use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
+use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
 use bevy::time::TimePlugin;
@@ -354,4 +355,13 @@ pub fn builtin_game_registries() -> GameRegistries {
         block_types: Arc::new(block_types),
         biome_types: Arc::new(biome_types),
     }
+}
+
+/// Runs static pre-main setup needed (e.g. cryptography init)
+pub fn geosia_pre_main() {
+    // Set up bevy's logging once per process
+    App::new().add_plugins(LogPlugin::default()).run();
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Could not init cryptography");
 }

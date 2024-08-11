@@ -42,5 +42,5 @@ impl GameConfig {
 }
 
 fn default_listen_addresses() -> Vec<SocketAddr> {
-    vec!["0.0.0.0:28032".parse().unwrap(), "[::]:28032".parse().unwrap()]
+    vec!["[::]:28032".parse().unwrap()]
 }
