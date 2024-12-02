@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-24.04 ]
         rust: [ stable, nightly-2024-12-01 ]
         include:
           - os: ubuntu-24.04
