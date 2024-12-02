@@ -3,7 +3,7 @@ members = ["lib/*", "crates/*"]
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.79"
+rust-version = "1.83"
 edition = "2021"
 license = "LGPL-3.0-only"
 authors = ["Geosia team"]
