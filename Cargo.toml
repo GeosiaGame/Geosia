@@ -49,11 +49,14 @@ kstring = { version = "2.0.0", features = ["serde"] }
 lru = "0.12.3"
 noise = "0.9.0"
 once_cell = "1.19.0"
-quinn = "0.11.2"
+quinn = { version = "0.11.2", features = ["futures-io", "runtime-tokio"] }
 rand = "0.8.5"
 rand_pcg = "0.3.1"
 rand_xoshiro = "0.6.0"
+rcgen = "0.13.1"
 rgb = { version = "0.8.40", features = ["serde"] }
+rustls = { version = "0.23.11" }
+rustyline = "14.0.0"
 serde = { version = "1.0.203", features = ["derive"] }
 smallvec = { version = "1.13.2", features = [
     "serde",
@@ -63,6 +66,8 @@ smallvec = { version = "1.13.2", features = [
     "union",
 ] }
 smart-default = "0.7.1"
+socket2 = "0.5.7"
+spade = { version = "2.9.0", features = ["serde"] }
 static_assertions = "1.1.0"
 thiserror = "1.0.61"
 thread_local = "1.1.8"
@@ -84,7 +89,6 @@ uuid = { version = "1.9.1", features = [
     "v4",
     "v6",
 ] }
-spade = { version = "2.9.0", features = ["serde"] }
 zorder = "0.2.2"
 
 # Remote, bevy plugins
