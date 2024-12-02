@@ -37,7 +37,7 @@ impl BiomeEntry {
     }
 
     /// Helper to look up the biome definition corresponding to this ID
-    pub fn lookup<'a>(&'a self, registry: &'a BiomeRegistry) -> Option<&BiomeDefinition> {
+    pub fn lookup<'r>(&self, registry: &'r BiomeRegistry) -> Option<&'r BiomeDefinition> {
         registry.lookup_id_to_object(self.id)
     }
 }

@@ -4,18 +4,11 @@
 //
 //THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-use bevy::ecs::event::ManualEventReader;
-use bevy::input::mouse::MouseMotion;
+use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 
 use crate::states::{ClientAppState, InGameSystemSet};
-
-/// Keeps track of mouse motion events, pitch, and yaw
-#[derive(Resource, Default)]
-struct InputState {
-    reader_motion: ManualEventReader<MouseMotion>,
-}
 
 /// Mouse sensitivity and movement speed
 #[derive(Resource)]
@@ -72,14 +65,14 @@ pub struct PositionText;
 
 /// Grabs/ungrabs mouse cursor
 fn toggle_grab_cursor(window: &mut Window) {
-    match window.cursor.grab_mode {
+    match window.cursor_options.grab_mode {
         CursorGrabMode::None => {
-            window.cursor.grab_mode = CursorGrabMode::Confined;
-            window.cursor.visible = false;
+            window.cursor_options.grab_mode = CursorGrabMode::Confined;
+            window.cursor_options.visible = false;
         }
         _ => {
-            window.cursor.grab_mode = CursorGrabMode::None;
-            window.cursor.visible = true;
+            window.cursor_options.grab_mode = CursorGrabMode::None;
+            window.cursor_options.visible = true;
         }
     }
 }
@@ -98,10 +91,8 @@ fn initial_grab_cursor(mut primary_window: Query<&mut Window, With<PrimaryWindow
 /// Spawns the `Camera3dBundle` to be controlled
 fn setup_player(mut commands: Commands) {
     commands.spawn((
-        Camera3dBundle {
-            transform: Transform::from_xyz(0.0, 6.0, 12.0).looking_at(Vec3::ZERO, Vec3::Y),
-            ..Default::default()
-        },
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 6.0, 12.0).looking_at(Vec3::ZERO, Vec3::Y),
         FlyCam,
     ));
 }
@@ -114,7 +105,8 @@ fn player_move(
     settings: Res<MovementSettings>,
     key_bindings: Res<KeyBindings>,
     mut camera_query: Query<(&FlyCam, &mut Transform)>, //    mut query: Query<&mut Transform, With<FlyCam>>,
-    mut set: ParamSet<(Query<&mut Text, With<BiomeText>>, Query<&mut Text, With<PositionText>>)>,
+    mut text_writer: TextUiWriter,
+    mut set: ParamSet<(Query<Entity, With<BiomeText>>, Query<Entity, With<PositionText>>)>,
 ) {
     if let Ok(window) = primary_window.get_single() {
         let mut camera_pos = Vec3::ZERO;
@@ -126,7 +118,7 @@ fn player_move(
             let right = Vec3::new(local_z.z, 0., -local_z.x);
 
             for key in keys.get_pressed() {
-                match window.cursor.grab_mode {
+                match window.cursor_options.grab_mode {
                     CursorGrabMode::None => (),
                     _ => {
                         let key = *key;
@@ -148,7 +140,7 @@ fn player_move(
 
                 velocity = velocity.normalize_or_zero();
 
-                transform.translation += velocity * time.delta_seconds() * settings.speed;
+                transform.translation += velocity * time.delta_secs() * settings.speed;
             }
             camera_pos = transform.translation;
             camera_angle = transform.rotation;
@@ -166,11 +158,11 @@ fn player_move(
             }
         }
         */
-        for mut text in &mut set.p1() {
-            text.sections[1].value = camera_pos.to_string();
+        for text in &set.p1() {
+            *text_writer.text(text, 1) = camera_pos.to_string();
             let euler = camera_angle.to_euler(EulerRot::XYZ);
             let euler = (euler.0 * 1.0, euler.1 * 1.0, euler.2 * 1.0);
-            text.sections[3].value = format!("{:?}", euler);
+            *text_writer.text(text, 3) = format!("{:?}", euler);
         }
     } else {
         warn!("Primary window not found for `player_move`!");
@@ -181,29 +173,26 @@ fn player_move(
 fn player_look(
     settings: Res<MovementSettings>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
-    mut state: ResMut<InputState>,
-    motion: Res<Events<MouseMotion>>,
+    motion: Res<AccumulatedMouseMotion>,
     mut camera_query: Query<&mut Transform, With<FlyCam>>,
 ) {
     if let Ok(window) = primary_window.get_single() {
         for mut transform in camera_query.iter_mut() {
-            for ev in state.reader_motion.read(&motion) {
-                let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
-                match window.cursor.grab_mode {
-                    CursorGrabMode::None => (),
-                    _ => {
-                        // Using smallest of height or width ensures equal vertical and horizontal sensitivity
-                        let window_scale = window.height().min(window.width());
-                        pitch -= (settings.sensitivity * ev.delta.y * window_scale).to_radians();
-                        yaw -= (settings.sensitivity * ev.delta.x * window_scale).to_radians();
-                    }
+            let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
+            match window.cursor_options.grab_mode {
+                CursorGrabMode::None => (),
+                _ => {
+                    // Using smallest of height or width ensures equal vertical and horizontal sensitivity
+                    let window_scale = window.height().min(window.width());
+                    pitch -= (settings.sensitivity * motion.delta.y * window_scale).to_radians();
+                    yaw -= (settings.sensitivity * motion.delta.x * window_scale).to_radians();
                 }
-
-                pitch = pitch.clamp(-1.54, 1.54);
-
-                // Order is important to prevent unintended roll
-                transform.rotation = Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_axis_angle(Vec3::X, pitch);
             }
+
+            pitch = pitch.clamp(-1.54, 1.54);
+
+            // Order is important to prevent unintended roll
+            transform.rotation = Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_axis_angle(Vec3::X, pitch);
         }
     } else {
         warn!("Primary window not found for `player_look`!");
@@ -242,63 +231,50 @@ fn initial_grab_on_flycam_spawn(
 
 fn spawn_debug_text(asset_server: Res<AssetServer>, mut commands: Commands) {
     let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
-    commands.spawn((
-        TextBundle::from_sections([
-            TextSection::new(
-                "Current Biome:",
-                TextStyle {
-                    font: font.clone(),
-                    font_size: 15.0,
-                    color: Color::srgb(0.9, 0.9, 0.9),
-                },
-            ),
-            TextSection::from_style(TextStyle {
-                font: font.clone(),
-                font_size: 15.0,
-                color: Color::srgb(0.9, 0.9, 0.9),
-            }),
-        ]),
-        BiomeText,
-    ));
-    commands.spawn((
-        TextBundle::from_sections([
-            TextSection::new(
-                "\nCurrent Position:",
-                TextStyle {
-                    font: font.clone(),
-                    font_size: 15.0,
-                    color: Color::srgb(0.9, 0.9, 0.9),
-                },
-            ),
-            TextSection::from_style(TextStyle {
-                font: font.clone(),
-                font_size: 15.0,
-                color: Color::srgb(0.9, 0.9, 0.9),
-            }),
-            TextSection::new(
-                "\nCurrent Rotation:",
-                TextStyle {
-                    font: font.clone(),
-                    font_size: 15.0,
-                    color: Color::srgb(0.9, 0.9, 0.9),
-                },
-            ),
-            TextSection::from_style(TextStyle {
-                font: font.clone(),
-                font_size: 15.0,
-                color: Color::srgb(0.9, 0.9, 0.9),
-            }),
-        ]),
-        PositionText,
-    ));
+    commands
+        .spawn((
+            Text::new("Current Biome:"),
+            TextFont::from_font(font.clone()).with_font_size(15.0),
+            TextColor(Color::srgb(0.9, 0.9, 0.9)),
+            BiomeText,
+        ))
+        .with_child((
+            TextSpan::new(""),
+            TextFont::from_font(font.clone()).with_font_size(15.0),
+            TextColor(Color::srgb(0.9, 0.9, 0.9)),
+        ));
+    commands
+        .spawn((
+            Text::new("\nCurrent Position:"),
+            TextFont::from_font(font.clone()).with_font_size(15.0),
+            TextColor(Color::srgb(0.9, 0.9, 0.9)),
+            BiomeText,
+            PositionText,
+        ))
+        .with_children(|b| {
+            b.spawn((
+                TextSpan::new(""),
+                TextFont::from_font(font.clone()).with_font_size(15.0),
+                TextColor(Color::srgb(0.9, 0.9, 0.9)),
+            ));
+            b.spawn((
+                TextSpan::new("\nCurrent Rotation:"),
+                TextFont::from_font(font.clone()).with_font_size(15.0),
+                TextColor(Color::srgb(0.9, 0.9, 0.9)),
+            ));
+            b.spawn((
+                TextSpan::new(""),
+                TextFont::from_font(font.clone()).with_font_size(15.0),
+                TextColor(Color::srgb(0.9, 0.9, 0.9)),
+            ));
+        });
 }
 
 /// Contains everything needed to add first-person fly camera behavior to your game
 pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<InputState>()
-            .init_resource::<MovementSettings>()
+        app.init_resource::<MovementSettings>()
             .init_resource::<KeyBindings>()
             .add_systems(OnEnter(ClientAppState::InGame), setup_player)
             .add_systems(OnEnter(ClientAppState::InGame), initial_grab_cursor)
@@ -313,8 +289,7 @@ impl Plugin for PlayerPlugin {
 pub struct NoCameraPlayerPlugin;
 impl Plugin for NoCameraPlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<InputState>()
-            .init_resource::<MovementSettings>()
+        app.init_resource::<MovementSettings>()
             .init_resource::<KeyBindings>()
             .add_systems(OnEnter(ClientAppState::InGame), initial_grab_cursor)
             .add_systems(OnEnter(ClientAppState::InGame), initial_grab_on_flycam_spawn)

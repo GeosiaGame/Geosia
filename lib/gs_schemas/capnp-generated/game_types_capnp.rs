@@ -19,12 +19,12 @@ pub mod option { /* T */
     reader: ::capnp::private::layout::StructReader<'a>,
     _phantom: ::core::marker::PhantomData<T>
   }
-  impl <'a,T> ::core::marker::Copy for Reader<'a,T> where T: ::capnp::traits::Owned  {}
-  impl <'a,T> ::core::clone::Clone for Reader<'a,T> where T: ::capnp::traits::Owned  {
+  impl <T> ::core::marker::Copy for Reader<'_,T> where T: ::capnp::traits::Owned  {}
+  impl <T> ::core::clone::Clone for Reader<'_,T> where T: ::capnp::traits::Owned  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,T> ::capnp::traits::HasTypeId for Reader<'a,T> where T: ::capnp::traits::Owned  {
+  impl <T> ::capnp::traits::HasTypeId for Reader<'_,T> where T: ::capnp::traits::Owned  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,T> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,T> where T: ::capnp::traits::Owned  {
@@ -39,7 +39,7 @@ pub mod option { /* T */
     }
   }
 
-  impl <'a,T> ::core::fmt::Debug for Reader<'a,T> where T: ::capnp::traits::Owned  {
+  impl <T> ::core::fmt::Debug for Reader<'_,T> where T: ::capnp::traits::Owned  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -98,10 +98,10 @@ pub mod option { /* T */
     builder: ::capnp::private::layout::StructBuilder<'a>,
     _phantom: ::core::marker::PhantomData<T>
   }
-  impl <'a,T> ::capnp::traits::HasStructSize for Builder<'a,T> where T: ::capnp::traits::Owned  {
+  impl <T> ::capnp::traits::HasStructSize for Builder<'_,T> where T: ::capnp::traits::Owned  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 1, pointers: 1 };
   }
-  impl <'a,T> ::capnp::traits::HasTypeId for Builder<'a,T> where T: ::capnp::traits::Owned  {
+  impl <T> ::capnp::traits::HasTypeId for Builder<'_,T> where T: ::capnp::traits::Owned  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,T> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,T> where T: ::capnp::traits::Owned  {
@@ -131,7 +131,7 @@ pub mod option { /* T */
     }
   }
 
-  impl <'a,T> ::capnp::traits::SetterInput<Owned<T>> for Reader<'a,T> where T: ::capnp::traits::Owned  {
+  impl <T> ::capnp::traits::SetterInput<Owned<T>> for Reader<'_,T> where T: ::capnp::traits::Owned  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -300,12 +300,12 @@ pub mod result { /* Ok,Err */
     reader: ::capnp::private::layout::StructReader<'a>,
     _phantom: ::core::marker::PhantomData<(Ok,Err)>
   }
-  impl <'a,Ok,Err> ::core::marker::Copy for Reader<'a,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {}
-  impl <'a,Ok,Err> ::core::clone::Clone for Reader<'a,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
+  impl <Ok,Err> ::core::marker::Copy for Reader<'_,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {}
+  impl <Ok,Err> ::core::clone::Clone for Reader<'_,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,Ok,Err> ::capnp::traits::HasTypeId for Reader<'a,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
+  impl <Ok,Err> ::capnp::traits::HasTypeId for Reader<'_,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,Ok,Err> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
@@ -320,7 +320,7 @@ pub mod result { /* Ok,Err */
     }
   }
 
-  impl <'a,Ok,Err> ::core::fmt::Debug for Reader<'a,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
+  impl <Ok,Err> ::core::fmt::Debug for Reader<'_,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -384,10 +384,10 @@ pub mod result { /* Ok,Err */
     builder: ::capnp::private::layout::StructBuilder<'a>,
     _phantom: ::core::marker::PhantomData<(Ok,Err)>
   }
-  impl <'a,Ok,Err> ::capnp::traits::HasStructSize for Builder<'a,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
+  impl <Ok,Err> ::capnp::traits::HasStructSize for Builder<'_,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 1, pointers: 1 };
   }
-  impl <'a,Ok,Err> ::capnp::traits::HasTypeId for Builder<'a,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
+  impl <Ok,Err> ::capnp::traits::HasTypeId for Builder<'_,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,Ok,Err> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
@@ -417,7 +417,7 @@ pub mod result { /* Ok,Err */
     }
   }
 
-  impl <'a,Ok,Err> ::capnp::traits::SetterInput<Owned<Ok,Err>> for Reader<'a,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
+  impl <Ok,Err> ::capnp::traits::SetterInput<Owned<Ok,Err>> for Reader<'_,Ok,Err> where Ok: ::capnp::traits::Owned, Err: ::capnp::traits::Owned  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -597,12 +597,12 @@ pub mod version {
   impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
 
   pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
-  impl <'a,> ::core::marker::Copy for Reader<'a,>  {}
-  impl <'a,> ::core::clone::Clone for Reader<'a,>  {
+  impl <> ::core::marker::Copy for Reader<'_,>  {}
+  impl <> ::core::clone::Clone for Reader<'_,>  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Reader<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,>  {
@@ -617,7 +617,7 @@ pub mod version {
     }
   }
 
-  impl <'a,> ::core::fmt::Debug for Reader<'a,>  {
+  impl <> ::core::fmt::Debug for Reader<'_,>  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -680,10 +680,10 @@ pub mod version {
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
-  impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+  impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 2, pointers: 2 };
   }
-  impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,>  {
@@ -713,7 +713,7 @@ pub mod version {
     }
   }
 
-  impl <'a,> ::capnp::traits::SetterInput<Owned<>> for Reader<'a,>  {
+  impl <> ::capnp::traits::SetterInput<Owned<>> for Reader<'_,>  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -929,12 +929,12 @@ pub mod uuid {
   impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
 
   pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
-  impl <'a,> ::core::marker::Copy for Reader<'a,>  {}
-  impl <'a,> ::core::clone::Clone for Reader<'a,>  {
+  impl <> ::core::marker::Copy for Reader<'_,>  {}
+  impl <> ::core::clone::Clone for Reader<'_,>  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Reader<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,>  {
@@ -949,7 +949,7 @@ pub mod uuid {
     }
   }
 
-  impl <'a,> ::core::fmt::Debug for Reader<'a,>  {
+  impl <> ::core::fmt::Debug for Reader<'_,>  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -973,7 +973,7 @@ pub mod uuid {
     }
   }
 
-  impl <'a,> Reader<'a,>  {
+  impl <> Reader<'_,>  {
     pub fn reborrow(&self) -> Reader<'_,> {
       Self { .. *self }
     }
@@ -992,10 +992,10 @@ pub mod uuid {
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
-  impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+  impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 2, pointers: 0 };
   }
-  impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,>  {
@@ -1025,7 +1025,7 @@ pub mod uuid {
     }
   }
 
-  impl <'a,> ::capnp::traits::SetterInput<Owned<>> for Reader<'a,>  {
+  impl <> ::capnp::traits::SetterInput<Owned<>> for Reader<'_,>  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -1151,12 +1151,12 @@ pub mod i_vec2 {
   impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
 
   pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
-  impl <'a,> ::core::marker::Copy for Reader<'a,>  {}
-  impl <'a,> ::core::clone::Clone for Reader<'a,>  {
+  impl <> ::core::marker::Copy for Reader<'_,>  {}
+  impl <> ::core::clone::Clone for Reader<'_,>  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Reader<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,>  {
@@ -1171,7 +1171,7 @@ pub mod i_vec2 {
     }
   }
 
-  impl <'a,> ::core::fmt::Debug for Reader<'a,>  {
+  impl <> ::core::fmt::Debug for Reader<'_,>  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -1195,7 +1195,7 @@ pub mod i_vec2 {
     }
   }
 
-  impl <'a,> Reader<'a,>  {
+  impl <> Reader<'_,>  {
     pub fn reborrow(&self) -> Reader<'_,> {
       Self { .. *self }
     }
@@ -1214,10 +1214,10 @@ pub mod i_vec2 {
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
-  impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+  impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 1, pointers: 0 };
   }
-  impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,>  {
@@ -1247,7 +1247,7 @@ pub mod i_vec2 {
     }
   }
 
-  impl <'a,> ::capnp::traits::SetterInput<Owned<>> for Reader<'a,>  {
+  impl <> ::capnp::traits::SetterInput<Owned<>> for Reader<'_,>  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -1373,12 +1373,12 @@ pub mod i_vec3 {
   impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
 
   pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
-  impl <'a,> ::core::marker::Copy for Reader<'a,>  {}
-  impl <'a,> ::core::clone::Clone for Reader<'a,>  {
+  impl <> ::core::marker::Copy for Reader<'_,>  {}
+  impl <> ::core::clone::Clone for Reader<'_,>  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Reader<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,>  {
@@ -1393,7 +1393,7 @@ pub mod i_vec3 {
     }
   }
 
-  impl <'a,> ::core::fmt::Debug for Reader<'a,>  {
+  impl <> ::core::fmt::Debug for Reader<'_,>  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -1417,7 +1417,7 @@ pub mod i_vec3 {
     }
   }
 
-  impl <'a,> Reader<'a,>  {
+  impl <> Reader<'_,>  {
     pub fn reborrow(&self) -> Reader<'_,> {
       Self { .. *self }
     }
@@ -1440,10 +1440,10 @@ pub mod i_vec3 {
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
-  impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+  impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 2, pointers: 0 };
   }
-  impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,>  {
@@ -1473,7 +1473,7 @@ pub mod i_vec3 {
     }
   }
 
-  impl <'a,> ::capnp::traits::SetterInput<Owned<>> for Reader<'a,>  {
+  impl <> ::capnp::traits::SetterInput<Owned<>> for Reader<'_,>  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -1623,12 +1623,12 @@ pub mod i64_vec2 {
   impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
 
   pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
-  impl <'a,> ::core::marker::Copy for Reader<'a,>  {}
-  impl <'a,> ::core::clone::Clone for Reader<'a,>  {
+  impl <> ::core::marker::Copy for Reader<'_,>  {}
+  impl <> ::core::clone::Clone for Reader<'_,>  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Reader<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,>  {
@@ -1643,7 +1643,7 @@ pub mod i64_vec2 {
     }
   }
 
-  impl <'a,> ::core::fmt::Debug for Reader<'a,>  {
+  impl <> ::core::fmt::Debug for Reader<'_,>  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -1667,7 +1667,7 @@ pub mod i64_vec2 {
     }
   }
 
-  impl <'a,> Reader<'a,>  {
+  impl <> Reader<'_,>  {
     pub fn reborrow(&self) -> Reader<'_,> {
       Self { .. *self }
     }
@@ -1690,10 +1690,10 @@ pub mod i64_vec2 {
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
-  impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+  impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 3, pointers: 0 };
   }
-  impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,>  {
@@ -1723,7 +1723,7 @@ pub mod i64_vec2 {
     }
   }
 
-  impl <'a,> ::capnp::traits::SetterInput<Owned<>> for Reader<'a,>  {
+  impl <> ::capnp::traits::SetterInput<Owned<>> for Reader<'_,>  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -1874,12 +1874,12 @@ pub mod i64_vec3 {
   impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
 
   pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
-  impl <'a,> ::core::marker::Copy for Reader<'a,>  {}
-  impl <'a,> ::core::clone::Clone for Reader<'a,>  {
+  impl <> ::core::marker::Copy for Reader<'_,>  {}
+  impl <> ::core::clone::Clone for Reader<'_,>  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Reader<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,>  {
@@ -1894,7 +1894,7 @@ pub mod i64_vec3 {
     }
   }
 
-  impl <'a,> ::core::fmt::Debug for Reader<'a,>  {
+  impl <> ::core::fmt::Debug for Reader<'_,>  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -1918,7 +1918,7 @@ pub mod i64_vec3 {
     }
   }
 
-  impl <'a,> Reader<'a,>  {
+  impl <> Reader<'_,>  {
     pub fn reborrow(&self) -> Reader<'_,> {
       Self { .. *self }
     }
@@ -1941,10 +1941,10 @@ pub mod i64_vec3 {
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
-  impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+  impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 3, pointers: 0 };
   }
-  impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,>  {
@@ -1974,7 +1974,7 @@ pub mod i64_vec3 {
     }
   }
 
-  impl <'a,> ::capnp::traits::SetterInput<Owned<>> for Reader<'a,>  {
+  impl <> ::capnp::traits::SetterInput<Owned<>> for Reader<'_,>  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -2125,12 +2125,12 @@ pub mod vec2 {
   impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
 
   pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
-  impl <'a,> ::core::marker::Copy for Reader<'a,>  {}
-  impl <'a,> ::core::clone::Clone for Reader<'a,>  {
+  impl <> ::core::marker::Copy for Reader<'_,>  {}
+  impl <> ::core::clone::Clone for Reader<'_,>  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Reader<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,>  {
@@ -2145,7 +2145,7 @@ pub mod vec2 {
     }
   }
 
-  impl <'a,> ::core::fmt::Debug for Reader<'a,>  {
+  impl <> ::core::fmt::Debug for Reader<'_,>  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -2169,7 +2169,7 @@ pub mod vec2 {
     }
   }
 
-  impl <'a,> Reader<'a,>  {
+  impl <> Reader<'_,>  {
     pub fn reborrow(&self) -> Reader<'_,> {
       Self { .. *self }
     }
@@ -2188,10 +2188,10 @@ pub mod vec2 {
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
-  impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+  impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 1, pointers: 0 };
   }
-  impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,>  {
@@ -2221,7 +2221,7 @@ pub mod vec2 {
     }
   }
 
-  impl <'a,> ::capnp::traits::SetterInput<Owned<>> for Reader<'a,>  {
+  impl <> ::capnp::traits::SetterInput<Owned<>> for Reader<'_,>  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -2347,12 +2347,12 @@ pub mod vec3 {
   impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
 
   pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
-  impl <'a,> ::core::marker::Copy for Reader<'a,>  {}
-  impl <'a,> ::core::clone::Clone for Reader<'a,>  {
+  impl <> ::core::marker::Copy for Reader<'_,>  {}
+  impl <> ::core::clone::Clone for Reader<'_,>  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Reader<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,>  {
@@ -2367,7 +2367,7 @@ pub mod vec3 {
     }
   }
 
-  impl <'a,> ::core::fmt::Debug for Reader<'a,>  {
+  impl <> ::core::fmt::Debug for Reader<'_,>  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -2391,7 +2391,7 @@ pub mod vec3 {
     }
   }
 
-  impl <'a,> Reader<'a,>  {
+  impl <> Reader<'_,>  {
     pub fn reborrow(&self) -> Reader<'_,> {
       Self { .. *self }
     }
@@ -2414,10 +2414,10 @@ pub mod vec3 {
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
-  impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+  impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 2, pointers: 0 };
   }
-  impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,>  {
@@ -2447,7 +2447,7 @@ pub mod vec3 {
     }
   }
 
-  impl <'a,> ::capnp::traits::SetterInput<Owned<>> for Reader<'a,>  {
+  impl <> ::capnp::traits::SetterInput<Owned<>> for Reader<'_,>  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -2597,12 +2597,12 @@ pub mod quat {
   impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
 
   pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
-  impl <'a,> ::core::marker::Copy for Reader<'a,>  {}
-  impl <'a,> ::core::clone::Clone for Reader<'a,>  {
+  impl <> ::core::marker::Copy for Reader<'_,>  {}
+  impl <> ::core::clone::Clone for Reader<'_,>  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Reader<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,>  {
@@ -2617,7 +2617,7 @@ pub mod quat {
     }
   }
 
-  impl <'a,> ::core::fmt::Debug for Reader<'a,>  {
+  impl <> ::core::fmt::Debug for Reader<'_,>  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -2641,7 +2641,7 @@ pub mod quat {
     }
   }
 
-  impl <'a,> Reader<'a,>  {
+  impl <> Reader<'_,>  {
     pub fn reborrow(&self) -> Reader<'_,> {
       Self { .. *self }
     }
@@ -2668,10 +2668,10 @@ pub mod quat {
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
-  impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+  impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 2, pointers: 0 };
   }
-  impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,>  {
@@ -2701,7 +2701,7 @@ pub mod quat {
     }
   }
 
-  impl <'a,> ::capnp::traits::SetterInput<Owned<>> for Reader<'a,>  {
+  impl <> ::capnp::traits::SetterInput<Owned<>> for Reader<'_,>  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -2875,12 +2875,12 @@ pub mod registry_name {
   impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
 
   pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
-  impl <'a,> ::core::marker::Copy for Reader<'a,>  {}
-  impl <'a,> ::core::clone::Clone for Reader<'a,>  {
+  impl <> ::core::marker::Copy for Reader<'_,>  {}
+  impl <> ::core::clone::Clone for Reader<'_,>  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Reader<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,>  {
@@ -2895,7 +2895,7 @@ pub mod registry_name {
     }
   }
 
-  impl <'a,> ::core::fmt::Debug for Reader<'a,>  {
+  impl <> ::core::fmt::Debug for Reader<'_,>  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -2946,10 +2946,10 @@ pub mod registry_name {
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
-  impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+  impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 0, pointers: 2 };
   }
-  impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,>  {
@@ -2979,7 +2979,7 @@ pub mod registry_name {
     }
   }
 
-  impl <'a,> ::capnp::traits::SetterInput<Owned<>> for Reader<'a,>  {
+  impl <> ::capnp::traits::SetterInput<Owned<>> for Reader<'_,>  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -3122,12 +3122,12 @@ pub mod registry_id_mapping_bundle {
   impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
 
   pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
-  impl <'a,> ::core::marker::Copy for Reader<'a,>  {}
-  impl <'a,> ::core::clone::Clone for Reader<'a,>  {
+  impl <> ::core::marker::Copy for Reader<'_,>  {}
+  impl <> ::core::clone::Clone for Reader<'_,>  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Reader<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,>  {
@@ -3142,7 +3142,7 @@ pub mod registry_id_mapping_bundle {
     }
   }
 
-  impl <'a,> ::core::fmt::Debug for Reader<'a,>  {
+  impl <> ::core::fmt::Debug for Reader<'_,>  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -3201,10 +3201,10 @@ pub mod registry_id_mapping_bundle {
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
-  impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+  impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 0, pointers: 3 };
   }
-  impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,>  {
@@ -3234,7 +3234,7 @@ pub mod registry_id_mapping_bundle {
     }
   }
 
-  impl <'a,> ::capnp::traits::SetterInput<Owned<>> for Reader<'a,>  {
+  impl <> ::capnp::traits::SetterInput<Owned<>> for Reader<'_,>  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -3423,12 +3423,12 @@ pub mod game_bootstrap_data {
   impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
 
   pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
-  impl <'a,> ::core::marker::Copy for Reader<'a,>  {}
-  impl <'a,> ::core::clone::Clone for Reader<'a,>  {
+  impl <> ::core::marker::Copy for Reader<'_,>  {}
+  impl <> ::core::clone::Clone for Reader<'_,>  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Reader<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,>  {
@@ -3443,7 +3443,7 @@ pub mod game_bootstrap_data {
     }
   }
 
-  impl <'a,> ::core::fmt::Debug for Reader<'a,>  {
+  impl <> ::core::fmt::Debug for Reader<'_,>  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -3502,10 +3502,10 @@ pub mod game_bootstrap_data {
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
-  impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+  impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 0, pointers: 3 };
   }
-  impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,>  {
@@ -3535,7 +3535,7 @@ pub mod game_bootstrap_data {
     }
   }
 
-  impl <'a,> ::capnp::traits::SetterInput<Owned<>> for Reader<'a,>  {
+  impl <> ::capnp::traits::SetterInput<Owned<>> for Reader<'_,>  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
@@ -3723,12 +3723,12 @@ pub mod full_chunk_data {
   impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
 
   pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
-  impl <'a,> ::core::marker::Copy for Reader<'a,>  {}
-  impl <'a,> ::core::clone::Clone for Reader<'a,>  {
+  impl <> ::core::marker::Copy for Reader<'_,>  {}
+  impl <> ::core::clone::Clone for Reader<'_,>  {
     fn clone(&self) -> Self { *self }
   }
 
-  impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Reader<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructReader<'a>> for Reader<'a,>  {
@@ -3743,7 +3743,7 @@ pub mod full_chunk_data {
     }
   }
 
-  impl <'a,> ::core::fmt::Debug for Reader<'a,>  {
+  impl <> ::core::fmt::Debug for Reader<'_,>  {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::result::Result<(), ::core::fmt::Error> {
       core::fmt::Debug::fmt(&::core::convert::Into::<::capnp::dynamic_value::Reader<'_>>::into(*self), f)
     }
@@ -3794,10 +3794,10 @@ pub mod full_chunk_data {
   }
 
   pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
-  impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+  impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
     const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 0, pointers: 2 };
   }
-  impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+  impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
     const TYPE_ID: u64 = _private::TYPE_ID;
   }
   impl <'a,> ::core::convert::From<::capnp::private::layout::StructBuilder<'a>> for Builder<'a,>  {
@@ -3827,7 +3827,7 @@ pub mod full_chunk_data {
     }
   }
 
-  impl <'a,> ::capnp::traits::SetterInput<Owned<>> for Reader<'a,>  {
+  impl <> ::capnp::traits::SetterInput<Owned<>> for Reader<'_,>  {
     fn set_pointer_builder(mut pointer: ::capnp::private::layout::PointerBuilder<'_>, value: Self, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
   }
 
