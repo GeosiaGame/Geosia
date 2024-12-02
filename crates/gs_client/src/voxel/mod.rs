@@ -166,12 +166,11 @@ fn client_chunk_mesher_system(
         trace!(position = %pos, "Spawning new chunk mesh");
 
         let entity = commands
-            .spawn(PbrBundle {
-                mesh: mesh.clone(),
-                material: voxel_material.clone(),
-                transform: Transform::from_translation(AbsBlockPos::from(pos).as_vec3()),
-                ..default()
-            })
+            .spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(voxel_material.clone()),
+                Transform::from_translation(AbsBlockPos::from(pos).as_vec3()),
+            ))
             .id();
 
         let mesh = chunk.new_with_same_revision(ChunkMeshState {

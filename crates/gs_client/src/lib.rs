@@ -106,9 +106,12 @@ pub fn client_main() {
         .add_plugins(ImagePlugin::default())
         .add_plugins(PipelinedRenderingPlugin)
         .add_plugins(CorePipelinePlugin)
-        .add_plugins(SpritePlugin)
+        .add_plugins(SpritePlugin { add_picking: false })
         .add_plugins(TextPlugin)
-        .add_plugins(UiPlugin)
+        .add_plugins(UiPlugin {
+            add_picking: false,
+            enable_rendering: true,
+        })
         .add_plugins(PbrPlugin::default())
         .add_plugins(AudioPlugin::default())
         .add_plugins(GilrsPlugin)
@@ -180,15 +183,14 @@ mod debug_window {
         warn!("Setting up debug window");
         let _ = asset_server.load::<Font>("fonts/cascadiacode.ttf");
 
-        commands.spawn(DirectionalLightBundle {
-            directional_light: DirectionalLight {
+        commands.spawn((
+            DirectionalLight {
                 shadows_enabled: false,
                 illuminance: 1000.0,
                 ..default()
             },
-            transform: Transform::from_xyz(0., 1000., 0.).looking_at(Vec3::new(300.0, 0.0, 300.0), Vec3::Y),
-            ..default()
-        });
+            Transform::from_xyz(0., 1000., 0.).looking_at(Vec3::new(300.0, 0.0, 300.0), Vec3::Y),
+        ));
         warn!("Setting up debug window done");
     }
 }

@@ -36,6 +36,7 @@ features = [
     "bevy_audio",         # Builtin audio
     "bevy_gilrs",         # Gamepad input support
     "bevy_scene",         # Scenes management
+    "bevy_window",        # Window management
     "bevy_winit",         # Window management
     "bevy_render",        # Rendering framework core
     "bevy_core_pipeline", # Common rendering abstractions
@@ -54,7 +55,6 @@ features = [
 
     # Extra Bevy functionality:
     "wayland",              # Linux: Support Wayland windowing system
-    "subpixel_glyph_atlas", # Subpixel antialiasing for text/fonts
     "accesskit_unix",       # AccessKit integration for UI Accessibility
 
     # Development/Debug features:
