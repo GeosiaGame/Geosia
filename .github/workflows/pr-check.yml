@@ -24,9 +24,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest ]
-        rust: [ stable, nightly-2024-08-10 ]
+        rust: [ stable, nightly-2024-12-01 ]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
 #          - os: macos-latest
     env:
       RUST_BACKTRACE: full
@@ -35,13 +35,13 @@ jobs:
       RUSTC_WRAPPER: "sccache"
     steps:
       - name: Install dependencies
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         run: |
           sudo apt-get update --yes
           sudo apt-get install --yes --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev libvulkan-dev
       - uses: actions/checkout@v4
       - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.4
+        uses: mozilla-actions/sccache-action@v0.0.6
       - name: Install Rust ${{ matrix.rust }}
         uses: dtolnay/rust-toolchain@stable
         with:
