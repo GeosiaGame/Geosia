@@ -55,7 +55,7 @@ pub trait ClientVoxelUniverseBuilder: Sized {
     fn with_client_chunk_system(self) -> Self;
 }
 
-impl<'world> ClientVoxelUniverseBuilder for VoxelUniverseBuilder<'world, ClientData> {
+impl ClientVoxelUniverseBuilder for VoxelUniverseBuilder<'_, ClientData> {
     fn with_client_chunk_system(mut self) -> Self {
         self.bundle.world_scope(|world| {
             let fixed_pre_update = FixedPreUpdate.intern();

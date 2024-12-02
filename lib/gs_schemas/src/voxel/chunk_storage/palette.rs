@@ -33,7 +33,7 @@ enum SafePaletteIndicesMut<'d> {
     U16(&'d mut [u16; CHUNK_DIM3Z]),
 }
 
-impl<'d> SafePaletteIndices<'d> {
+impl SafePaletteIndices<'_> {
     fn new(data_storage: &SmallVec<[u16; 1]>) -> SafePaletteIndices {
         match data_storage.len() {
             0 | 1 => SafePaletteIndices::Singleton,
@@ -59,7 +59,7 @@ impl<'d> SafePaletteIndices<'d> {
     }
 }
 
-impl<'d> SafePaletteIndicesMut<'d> {
+impl SafePaletteIndicesMut<'_> {
     fn new(data_storage: &mut SmallVec<[u16; 1]>) -> SafePaletteIndicesMut {
         match data_storage.len() {
             0 | 1 => SafePaletteIndicesMut::Singleton,
@@ -367,14 +367,14 @@ impl<DataType: ChunkDataType + Copy> ChunkStorage<DataType> for PaletteStorage<D
             SafePaletteIndicesMut::U8(indices) => {
                 if palette_pos <= u8::MAX as u16 {
                     let old_idx = std::mem::replace(&mut indices[position.as_index()], palette_pos as u8);
-                    return self.palette.get(old_idx as usize).copied().unwrap();
+                    self.palette.get(old_idx as usize).copied().unwrap()
                 } else {
                     unreachable!();
                 }
             }
             SafePaletteIndicesMut::U16(indices) => {
                 let old_idx = std::mem::replace(&mut indices[position.as_index()], palette_pos);
-                return self.palette.get(old_idx as usize).copied().unwrap();
+                self.palette.get(old_idx as usize).copied().unwrap()
             }
         }
     }

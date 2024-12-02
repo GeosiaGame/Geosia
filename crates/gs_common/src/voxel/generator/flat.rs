@@ -49,7 +49,7 @@ impl FlatGenerator {
             }
             cur_y = end_y;
         }
-        return *self.layers.last().unwrap();
+        *self.layers.last().unwrap()
     }
 }
 

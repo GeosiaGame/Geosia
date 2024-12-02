@@ -112,14 +112,14 @@ impl<'a> RegistryNameRef<'a> {
     }
 }
 
-impl<'a> Equivalent<RegistryName> for RegistryNameRef<'a> {
+impl Equivalent<RegistryName> for RegistryNameRef<'_> {
     /// Enabled heterogeneous lookup in [`HashMap`] and related types.
     fn equivalent(&self, key: &RegistryName) -> bool {
         key.as_ref() == *self
     }
 }
 
-impl<'a> Equivalent<RegistryNameRef<'a>> for RegistryName {
+impl Equivalent<RegistryNameRef<'_>> for RegistryName {
     /// Enabled heterogeneous lookup in [`HashMap`] and related types.
     fn equivalent(&self, key: &RegistryNameRef) -> bool {
         *key == self.as_ref()
@@ -174,7 +174,7 @@ impl Display for RegistryName {
     }
 }
 
-impl<'a> Display for RegistryNameRef<'a> {
+impl Display for RegistryNameRef<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}", self.ns, self.key)
     }
