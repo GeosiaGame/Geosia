@@ -1,18 +1,21 @@
 //! Network transport implementations - local message passing for singleplayer&unit tests and QUIC for multiplayer
 
+use std::ops::{Deref, DerefMut};
+
 use capnp::message::ReaderOptions;
+use capnp::Word;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::VatNetwork;
 use capnp_rpc::RpcSystem;
 use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::schemas::{network_capnp as rpc, read_leb128, write_leb128, NetworkStreamHeader};
 use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
-use quinn::{RecvStream, SendStream};
+use quinn::{Connection, RecvStream, SendStream};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 use rustls::version::TLS13;
 use rustls::{DigitallySignedStruct, Error, SignatureScheme, SupportedProtocolVersion};
-use tokio_util::bytes::{Bytes, BytesMut};
+use tokio_util::bytes::Bytes;
 
 use crate::network::server::{NetworkThreadServerState, Server2ClientEndpoint};
 use crate::network::PeerAddress;
@@ -85,6 +88,54 @@ pub static RPC_CLIENT_READER_OPTIONS: ReaderOptions = ReaderOptions {
 /// Size in bytes of the in-process client-server "socket" buffer.
 const INPROCESS_SOCKET_BUFFER_SIZE: usize = 1024 * 1024;
 
+/// A byte array over-aligned to Cap'n proto requirements.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct AlignedBytesMut {
+    buffer: Vec<Word>,
+    len: usize,
+}
+
+impl AlignedBytesMut {
+    /// Allocates a mutable byte array object with the given length in bytes, and the alignment required by Cap'n proto.
+    pub fn new(len: usize) -> Self {
+        Self {
+            buffer: Word::allocate_zeroed_vec(len.div_ceil(size_of::<Word>())),
+            len,
+        }
+    }
+}
+
+impl Deref for AlignedBytesMut {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &Word::words_to_bytes(&self.buffer)[0..self.len]
+    }
+}
+
+impl DerefMut for AlignedBytesMut {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut Word::words_to_bytes_mut(&mut self.buffer)[0..self.len]
+    }
+}
+
+impl AsRef<[u8]> for AlignedBytesMut {
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
+    }
+}
+
+impl AsMut<[u8]> for AlignedBytesMut {
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.deref_mut()
+    }
+}
+
+impl From<AlignedBytesMut> for Bytes {
+    fn from(value: AlignedBytesMut) -> Self {
+        Self::from_owner(value)
+    }
+}
+
 /// A QUIC network stream for communication asynchronous to the main RPC channel.
 #[derive(Clone)]
 pub struct QuicStream {
@@ -94,6 +145,36 @@ pub struct QuicStream {
     pub tx: Arc<AsyncMutex<SendStream>>,
     /// The incoming QUIC stream handle.
     pub rx: Arc<AsyncMutex<RecvStream>>,
+}
+
+impl QuicStream {
+    /// Opens a new stream on an existing QUIC connection.
+    pub async fn open(connection: Connection, header: NetworkStreamHeader) -> Result<Self> {
+        let (mut tx, rx) = connection.open_bi().await?;
+        let header_bytes = header.write_to_bytes();
+        let len_bytes = write_leb128(header_bytes.len() as u64);
+        tx.write_all(&len_bytes).await?;
+        tx.write_all(&header_bytes).await?;
+        Ok(Self {
+            header,
+            tx: Arc::new(AsyncMutex::new(tx)),
+            rx: Arc::new(AsyncMutex::new(rx)),
+        })
+    }
+
+    /// Listens for a single new stream on an existing QUIC connection.
+    pub async fn accept(connection: &Connection) -> Result<Self> {
+        let (tx, mut rx) = connection.accept_bi().await?;
+        let len_bytes: usize = read_leb128(&mut rx).await?.try_into()?;
+        let mut header_bytes: Box<[u8]> = vec![0u8; len_bytes].into_boxed_slice();
+        rx.read_exact(&mut header_bytes).await?;
+        let header = NetworkStreamHeader::read_from_bytes(&header_bytes, RPC_SERVER_READER_OPTIONS)?;
+        Ok(Self {
+            header,
+            tx: Arc::new(AsyncMutex::new(tx)),
+            rx: Arc::new(AsyncMutex::new(rx)),
+        })
+    }
 }
 
 /// An in-process stream, modelling QUIC streams when using in-process communication.
@@ -182,11 +263,10 @@ impl TransportStream {
             Self::Network(quic) => {
                 let mut rx = quic.rx.lock().await;
                 let len = read_leb128(&mut *rx).await.ok()? as usize;
-                let mut buf = BytesMut::zeroed(len);
+                let mut buf = AlignedBytesMut::new(len);
                 rx.read_exact(&mut buf).await.ok()?;
-                let buf = buf.freeze();
                 assert_eq!(len, buf.len());
-                Some(buf)
+                Some(buf.into())
             }
         }
     }
@@ -294,6 +374,7 @@ pub mod test {
     }
 
     impl TestClient2ServerConnection {
+        /// Constructs a dummy connection.
         pub fn new(server_addr: PeerAddress, server_rpc: rpc::game_server::Client) -> Self {
             Self {
                 server_addr,
@@ -301,10 +382,12 @@ pub mod test {
             }
         }
 
+        /// Getter for the server address.
         pub fn server_addr(&self) -> PeerAddress {
             self.server_addr
         }
 
+        /// Getter for the server RPC client object.
         pub fn server_rpc(&self) -> &rpc::game_server::Client {
             &self.server_rpc
         }

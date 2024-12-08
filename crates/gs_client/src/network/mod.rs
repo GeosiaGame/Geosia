@@ -1,5 +1,7 @@
 //! The network client thread implementation.
 
+use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
+
 use bevy::log::*;
 use capnp::capability::Promise;
 use capnp::Error;
@@ -8,13 +10,18 @@ use capnp_rpc::twoparty::{VatId, VatNetwork};
 use capnp_rpc::{pry, Disconnector, RpcSystem};
 use gs_common::network::server::LocalConnectionPipe;
 use gs_common::network::thread::{NetworkThread, NetworkThreadState};
-use gs_common::network::transport::{InProcessStream, RPC_LOCAL_READER_OPTIONS};
+use gs_common::network::transport::{
+    quinn_client_config, InProcessStream, QuicStream, TransportStream, RPC_CLIENT_READER_OPTIONS,
+    RPC_LOCAL_READER_OPTIONS,
+};
 use gs_common::network::PeerAddress;
 use gs_common::prelude::*;
 use gs_schemas::schemas::network_capnp as rpc;
 use gs_schemas::schemas::network_capnp::authenticated_client_connection::{
     AddChatMessageParams, AddChatMessageResults, TerminateConnectionParams, TerminateConnectionResults,
 };
+use quinn::{Connection, Endpoint, EndpointConfig, RecvStream, SendStream};
+use socket2::{Domain, Socket};
 use tokio::sync::Barrier;
 use tokio::task::{spawn_local, JoinHandle};
 use tracing::Instrument;
@@ -33,9 +40,6 @@ pub struct NetworkThreadClientConnectingState {
     rpc_task: JoinHandle<Result<()>>,
     /// The async stream system task.
     stream_task: JoinHandle<Result<()>>,
-    /// The async stream creation channel.
-    // TODO: use a trait object here, so we can use sockets too.
-    _stream_sender: AsyncUnboundedSender<InProcessStream>,
 }
 
 /// Post-authentication
@@ -211,7 +215,93 @@ impl NetworkThreadClientState {
                     rpc_disconnector: Some(rpc_disconnector),
                     rpc_task,
                     stream_task,
-                    _stream_sender: pipe.outgoing_streams,
+                },
+                server_auth_rpc,
+            });
+
+        Ok(())
+    }
+
+    /// Initiates a new remote connection to the given address.
+    pub async fn connect_remotely(
+        this: &Rc<RefCell<Self>>,
+        net_thread: Arc<NetworkThread<NetworkThreadClientState>>,
+        remote_address: SocketAddr,
+    ) -> Result<()> {
+        if let Some(existing_connection) = this.borrow().peer_address() {
+            return Err(anyhow!("Already connected to {existing_connection:?}"));
+        }
+
+        let socket = Socket::new(Domain::IPV6, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))?;
+        socket.set_only_v6(false)?;
+        socket.bind(&SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0).into())?;
+        let local_addr = socket.local_addr()?;
+        let endpoint = Endpoint::new(
+            EndpointConfig::default(),
+            None,
+            socket.into(),
+            quinn::default_runtime().unwrap(),
+        )?;
+        let quic_connection = endpoint
+            .connect_with(quinn_client_config(), remote_address, "example.com")?
+            .await?;
+        let (rpc_tx, rpc_rx) = quic_connection.open_bi().await?;
+
+        let address = PeerAddress::Network {
+            local: local_addr.as_socket().context("Obtaining local socket address")?,
+            remote: quic_connection.remote_address(),
+        };
+
+        let (rpc_system, connection) = create_quic_rpc_client(address, rpc_tx, rpc_rx);
+        let rpc_disconnector = rpc_system.get_disconnector();
+        let rpc_task: JoinHandle<Result<()>> = spawn_local(
+            async move { rpc_system.await.map_err(anyhow::Error::from) }
+                .instrument(tracing::info_span!("client-rpc", address = ?address)),
+        );
+
+        // Authenticate
+        let mut auth_request = connection.server_rpc.authenticate_request();
+        {
+            let mut builder = auth_request.get();
+            builder.set_username("InternetPlayer");
+            let auth_rpc = AuthenticatedClientConnectionImpl {};
+            builder.set_connection(capnp_rpc::new_client(auth_rpc));
+        }
+        let auth_response = auth_request
+            .send()
+            .promise
+            .await
+            .context("RPC failure to authenticate with remote server")?;
+        let auth_response = auth_response.get().context("Invalid authentication response")?;
+        let auth_response = auth_response
+            .get_conn()
+            .context("Missing authentication response")?
+            .which()
+            .context("Illegal authentication response")?;
+        let server_auth_rpc = match auth_response {
+            gs_schemas::schemas::game_types_capnp::result::Which::Ok(ok) => ok?,
+            gs_schemas::schemas::game_types_capnp::result::Which::Err(err) => {
+                let err = err?;
+                let msg = err.get_message()?.to_str()?;
+                bail!("Remote server authentication error {msg}");
+            }
+        };
+
+        info!("Authenticated to the remote server via {:?}", connection.server_addr);
+
+        let stream_task: JoinHandle<Result<()>> = spawn_local(
+            Self::remote_stream_acceptor(Rc::clone(this), Arc::clone(&net_thread), quic_connection.clone())
+                .instrument(tracing::info_span!("client-stream", address = ?address)),
+        );
+
+        this.borrow_mut().variant =
+            NetworkThreadClientStateVariant::Authenticated(NetworkThreadClientAuthenticatedState {
+                connection: NetworkThreadClientConnectingState {
+                    server_address: connection.server_addr,
+                    server_rpc: connection,
+                    rpc_disconnector: Some(rpc_disconnector),
+                    rpc_task,
+                    stream_task,
                 },
                 server_auth_rpc,
             });
@@ -230,6 +320,32 @@ impl NetworkThreadClientState {
 
         while let Some(stream) = incoming_streams.recv().await {
             let handler = net_thread.create_stream_handler(Rc::clone(&this), stream.into());
+            match handler {
+                Ok(handler) => {
+                    spawn_local(handler);
+                }
+                Err(stream) => {
+                    error!(
+                        "No stream handler found for incoming server stream of type {:?}",
+                        stream.header()
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn remote_stream_acceptor(
+        this: Rc<RefCell<Self>>,
+        net_thread: Arc<NetworkThread<NetworkThreadClientState>>,
+        connection: Connection,
+    ) -> Result<()> {
+        let barrier = Arc::clone(this.borrow().ready_to_accept_streams.as_ref().unwrap());
+        barrier.wait().await;
+        this.borrow_mut().ready_to_accept_streams = None;
+
+        while let Ok(stream) = QuicStream::accept(&connection).await {
+            let handler = net_thread.create_stream_handler(Rc::clone(&this), TransportStream::Network(stream));
             match handler {
                 Ok(handler) => {
                     spawn_local(handler);
@@ -300,6 +416,18 @@ pub fn create_local_rpc_client(
 ) -> (RpcSystem<Side>, Client2ServerConnection) {
     let (read, write) = pipe.compat().split();
     let network = VatNetwork::new(read, write, Side::Client, RPC_LOCAL_READER_OPTIONS);
+    let mut rpc_system = RpcSystem::new(Box::new(network), None);
+    let server_object: rpc::game_server::Client = rpc_system.bootstrap(VatId::Server);
+    (rpc_system, Client2ServerConnection::new(id, server_object))
+}
+
+/// Create a Future that will handle in-memory messages coming from a [`Server2ClientEndpoint`] and any child RPC objects on the given `server`&`id`.
+pub fn create_quic_rpc_client(
+    id: PeerAddress,
+    tx: SendStream,
+    rx: RecvStream,
+) -> (RpcSystem<Side>, Client2ServerConnection) {
+    let network = VatNetwork::new(rx, tx, Side::Client, RPC_CLIENT_READER_OPTIONS);
     let mut rpc_system = RpcSystem::new(Box::new(network), None);
     let server_object: rpc::game_server::Client = rpc_system.bootstrap(VatId::Server);
     (rpc_system, Client2ServerConnection::new(id, server_object))

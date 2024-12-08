@@ -102,7 +102,7 @@ fn client_chunk_packet_receiver_system(
 
 fn handle_chunk_packet(raw_packet: Bytes, voxels: &mut ClientVoxelUniverse) -> Result<()> {
     let mut slice = &raw_packet as &[u8];
-    let msg = capnp::serialize::read_message_from_flat_slice(&mut slice, RPC_LOCAL_READER_OPTIONS)?;
+    let msg = capnp::serialize::read_message_from_flat_slice_no_alloc(&mut slice, RPC_LOCAL_READER_OPTIONS)?;
     let typed_reader = TypedReader::<_, rpc::chunk_data_stream_packet::Owned>::new(msg);
     let root = typed_reader.get()?;
     let cpos_r = root.reborrow().get_position()?;

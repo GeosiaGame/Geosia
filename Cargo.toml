@@ -31,7 +31,7 @@ bytemuck = { version = "1.16.1", features = [
     "zeroable_maybe_uninit",
     "zeroable_atomics",
 ] }
-capnp = "0.20.3"
+capnp = { version = "0.20.3" }
 capnp-futures = "0.20.1"
 capnp-rpc = "0.20.2"
 capnpc = "0.20.1"

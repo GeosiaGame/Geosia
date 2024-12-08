@@ -4,7 +4,7 @@
 
 use std::hash::Hash;
 
-use capnp::message::TypedBuilder;
+use capnp::message::{ReaderOptions, TypedBuilder, TypedReader};
 use futures::{AsyncRead, AsyncReadExt};
 use smallvec::SmallVec;
 use uuid::Uuid;
@@ -50,13 +50,14 @@ pub fn write_leb128(mut value: u64) -> SmallVec<[u8; 10]> {
 /// Reads a LEB128-encoded number from the given input stream.
 pub async fn read_leb128(mut input: impl AsyncRead + Unpin) -> Result<u64, std::io::Error> {
     let mut out = 0u64;
+    let mut shift = 0;
     let mut buf = [0u8];
     for _iter in 0..10 {
         input.read_exact(&mut buf).await?;
-        out |= (buf[0] & 0x7F) as u64;
+        out |= ((buf[0] & 0x7F) as u64) << shift;
         let has_more = (buf[0] & 0x80) != 0;
         if has_more {
-            out <<= 7;
+            shift += 7;
         } else {
             break;
         }
@@ -147,5 +148,14 @@ impl NetworkStreamHeader {
                 Ok(Self::Custom(RegistryName::new(ns, key)))
             }
         }
+    }
+
+    /// Deserializes a stream header from a serialized capnp message.
+    pub fn read_from_bytes(bytes: &[u8], options: ReaderOptions) -> capnp::Result<Self> {
+        let mut bytes_ref = bytes;
+        let msg = capnp::serialize::read_message_from_flat_slice_no_alloc(&mut bytes_ref, options)?;
+        let typed = TypedReader::<_, network_capnp::stream_header::Owned>::new(msg);
+        let root = typed.get()?;
+        Self::read_from_message(&root)
     }
 }

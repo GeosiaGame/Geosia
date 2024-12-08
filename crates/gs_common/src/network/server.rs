@@ -17,7 +17,7 @@ use gs_schemas::dependencies::kstring::KString;
 use gs_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
 };
-use gs_schemas::schemas::{network_capnp as rpc, write_leb128, NetworkStreamHeader, SchemaUuidExt};
+use gs_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader, SchemaUuidExt};
 use quinn::{Connection, EndpointConfig};
 use socket2::{Domain, Socket};
 use tokio::select;
@@ -77,23 +77,9 @@ impl ConnectedNetClient {
                 })
                 .boxed()
             }
-            NetClientConnectionData::Remote { connection, .. } => {
-                let connection = connection.clone();
-                (async move {
-                    let (mut tx, rx) = connection.open_bi().await?;
-                    let header_bytes = header.write_to_bytes();
-                    let len_bytes = write_leb128(header_bytes.len() as u64);
-                    tx.write_all(&len_bytes).await?;
-                    tx.write_all(&header_bytes).await?;
-                    Ok(QuicStream {
-                        header,
-                        tx: Arc::new(AsyncMutex::new(tx)),
-                        rx: Arc::new(AsyncMutex::new(rx)),
-                    }
-                    .into())
-                })
-                .boxed()
-            }
+            NetClientConnectionData::Remote { connection, .. } => QuicStream::open(connection.clone(), header)
+                .map(|r| r.map(TransportStream::from))
+                .boxed(),
         }
     }
 

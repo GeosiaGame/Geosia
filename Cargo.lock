@@ -3262,6 +3262,7 @@ dependencies = [
  "image",
  "quinn",
  "smallvec",
+ "socket2",
  "thiserror 2.0.4",
  "tokio",
  "tokio-util",
