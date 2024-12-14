@@ -9,7 +9,7 @@ use gs_common::network::thread::NetworkThread;
 use gs_common::prelude::std_unbounded_channel;
 use gs_common::prelude::*;
 use gs_common::voxel::plugin::VoxelUniverseBuilder;
-use gs_common::{builtin_game_registries, GameServer};
+use gs_common::{builtin_game_registries, GameBevyCommand, GameServer};
 use gs_schemas::dependencies::uuid::Uuid;
 use gs_schemas::registries::GameRegistries;
 use gs_schemas::schemas::SchemaUuidExt;
@@ -69,7 +69,6 @@ fn kickoff_game_transition(world: &mut World) {
         LoadingTransitionParams::SinglePlayer {} => {
             info!("Starting a new single player game");
 
-            let default_registries = builtin_game_registries();
             let game_config = GameConfig {
                 server: ServerConfig {
                     server_title: String::from("Integrated server"),
@@ -85,12 +84,8 @@ fn kickoff_game_transition(world: &mut World) {
             let net_thread = NetworkThread::new(GameSide::Client, move || NetworkThreadClientState::new(control_tx));
             let net_thread = Arc::new(net_thread);
 
-            struct IntegBootstrap {
-                registries: GameRegistries,
-            }
-
             let net_thread2 = Arc::clone(&net_thread);
-            let bootstrap_data = net_thread
+            net_thread
                 .schedule_task(|state| {
                     Box::pin(async move {
                         let local_conn = server_pipe
@@ -100,66 +95,13 @@ fn kickoff_game_transition(world: &mut World) {
                         NetworkThreadClientState::connect_locally(state, net_thread2, local_conn)
                             .await
                             .context("NetworkThreadClientState::connect_locally")?;
-                        let bootstrap_request = state
-                            .borrow()
-                            .server_auth_rpc()
-                            .context("Missing auth endpoint")?
-                            .bootstrap_game_data_request();
-                        let bootstrap_response = bootstrap_request
-                            .send()
-                            .promise
-                            .await
-                            .context("Failed bootstrap request to the integrated server")?;
-                        let bootstrap_response = bootstrap_response.get()?.get_data()?;
-                        let uuid = Uuid::read_from_message(&bootstrap_response.get_universe_id()?);
-                        let registries = default_registries.clone_with_serialized_ids(&bootstrap_response)?;
-                        let nblocks = registries.block_types.len();
-                        info!("Joining server world {uuid} with {nblocks} block types.");
-
-                        Ok(IntegBootstrap { registries })
+                        Ok(())
                     })
                 })
                 .blocking_wait()
                 .expect("Could not connect the client to the integrated server");
 
-            let client_data = ClientData {
-                shared_registries: bootstrap_data.registries,
-            };
-
-            let mut promises = world.resource_mut::<LoadingPromiseHolder>();
-            promises.promises.push(Box::new(net_thread.schedule_task(|state| {
-                Box::pin(async move {
-                    let auth_rpc = state.borrow().server_auth_rpc().cloned();
-                    if let Some(auth_rpc) = auth_rpc {
-                        let mut rq = auth_rpc.send_chat_message_request();
-                        rq.get().set_text("Hello in-process networking!");
-                        let _ = rq.send().promise.await;
-                    }
-                    Ok(())
-                })
-            })));
-
-            let block_registry = Arc::clone(&client_data.shared_registries.block_types);
-            let biome_registry = Arc::clone(&client_data.shared_registries.biome_types);
-
-            world.insert_resource(client_data);
-            world.insert_resource(ClientNetworkThreadHolder(Arc::clone(&net_thread)));
-            world.insert_resource(GameClientControlCommandReceiver(SyncCell::new(control_rx)));
-
-            VoxelUniverseBuilder::<ClientData>::new(world, block_registry, biome_registry)
-                .unwrap()
-                .with_network_client(&net_thread)
-                .unwrap()
-                .with_client_chunk_system()
-                .build();
-
-            let mut promises = world.resource_mut::<LoadingPromiseHolder>();
-            promises.promises.push(Box::new(net_thread.schedule_task(|state| {
-                Box::pin(async move {
-                    NetworkThreadClientState::allow_streams(state).await;
-                    Ok(())
-                })
-            })));
+            kickoff_connected_game_transition(world, net_thread, control_rx);
         }
         LoadingTransitionParams::MultiPlayer { server_address_raw } => {
             info!("Trying to join the multiplayer game at {server_address_raw}");
@@ -170,81 +112,105 @@ fn kickoff_game_transition(world: &mut World) {
 
             let net_thread = NetworkThread::new(GameSide::Client, move || NetworkThreadClientState::new(control_tx));
             let net_thread = Arc::new(net_thread);
-
-            struct NetBootstrap {
-                registries: GameRegistries,
-            }
-
             let net_thread2 = Arc::clone(&net_thread);
-            let default_registries = builtin_game_registries();
-            let bootstrap_data = net_thread
+
+            net_thread
                 .schedule_task(move |state| {
                     Box::pin(async move {
                         NetworkThreadClientState::connect_remotely(state, net_thread2, server_address)
                             .await
                             .context("NetworkThreadClientState::connect_remotely")?;
-                        let bootstrap_request = state
-                            .borrow()
-                            .server_auth_rpc()
-                            .context("Missing auth endpoint")?
-                            .bootstrap_game_data_request();
-                        let bootstrap_response = bootstrap_request
-                            .send()
-                            .promise
-                            .await
-                            .context("Failed bootstrap request to the remote server")?;
-                        let bootstrap_response = bootstrap_response.get()?.get_data()?;
-                        let uuid = Uuid::read_from_message(&bootstrap_response.get_universe_id()?);
-                        let registries = default_registries.clone_with_serialized_ids(&bootstrap_response)?;
-                        let nblocks = registries.block_types.len();
-                        info!("Joining server world {uuid} with {nblocks} block types.");
-
-                        Ok(NetBootstrap { registries })
+                        Ok(())
                     })
                 })
                 .blocking_wait()
                 .expect("Could not connect the client to the remote server");
 
-            let client_data = ClientData {
-                shared_registries: bootstrap_data.registries,
-            };
-
-            let mut promises = world.resource_mut::<LoadingPromiseHolder>();
-            promises.promises.push(Box::new(net_thread.schedule_task(|state| {
-                Box::pin(async move {
-                    let auth_rpc = state.borrow().server_auth_rpc().cloned();
-                    if let Some(auth_rpc) = auth_rpc {
-                        let mut rq = auth_rpc.send_chat_message_request();
-                        rq.get().set_text("Hello internet networking!");
-                        let _ = rq.send().promise.await;
-                    }
-                    Ok(())
-                })
-            })));
-
-            let block_registry = Arc::clone(&client_data.shared_registries.block_types);
-            let biome_registry = Arc::clone(&client_data.shared_registries.biome_types);
-
-            world.insert_resource(client_data);
-            world.insert_resource(ClientNetworkThreadHolder(Arc::clone(&net_thread)));
-            world.insert_resource(GameClientControlCommandReceiver(SyncCell::new(control_rx)));
-
-            VoxelUniverseBuilder::<ClientData>::new(world, block_registry, biome_registry)
-                .unwrap()
-                .with_network_client(&net_thread)
-                .unwrap()
-                .with_client_chunk_system()
-                .build();
-
-            let mut promises = world.resource_mut::<LoadingPromiseHolder>();
-            promises.promises.push(Box::new(net_thread.schedule_task(|state| {
-                Box::pin(async move {
-                    NetworkThreadClientState::allow_streams(state).await;
-                    Ok(())
-                })
-            })));
+            kickoff_connected_game_transition(world, net_thread, control_rx);
         }
     }
+}
+
+fn kickoff_connected_game_transition(
+    world: &mut World,
+    authenticated_net_thread: Arc<NetworkThread<NetworkThreadClientState>>,
+    game_command_receiver: StdUnboundedReceiver<Box<GameBevyCommand>>,
+) {
+    let default_registries = builtin_game_registries();
+    struct NetBootstrap {
+        registries: GameRegistries,
+    }
+    let bootstrap_data = authenticated_net_thread
+        .schedule_task(move |state| {
+            Box::pin(async move {
+                assert!(
+                    state.borrow().server_auth_rpc().is_some(),
+                    "Network state was not authenticated before running kickoff_connected_game_transition"
+                );
+                let bootstrap_request = state
+                    .borrow()
+                    .server_auth_rpc()
+                    .context("Missing auth endpoint")?
+                    .bootstrap_game_data_request();
+                let bootstrap_response = bootstrap_request
+                    .send()
+                    .promise
+                    .await
+                    .context("Failed bootstrap request to the remote server")?;
+                let bootstrap_response = bootstrap_response.get()?.get_data()?;
+                let uuid = Uuid::read_from_message(&bootstrap_response.get_universe_id()?);
+                let registries = default_registries.clone_with_serialized_ids(&bootstrap_response)?;
+                let nblocks = registries.block_types.len();
+                info!("Joining server world {uuid} with {nblocks} block types.");
+
+                Ok(NetBootstrap { registries })
+            })
+        })
+        .blocking_wait()
+        .expect("Could not connect the client to the remote server");
+
+    let client_data = ClientData {
+        shared_registries: bootstrap_data.registries,
+    };
+
+    let mut promises = world.resource_mut::<LoadingPromiseHolder>();
+    promises
+        .promises
+        .push(Box::new(authenticated_net_thread.schedule_task(|state| {
+            Box::pin(async move {
+                let auth_rpc = state.borrow().server_auth_rpc().cloned();
+                if let Some(auth_rpc) = auth_rpc {
+                    let mut rq = auth_rpc.send_chat_message_request();
+                    rq.get().set_text("Hello internet networking!");
+                    let _ = rq.send().promise.await;
+                }
+                Ok(())
+            })
+        })));
+
+    let block_registry = Arc::clone(&client_data.shared_registries.block_types);
+    let biome_registry = Arc::clone(&client_data.shared_registries.biome_types);
+
+    world.insert_resource(client_data);
+    world.insert_resource(ClientNetworkThreadHolder(Arc::clone(&authenticated_net_thread)));
+    world.insert_resource(GameClientControlCommandReceiver(SyncCell::new(game_command_receiver)));
+
+    VoxelUniverseBuilder::<ClientData>::new(world, block_registry, biome_registry)
+        .unwrap()
+        .with_network_client(&authenticated_net_thread)
+        .unwrap()
+        .with_client_chunk_system()
+        .build();
+
+    let mut promises = world.resource_mut::<LoadingPromiseHolder>();
+    promises
+        .promises
+        .push(Box::new(authenticated_net_thread.schedule_task(|state| {
+            Box::pin(async move {
+                NetworkThreadClientState::allow_streams(state).await;
+                Ok(())
+            })
+        })));
 }
 
 fn loading_game_transition_handler(
