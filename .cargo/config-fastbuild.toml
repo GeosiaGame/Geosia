@@ -154,3 +154,6 @@ rustflags = [
 # In most cases the gains are negligible, but if you are on macos and have slow compile times you should see significant gains.
 # [profile.dev]
 # debug = 1
+
+[alias]
+runs = "run --package gs_common --bin gs_dedi_server --"

@@ -4,12 +4,10 @@
 
 //! The clientside of Geosia - the main binary
 
-use bevy::app::App;
-use bevy::log::LogPlugin;
 use gs_client::client_main;
+use gs_common::geosia_pre_main;
 
 fn main() {
-    // Set up bevy's logging once per process
-    App::new().add_plugins(LogPlugin::default()).run();
+    geosia_pre_main();
     client_main()
 }

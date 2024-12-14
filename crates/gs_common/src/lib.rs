@@ -9,6 +9,7 @@
 //! The common client&server code for Geosia
 
 pub mod config;
+pub mod dedicated_server;
 pub mod network;
 pub mod prelude;
 pub mod promises;
@@ -20,6 +21,7 @@ use std::time::Duration;
 use bevy::app::{AppExit, ScheduleRunnerPlugin};
 use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
+use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
 use bevy::time::TimePlugin;
@@ -95,7 +97,7 @@ pub type GameBevyCommand<Output = ()> = dyn (FnOnce(&mut World) -> Output) + Sen
 /// Control commands for the server, for in-process communication.
 pub enum GameServerControlCommand {
     /// Gracefully shuts down the server, notifies on the given channel when done.
-    Shutdown(AsyncOneshotSender<()>),
+    Shutdown(AsyncOneshotSender<Result<()>>),
     /// Queues the given command to run in an exclusive system with full World access.
     Invoke(Box<GameBevyCommand>),
 }
@@ -193,6 +195,16 @@ impl GameServer {
     /// Checks if the network thread is still alive.
     pub fn is_network_alive(&self) -> bool {
         self.network_thread.is_alive()
+    }
+
+    /// Schedules a shutdown of the server, returning an awaitable result of the operation.
+    pub fn shutdown(&self) -> AsyncResult<()> {
+        if !self.is_alive() {
+            return AsyncResult::new_ok(());
+        }
+        let (result, tx) = AsyncResult::new_pair();
+        let _ = self.control_channel.send(GameServerControlCommand::Shutdown(tx));
+        result
     }
 
     /// Queues the given function to run with exclusive access to the bevy [`World`].
@@ -322,7 +334,7 @@ impl GameServer {
                     let engine = &engine.0;
                     engine.network_thread.sync_shutdown();
                     world.send_event(AppExit::Success);
-                    let _ = notif.send(());
+                    let _ = notif.send(Ok(()));
                 }
                 GameServerControlCommand::Invoke(cmd) => {
                     cmd(world);
@@ -343,4 +355,13 @@ pub fn builtin_game_registries() -> GameRegistries {
         block_types: Arc::new(block_types),
         biome_types: Arc::new(biome_types),
     }
+}
+
+/// Runs static pre-main setup needed (e.g. cryptography init)
+pub fn geosia_pre_main() {
+    // Set up bevy's logging once per process
+    App::new().add_plugins(LogPlugin::default()).run();
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Could not init cryptography");
 }

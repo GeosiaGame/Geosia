@@ -4,6 +4,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use anyhow::Error;
+use tokio::sync::Notify;
 use tracing::error;
 
 use crate::prelude::*;
@@ -151,6 +152,65 @@ impl<OkT: Send + 'static> GenericAsyncResult for AsyncResult<OkT> {
 
     fn async_generic_log_when_fails(self: Box<Self>, context: &'static str) {
         self.async_log_when_fails(context)
+    }
+}
+
+/// An idempotent handle for shutting down an async task and waiting for completion.
+#[derive(Clone)]
+pub struct ShutdownHandle(Arc<InnerShutdownHandle>);
+
+/// A RAII guard for [`ShutdownHandle`], marking the task as shut down if it gets dropped.
+pub struct ShutdownGuard(AsyncWatchSender<bool>);
+
+struct InnerShutdownHandle {
+    down_rx: AsyncWatchReceiver<bool>,
+    down_tx: AsyncWatchSender<bool>,
+    requester: Notify,
+}
+
+impl Default for ShutdownHandle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ShutdownHandle {
+    /// Constructs a new handle.
+    pub fn new() -> Self {
+        let (down_tx, down_rx) = async_watch_channel(false);
+        Self(Arc::new(InnerShutdownHandle {
+            down_rx,
+            down_tx,
+            requester: Notify::new(),
+        }))
+    }
+
+    /// Requests a shutdown if not already down, and waits for the shutdown to complete.
+    pub async fn shutdown(&self) {
+        let inner = &self.0 as &InnerShutdownHandle;
+        if *inner.down_rx.borrow() {
+            return;
+        }
+        let mut receiver = inner.down_rx.clone();
+        inner.requester.notify_one();
+        let _ = receiver.wait_for(|&down| down).await;
+    }
+
+    /// Await this in the task that can be remotely shut down, when it's ready a request has been made.
+    pub async fn handler_future(&self) {
+        self.0.requester.notified().await;
+    }
+
+    /// Assign this to a variable early in the task that can be remotely shut down, it will notify the awaiters of the task exit/drop/cancellation.
+    pub fn guard(&self) -> ShutdownGuard {
+        ShutdownGuard(self.0.down_tx.clone())
+    }
+}
+
+impl Drop for ShutdownGuard {
+    fn drop(&mut self) {
+        // Ignore the error if there is already no one watching the channel.
+        let _ = self.0.send(true);
     }
 }
 

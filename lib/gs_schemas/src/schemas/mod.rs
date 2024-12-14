@@ -4,6 +4,9 @@
 
 use std::hash::Hash;
 
+use capnp::message::{ReaderOptions, TypedBuilder, TypedReader};
+use futures::{AsyncRead, AsyncReadExt};
+use smallvec::SmallVec;
 use uuid::Uuid;
 
 use crate::registry::RegistryName;
@@ -31,6 +34,35 @@ pub mod voxel_mesh_capnp {
 #[allow(missing_docs, clippy::all)] // Auto-generated
 pub mod network_capnp {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/capnp-generated/network_capnp.rs"));
+}
+
+/// Computes the LEB128 representation of the given input.
+pub fn write_leb128(mut value: u64) -> SmallVec<[u8; 10]> {
+    let mut v = SmallVec::new();
+    while value > 0x7F {
+        v.push((0x80 | (value & 0x7F)) as u8);
+        value >>= 7;
+    }
+    v.push((value & 0x7F) as u8);
+    v
+}
+
+/// Reads a LEB128-encoded number from the given input stream.
+pub async fn read_leb128(mut input: impl AsyncRead + Unpin) -> Result<u64, std::io::Error> {
+    let mut out = 0u64;
+    let mut shift = 0;
+    let mut buf = [0u8];
+    for _iter in 0..10 {
+        input.read_exact(&mut buf).await?;
+        out |= ((buf[0] & 0x7F) as u64) << shift;
+        let has_more = (buf[0] & 0x80) != 0;
+        if has_more {
+            shift += 7;
+        } else {
+            break;
+        }
+    }
+    Ok(out)
 }
 
 /// Helpers for (de)serializing UUIDs.
@@ -77,18 +109,9 @@ impl Hash for NetworkStreamHeader {
     }
 }
 
-/// Helpers for (de)serializing stream headers.
-pub trait NetworkStreamHeaderExt {
+impl NetworkStreamHeader {
     /// Serializes a stream header into a capnp message.
-    fn write_to_message(&self, builder: &mut network_capnp::stream_header::Builder);
-    /// Deserializes a stream header from a capnp message.
-    fn read_from_message(reader: &network_capnp::stream_header::Reader) -> capnp::Result<Self>
-    where
-        Self: Sized;
-}
-
-impl NetworkStreamHeaderExt for NetworkStreamHeader {
-    fn write_to_message(&self, builder: &mut network_capnp::stream_header::Builder) {
+    pub fn write_to_message(&self, builder: &mut network_capnp::stream_header::Builder) {
         match self {
             Self::Standard(standard) => {
                 builder.set_standard_type(*standard);
@@ -101,7 +124,18 @@ impl NetworkStreamHeaderExt for NetworkStreamHeader {
         }
     }
 
-    fn read_from_message(reader: &network_capnp::stream_header::Reader) -> capnp::Result<Self> {
+    /// Serializes the capnp message into a byte array.
+    pub fn write_to_bytes(&self) -> Box<[u8]> {
+        let mut builder = TypedBuilder::<network_capnp::stream_header::Owned>::new_default();
+        let mut root = builder.init_root();
+        self.write_to_message(&mut root);
+        let mut buffer = Vec::new();
+        capnp::serialize::write_message(&mut buffer, builder.borrow_inner()).unwrap();
+        buffer.into_boxed_slice()
+    }
+
+    /// Deserializes a stream header from a capnp message.
+    pub fn read_from_message(reader: &network_capnp::stream_header::Reader) -> capnp::Result<Self> {
         match reader.which()? {
             WhichReader::StandardType(standard) => {
                 let standard = standard?;
@@ -114,5 +148,14 @@ impl NetworkStreamHeaderExt for NetworkStreamHeader {
                 Ok(Self::Custom(RegistryName::new(ns, key)))
             }
         }
+    }
+
+    /// Deserializes a stream header from a serialized capnp message.
+    pub fn read_from_bytes(bytes: &[u8], options: ReaderOptions) -> capnp::Result<Self> {
+        let mut bytes_ref = bytes;
+        let msg = capnp::serialize::read_message_from_flat_slice_no_alloc(&mut bytes_ref, options)?;
+        let typed = TypedReader::<_, network_capnp::stream_header::Owned>::new(msg);
+        let root = typed.get()?;
+        Self::read_from_message(&root)
     }
 }

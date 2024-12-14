@@ -27,9 +27,14 @@ noise.workspace = true
 quinn.workspace = true
 rand.workspace = true
 rand_xoshiro.workspace = true
+rcgen.workspace = true
+rustls.workspace = true
+rustyline.workspace = true
 serde.workspace = true
 smallvec.workspace = true
 smart-default.workspace = true
+socket2.workspace = true
+spade.workspace = true
 static_assertions.workspace = true
 thiserror.workspace = true
 thread_local.workspace = true
@@ -37,7 +42,6 @@ tokio-util.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-spade.workspace = true
 
 [features]
 trace_tracy = ["bevy/trace_tracy"]

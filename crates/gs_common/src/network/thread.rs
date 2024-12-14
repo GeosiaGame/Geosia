@@ -11,7 +11,7 @@ use hashbrown::HashMap;
 use thiserror::Error;
 use tokio::task::LocalSet;
 
-use super::transport::InProcessStream;
+use super::transport::TransportStream;
 use crate::prelude::*;
 
 /// A wrapper for a tokio runtime, allowing for easy scheduling of tasks to run within the context of the network thread.
@@ -36,7 +36,7 @@ pub type NetworkThreadAsyncFunction<State> =
     dyn for<'state> FnOnce(&'state Rc<RefCell<State>>) -> NetworkThreadAsyncFuture<'state> + Send + 'static;
 /// Handler for newly opened async streams.
 pub type NetworkThreadStreamHandler<State> =
-    dyn FnMut(Rc<RefCell<State>>, InProcessStream) -> NetworkThreadAsyncFuture<'static> + Send + 'static;
+    dyn FnMut(Rc<RefCell<State>>, TransportStream) -> NetworkThreadAsyncFuture<'static> + Send + 'static;
 
 enum NetworkThreadCommand<State> {
     Shutdown(AsyncOneshotSender<()>),
@@ -133,10 +133,10 @@ impl<State: NetworkThreadState> NetworkThread<State> {
     pub fn create_stream_handler(
         &self,
         state: Rc<RefCell<State>>,
-        stream: InProcessStream,
-    ) -> Result<NetworkThreadAsyncFuture<'static>, InProcessStream> {
+        stream: TransportStream,
+    ) -> Result<NetworkThreadAsyncFuture<'static>, TransportStream> {
         let mut factory = self.new_stream_handler.lock().unwrap();
-        let factory = factory.get_mut(&stream.header);
+        let factory = factory.get_mut(stream.header());
         match factory {
             Some(factory) => Ok(factory(state, stream)),
             None => Err(stream),

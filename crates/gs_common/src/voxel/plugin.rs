@@ -17,18 +17,19 @@ use gs_schemas::voxel::chunk_group::ChunkGroup;
 use gs_schemas::voxel::voxeltypes::BlockRegistry;
 use gs_schemas::{GameSide, GsExtraData};
 use smallvec::SmallVec;
+use tokio::task::JoinSet;
 use tokio_util::bytes::Bytes;
 
-use crate::network::server::{ConnectedPlayer, ConnectedPlayersTable};
+use crate::network::server::ConnectedPlayer;
 use crate::network::thread::{NetworkThread, NetworkThreadState};
-use crate::network::transport::InProcessStream;
+use crate::network::transport::TransportStream;
 use crate::network::PeerAddress;
 use crate::voxel::persistence::ChunkPersistenceLayer;
 use crate::{prelude::*, GameServer, GameServerResource};
 use crate::{InGameSystemSet, ServerData};
 
 /// The maximum number of stored chunk packets before applying stream backpressure.
-pub const CHUNK_PACKET_QUEUE_LENGTH: usize = 64;
+pub const CHUNK_PACKET_QUEUE_LENGTH: usize = 20;
 
 /// Initializes the settings related to the voxel universe.
 #[derive(Default)]
@@ -227,9 +228,8 @@ impl<ExtraData: GsExtraData> VoxelUniverse<ExtraData> {
 }
 
 impl<ED: GsExtraData> NetworkVoxelClient<ED> {
-    async fn chunk_stream_handler(stream: InProcessStream, packet_queue: AsyncBoundedSender<Bytes>) {
-        let InProcessStream { mut rx, .. } = stream;
-        while let Some(raw_packet) = rx.recv().await {
+    async fn chunk_stream_handler(stream: TransportStream, packet_queue: AsyncBoundedSender<Bytes>) {
+        while let Some(raw_packet) = stream.recv().await {
             if let Err(e) = packet_queue.send(raw_packet).await {
                 error!("Error while queueing chunk data packet: {e}");
                 break;
@@ -309,15 +309,10 @@ fn server_system_process_chunk_loading(
 fn server_system_process_chunk_sending(
     engine: Res<GameServerResource>,
     mut voxel_q: Query<&mut VoxelUniverse<ServerData>>,
-    connected_players_table_q: Query<&ConnectedPlayersTable>,
-    connected_players_q: Query<&ConnectedPlayer>,
+    connected_players_q: Query<(Entity, &ConnectedPlayer)>,
 ) {
     // TODO: send only nearby chunks, not everything. Also don't iterate every chunk every tick.
-    let Ok(player_list) = connected_players_table_q.get_single() else {
-        return;
-    };
-    let player_list = &player_list.players_by_address;
-    if player_list.is_empty() {
+    if connected_players_q.is_empty() {
         return;
     }
 
@@ -337,8 +332,9 @@ fn server_system_process_chunk_sending(
         // remove disconnected players
         chunk_player_list.retain(|&player, _rev| connected_players_q.contains(player));
         // find players with outdated revisions
-        for (&peer, &player) in player_list.iter() {
-            let entry = chunk_player_list.entry(player).or_insert_with(|| {
+        for (pid, player) in connected_players_q.iter() {
+            let peer = player.address;
+            let entry = chunk_player_list.entry(pid).or_insert_with(|| {
                 send_list.push(peer);
                 chunk_rev
             });
@@ -380,20 +376,58 @@ fn send_chunk_to_players(
     let peers: SmallVec<[_; 8]> = peers.into();
     let _ = engine.network_thread.schedule_task(move |rstate| {
         Box::pin(async move {
-            let mut state = rstate.borrow_mut();
+            let mut joiner: JoinSet<Result<()>> = JoinSet::new();
             for addr in peers {
+                let rstate_inner = rstate.clone();
+                let state = rstate.borrow();
                 let my_buffer = buffer.clone();
-                let Some(peer) = state.find_connected_client_mut(addr) else {
+                let Some(peer) = state.find_connected_client(addr) else {
                     bail!("Cannot find connected client {addr:?} anymore");
                 };
-                if peer.chunk_stream.is_none() {
-                    peer.chunk_stream = Some(
-                        peer.open_stream(NetworkStreamHeader::Standard(StandardTypes::ChunkData))
-                            .unwrap(),
-                    );
+                match &peer.chunk_stream {
+                    Some(chunk_stream) => {
+                        let chunk_stream = chunk_stream.clone();
+                        joiner.spawn_local(async move {
+                            chunk_stream.send(my_buffer).await?;
+                            Ok(())
+                        });
+                    }
+                    None => {
+                        // TODO: encapsulate safe concurrent stream opening
+                        let open_stream = peer.open_stream(NetworkStreamHeader::Standard(StandardTypes::ChunkData));
+                        joiner.spawn_local(async move {
+                            let mut open_stream = open_stream.await?;
+                            {
+                                let mut state = rstate_inner.borrow_mut();
+                                let client = state.find_connected_client_mut(addr).context("Client went missing")?;
+                                if let Some(already_open_stream) = &client.chunk_stream {
+                                    open_stream = already_open_stream.clone();
+                                } else {
+                                    client.chunk_stream = Some(open_stream.clone());
+                                }
+                            }
+                            open_stream.send(my_buffer).await?;
+                            Ok(())
+                        });
+                    }
                 }
-                let chunk_stream = peer.chunk_stream.as_mut().unwrap();
-                chunk_stream.tx.send(my_buffer)?;
+            }
+            while let Some(result) = joiner.join_next().await {
+                match result {
+                    Err(join_error) => {
+                        if join_error.is_cancelled() {
+                            continue;
+                        } else if join_error.is_panic() {
+                            std::panic::resume_unwind(join_error.into_panic())
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    Ok(Err(error)) => {
+                        error!("Error while sending chunk data to player: {error}");
+                    }
+                    Ok(Ok(())) => {}
+                }
             }
             Ok(())
         })

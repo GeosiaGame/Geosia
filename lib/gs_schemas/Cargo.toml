@@ -26,6 +26,7 @@ bevy_math.workspace = true
 bevy_reflect.workspace = true
 capnp.workspace = true
 either.workspace = true
+futures.workspace = true
 hashbrown.workspace = true
 itertools.workspace = true
 kstring.workspace = true

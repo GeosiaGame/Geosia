@@ -18,11 +18,24 @@ impl Plugin for MainMenuPlugin {
     }
 }
 
+struct MenuInputs {
+    server_ip: String,
+}
+
+impl Default for MenuInputs {
+    fn default() -> Self {
+        Self {
+            server_ip: String::from("[::1]:28032"),
+        }
+    }
+}
+
 fn main_menu_ui(
     mut contexts: EguiContexts,
     mut quit: EventWriter<AppExit>,
     mut loading_data: ResMut<LoadingTransitionParams>,
     mut state_switch: ResMut<NextState<ClientAppState>>,
+    mut menu_inputs: Local<MenuInputs>,
 ) {
     egui::Window::new(GAME_BRAND_NAME)
         .collapsible(false)
@@ -34,6 +47,17 @@ fn main_menu_ui(
                 ui.add_space(16.0);
                 if ui.button("Play singleplayer").clicked() {
                     *loading_data = LoadingTransitionParams::SinglePlayer {};
+                    state_switch.set(ClientAppState::LoadingGame);
+                }
+                ui.add_space(8.0);
+                ui.label("Server IP");
+                ui.add_space(8.0);
+                ui.text_edit_singleline(&mut menu_inputs.server_ip);
+                ui.add_space(8.0);
+                if ui.button("Join multiplayer session").clicked() {
+                    *loading_data = LoadingTransitionParams::MultiPlayer {
+                        server_address_raw: menu_inputs.server_ip.clone(),
+                    };
                     state_switch.set(ClientAppState::LoadingGame);
                 }
                 ui.add_space(8.0);
