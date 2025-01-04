@@ -204,13 +204,14 @@ pub mod voxel_mesh {
     }
   }
   mod _private {
-    pub static ENCODED_NODE: [::capnp::Word; 79] = [
-      ::capnp::word(0, 0, 0, 0, 5, 0, 6, 0),
+    pub static ENCODED_NODE: [::capnp::Word; 80] = [
+      ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
       ::capnp::word(69, 194, 137, 46, 134, 104, 43, 203),
       ::capnp::word(17, 0, 0, 0, 1, 0, 0, 0),
       ::capnp::word(78, 174, 70, 247, 102, 184, 30, 213),
       ::capnp::word(3, 0, 7, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
+      ::capnp::word(12, 1, 0, 0, 135, 3, 0, 0),
       ::capnp::word(21, 0, 0, 0, 218, 0, 0, 0),
       ::capnp::word(33, 0, 0, 0, 7, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
@@ -514,13 +515,14 @@ pub mod voxel_mesh_side {
   impl Pipeline  {
   }
   mod _private {
-    pub static ENCODED_NODE: [::capnp::Word; 88] = [
-      ::capnp::word(0, 0, 0, 0, 5, 0, 6, 0),
+    pub static ENCODED_NODE: [::capnp::Word; 89] = [
+      ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
       ::capnp::word(92, 56, 61, 108, 217, 93, 204, 159),
       ::capnp::word(17, 0, 0, 0, 1, 0, 1, 0),
       ::capnp::word(78, 174, 70, 247, 102, 184, 30, 213),
       ::capnp::word(2, 0, 7, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
+      ::capnp::word(137, 3, 0, 0, 132, 5, 0, 0),
       ::capnp::word(21, 0, 0, 0, 250, 0, 0, 0),
       ::capnp::word(33, 0, 0, 0, 7, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
@@ -935,13 +937,14 @@ pub mod voxel_mesh_vertex {
   impl Pipeline  {
   }
   mod _private {
-    pub static ENCODED_NODE: [::capnp::Word; 243] = [
-      ::capnp::word(0, 0, 0, 0, 5, 0, 6, 0),
+    pub static ENCODED_NODE: [::capnp::Word; 244] = [
+      ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
       ::capnp::word(54, 189, 62, 218, 122, 204, 40, 159),
       ::capnp::word(17, 0, 0, 0, 1, 0, 7, 0),
       ::capnp::word(78, 174, 70, 247, 102, 184, 30, 213),
       ::capnp::word(1, 0, 7, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
+      ::capnp::word(134, 5, 0, 0, 101, 9, 0, 0),
       ::capnp::word(21, 0, 0, 0, 10, 1, 0, 0),
       ::capnp::word(37, 0, 0, 0, 7, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
