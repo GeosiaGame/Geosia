@@ -1,9 +1,14 @@
 //! Mesh generators taking in voxel data and producing vertex data.
 
 use anyhow::Context;
+use bevy::color::palettes::tailwind;
+use bevy::pbr::{ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline};
 use bevy::prelude::*;
-use bevy::render::mesh::{Indices, PrimitiveTopology};
+use bevy::render::mesh::{Indices, MeshVertexAttribute, MeshVertexBufferLayoutRef, PrimitiveTopology};
 use bevy::render::render_asset::RenderAssetUsages;
+use bevy::render::render_resource::{
+    AsBindGroup, RenderPipelineDescriptor, ShaderRef, SpecializedMeshPipelineError, VertexFormat,
+};
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, RelBlockPos, CHUNK_DIM};
 use gs_schemas::dependencies::itertools::iproduct;
 use gs_schemas::direction::ALL_DIRECTIONS;
@@ -25,7 +30,77 @@ pub fn does_chunk_need_rendering(chunk: &ClientChunk, registry: &BlockRegistry) 
     })
 }
 
+// Dimming factor applied to the vertex color for each adjacent ambient-occluding block
 const AO_OCCLUSION_FACTOR: f32 = 0.88;
+// Just a random number per MeshVertexAttribute docs
+const GEOSIA_VTX_ATTRIB_OFFSET: u64 = 745079851398183;
+/// The vertex attribute encoding the index of the block in the chunk, for block-based shader effects.
+pub const VERTEX_ATTRIBUTE_BLOCK_INDEX_WITH_FLAGS: MeshVertexAttribute = MeshVertexAttribute::new(
+    "Vertex_BlockIndexWithFlags",
+    GEOSIA_VTX_ATTRIB_OFFSET,
+    VertexFormat::Uint32,
+);
+/// The vertex attribute encoding the barycentric offset for color attributes, used for correct quad color interpolation.
+pub const VERTEX_ATTRIBUTE_BARYCENTRIC_COLOR_OFFSET: MeshVertexAttribute = MeshVertexAttribute::new(
+    "Vertex_BarycentricColorOffset",
+    GEOSIA_VTX_ATTRIB_OFFSET + 1,
+    VertexFormat::Float32x3,
+);
+
+/// The [`MaterialExtension`] for chunk mesh rendering using Bevy, extending the standard PBR material.
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+pub struct ChunkMeshMaterialExtension {}
+
+/// The full [`Material`] used for chunk mesh rendering.
+pub type ChunkMeshMaterial = ExtendedMaterial<StandardMaterial, ChunkMeshMaterialExtension>;
+
+/// Use this for rendering chunks without customizations.
+pub fn default_chunk_material() -> ChunkMeshMaterial {
+    ChunkMeshMaterial {
+        base: StandardMaterial {
+            base_color: tailwind::GRAY_500.into(),
+            ..default()
+        },
+        extension: ChunkMeshMaterialExtension {},
+    }
+}
+
+const SHADER_ASSET_PATH: &str = "shaders/chunk_mesh_main.wgsl";
+
+impl MaterialExtension for ChunkMeshMaterialExtension {
+    fn vertex_shader() -> ShaderRef {
+        SHADER_ASSET_PATH.into()
+    }
+
+    fn deferred_vertex_shader() -> ShaderRef {
+        SHADER_ASSET_PATH.into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        SHADER_ASSET_PATH.into()
+    }
+
+    fn deferred_fragment_shader() -> ShaderRef {
+        SHADER_ASSET_PATH.into()
+    }
+
+    fn specialize(
+        _pipeline: &MaterialExtensionPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialExtensionKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        let vertex_layout = layout.0.get_layout(&[
+            Mesh::ATTRIBUTE_POSITION.at_shader_location(0),
+            Mesh::ATTRIBUTE_NORMAL.at_shader_location(1),
+            Mesh::ATTRIBUTE_COLOR.at_shader_location(5),
+            VERTEX_ATTRIBUTE_BARYCENTRIC_COLOR_OFFSET.at_shader_location(6),
+            VERTEX_ATTRIBUTE_BLOCK_INDEX_WITH_FLAGS.at_shader_location(7),
+        ])?;
+        descriptor.vertex.buffers = vec![vertex_layout];
+        Ok(())
+    }
+}
 
 /// Creates a bevy mesh from a chunk, using neighboring chunks to determine culling&ambient occlusion information.
 #[allow(clippy::cognitive_complexity)]
@@ -43,6 +118,8 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
     let mut pos_buf: Vec<[f32; 3]> = Vec::with_capacity(6144);
     let mut normal_buf: Vec<[f32; 3]> = Vec::with_capacity(6144);
     let mut color_buf: Vec<[f32; 4]> = Vec::with_capacity(6144);
+    let mut bidx_flag_buf: Vec<u32> = Vec::with_capacity(6144);
+    let mut barycentric_buf: Vec<[f32; 3]> = Vec::with_capacity(6144);
     let mut ibuf: Vec<u32> = Vec::with_capacity(6144);
 
     for (cell_y, cell_z, cell_x) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM, 0..CHUNK_DIM) {
@@ -57,6 +134,7 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
             &VOXEL_NO_SHAPE
         };
         let vor = vstdmeta.orientation();
+        let ipos_as_offset = ipos.split_chunk_component().1.as_index() as u32;
 
         if !vdef.has_drawable_mesh {
             continue;
@@ -90,6 +168,7 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
             }
 
             let voff = pos_buf.len() as u32;
+            let boff = barycentric_buf.len();
             let mut barycentric_color_sum: Vec4 = Vec4::ZERO;
             let vor_matf = vor.to_matrix();
             for vtx in side.vertices.iter() {
@@ -111,12 +190,13 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
                 }
 
                 let voffset = vor_matf * vtx.offset;
+                let vnormal = vor_matf * vtx.normal;
                 let position: [f32; 3] = [
                     ipos.x as f32 + voffset.x + 0.5,
                     ipos.y as f32 + voffset.y + 0.5,
                     ipos.z as f32 + voffset.z + 0.5,
                 ];
-                let normal: [f32; 3] = vtx.normal.to_array();
+                let normal: [f32; 3] = vnormal.to_array();
                 // let texid = *vdef.texture_mapping.at_direction(rot_side_dir);
                 let color = [
                     vdef.representative_color.r as f32 * ao,
@@ -126,11 +206,7 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
                 ];
                 barycentric_color_sum += vtx.barycentric_sign as f32 * Vec4::from(color);
 
-                pos_buf.push(position);
-                color_buf.push(color);
-                normal_buf.push(normal);
-                /*
-                let mut idx_flags = ic_vidx as i32;
+                let mut idx_flags = ipos_as_offset;
                 if vtx.barycentric.x > 0.1 {
                     idx_flags |= 1 << 17;
                 }
@@ -140,27 +216,24 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
                 if vtx.barycentric.z > 0.1 {
                     idx_flags |= 1 << 19;
                 }
-                vbuf.push(VoxelVertex {
-                    position: as_wxyz10(position.map(|p| p / CHUNK_DIM as f32)),
-                    color: as_rgba8(color),
-                    texcoord: [vtx.texcoord.x, vtx.texcoord.y, texid as f32],
-                    index: idx_flags,
-                    barycentric_color_offset: [0.0; 4], // initialized after the loop
-                });
-                 */
+
+                pos_buf.push(position);
+                color_buf.push(color);
+                normal_buf.push(normal);
+                bidx_flag_buf.push(idx_flags);
+                barycentric_buf.push([0.0; 3]); // initialized after the loop
             }
-            /*for v in &mut vbuf[voff as usize..] {
-                v.barycentric_color_offset = barycentric_color_sum.into();
-            }*/
+            let final_barycentric_sum = barycentric_color_sum.xyz().into();
+            barycentric_buf[boff..].fill(final_barycentric_sum);
             ibuf.extend(side.indices.iter().map(|x| x + voff));
         }
     }
 
-    //warn!("Mesh of {} indices", ibuf.len());
-
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos_buf);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normal_buf);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color_buf);
+    mesh.insert_attribute(VERTEX_ATTRIBUTE_BLOCK_INDEX_WITH_FLAGS, bidx_flag_buf);
+    mesh.insert_attribute(VERTEX_ATTRIBUTE_BARYCENTRIC_COLOR_OFFSET, barycentric_buf);
     mesh.insert_indices(Indices::U32(ibuf));
 
     Ok(mesh)

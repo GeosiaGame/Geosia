@@ -1,6 +1,5 @@
 //! Client-side voxel world rendering
 
-use bevy::color::palettes::tailwind;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::prelude::*;
 use capnp::message::TypedReader;
@@ -19,8 +18,10 @@ use meshgen::mesh_from_chunk;
 use smallvec::{smallvec, SmallVec};
 use tokio_util::bytes::Bytes;
 
+use crate::voxel::meshgen::{default_chunk_material, ChunkMeshMaterial};
 use crate::ClientData;
 
+pub mod client_plugin;
 pub mod meshgen;
 
 /// Client Chunk type
@@ -58,6 +59,7 @@ pub trait ClientVoxelUniverseBuilder: Sized {
 impl ClientVoxelUniverseBuilder for VoxelUniverseBuilder<'_, ClientData> {
     fn with_client_chunk_system(mut self) -> Self {
         self.bundle.world_scope(|world| {
+            world.init_resource::<Assets<ChunkMeshMaterial>>();
             let fixed_pre_update = FixedPreUpdate.intern();
             let fixed_update = FixedUpdate.intern();
             let mut schedules = world.resource_mut::<Schedules>();
@@ -122,8 +124,8 @@ fn handle_chunk_packet(raw_packet: Bytes, voxels: &mut ClientVoxelUniverse) -> R
 fn client_chunk_mesher_system(
     mut voxel_q: Query<&mut ClientVoxelUniverse>,
     block_registry: Res<BlockRegistryHolder>,
-    mut voxel_material: Local<Option<Handle<StandardMaterial>>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut voxel_material: Local<Option<Handle<ChunkMeshMaterial>>>,
+    mut materials: ResMut<Assets<ChunkMeshMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut commands: Commands,
 ) {
@@ -132,12 +134,7 @@ fn client_chunk_mesher_system(
     };
     let voxels = &mut *voxels;
 
-    let voxel_material = voxel_material.get_or_insert_with(|| {
-        materials.add(StandardMaterial {
-            base_color: tailwind::GRAY_500.into(),
-            ..default()
-        })
-    });
+    let voxel_material = voxel_material.get_or_insert_with(|| materials.add(default_chunk_material()));
 
     // Schedule new meshes for all outdated chunks
     let mut new_entries = Vec::new();

@@ -35,7 +35,6 @@ use bevy::winit::WinitPlugin;
 use bevy_egui::EguiPlugin;
 use gs_common::network::thread::NetworkThread;
 use gs_common::prelude::*;
-use gs_common::voxel::plugin::VoxelUniversePlugin;
 use gs_common::{GameBevyCommand, GAME_BRAND_NAME};
 use gs_schemas::dependencies::smallvec::SmallVec;
 use gs_schemas::registries::GameRegistries;
@@ -43,6 +42,7 @@ use gs_schemas::{GameSide, GsExtraData};
 use states::{ClientAppState, InGameSystemSet, LoadingGameSystemSet, MainMenuSystemSet};
 
 use crate::network::NetworkThreadClientState;
+use crate::voxel::client_plugin::VoxelUniverseClientPlugin;
 
 /// An [`GsExtraData`] implementation containing the client-side data for the game engine.
 #[derive(Resource)]
@@ -139,7 +139,7 @@ pub fn client_main() {
     configure_sets(&mut app, FixedPostUpdate);
 
     app.add_plugins(debugcam::PlayerPlugin)
-        .add_plugins(VoxelUniversePlugin::<ClientData>::new())
+        .add_plugins(VoxelUniverseClientPlugin)
         .add_plugins(states::main_menu::MainMenuPlugin)
         .add_plugins(states::loading_game::LoadingGamePlugin)
         .add_plugins(states::in_game::InGamePlugin);
