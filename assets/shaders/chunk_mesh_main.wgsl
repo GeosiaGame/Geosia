@@ -48,11 +48,11 @@ struct ChunkVertexOutput {
 #ifdef VERTEX_TANGENTS
     @location(4) world_tangent: vec4<f32>,
 #endif
-    @location(5) color: vec4<f32>,
+    @location(5) @interpolate(linear, center) color: vec4<f32>,
 #ifdef VERTEX_OUTPUT_INSTANCE_INDEX
     @location(6) @interpolate(flat) instance_index: u32,
 #endif
-    @location(7) barycentric_coords: vec3<f32>,
+    @location(7) barycentric_coords: vec2<f32>,
     @location(8) barycentric_color_offset: vec3<f32>,
     @location(9) block_index: u32,
 }
@@ -130,8 +130,7 @@ fn vertex(vertex: ChunkVertex) -> ChunkVertexOutput {
     var index = vertex.block_index_with_flags;
     var baryx = f32((index & (1u << 17u)) > 0u);
     var baryy = f32((index & (1u << 18u)) > 0u);
-    var baryz = f32((index & (1u << 19u)) > 0u);
-    out.barycentric_coords = vec3<f32>(baryx, baryy, baryz);
+    out.barycentric_coords = vec2<f32>(baryx, baryy);
     out.barycentric_color_offset = vertex.barycentric_color_offset;
     out.block_index = vertex.block_index_with_flags & ((1u << 17u) - 1u);
 

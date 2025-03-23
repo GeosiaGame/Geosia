@@ -58,7 +58,8 @@ pub type ChunkMeshMaterial = ExtendedMaterial<StandardMaterial, ChunkMeshMateria
 pub fn default_chunk_material() -> ChunkMeshMaterial {
     ChunkMeshMaterial {
         base: StandardMaterial {
-            base_color: tailwind::GRAY_500.into(),
+            base_color: tailwind::GRAY_100.into(),
+            perceptual_roughness: 1.0,
             ..default()
         },
         extension: ChunkMeshMaterialExtension {},
@@ -175,7 +176,7 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
                 // Ambient Occlusion
                 let mut ao = 1.0;
                 for &ao_off in vtx.ao_offsets.iter() {
-                    let pos = ipos + RelBlockPos::from(vor.apply_to_ivec(ao_off));
+                    let pos = ipos + RelBlockPos::from(vor.unapply_to_ivec(ao_off));
                     let bentry = get_block(chunks, pos);
                     let bdef = registry.lookup_id_to_object(bentry.id).context("invalid block")?;
                     let bstdmeta = StandardShapeMetadata::from_meta(bentry.metadata);
@@ -199,12 +200,12 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
                 let normal: [f32; 3] = vnormal.to_array();
                 // let texid = *vdef.texture_mapping.at_direction(rot_side_dir);
                 let color = [
-                    vdef.representative_color.r as f32 * ao,
-                    vdef.representative_color.g as f32 * ao,
-                    vdef.representative_color.b as f32 * ao,
+                    vdef.representative_color.red * ao,
+                    vdef.representative_color.green * ao,
+                    vdef.representative_color.blue * ao,
                     1.0,
                 ];
-                barycentric_color_sum += vtx.barycentric_sign as f32 * Vec4::from(color);
+                barycentric_color_sum += vtx.barycentric_sign * Vec4::from(color);
 
                 let mut idx_flags = ipos_as_offset;
                 if vtx.barycentric.x > 0.1 {
@@ -212,9 +213,6 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
                 }
                 if vtx.barycentric.y > 0.1 {
                     idx_flags |= 1 << 18;
-                }
-                if vtx.barycentric.z > 0.1 {
-                    idx_flags |= 1 << 19;
                 }
 
                 pos_buf.push(position);

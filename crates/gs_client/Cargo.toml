@@ -47,6 +47,7 @@ features = [
     "bevy_text",          # Text/font rendering
     "bevy_ui",            # UI toolkit
     "bevy_color",         # Color space types
+    "bevy_gizmos",        # Immediate mode debug rendering
     "tonemapping_luts",   # Support different camera Tonemapping modes (embeds extra data)
     "x11",                # Linux: Support X11 windowing system
 

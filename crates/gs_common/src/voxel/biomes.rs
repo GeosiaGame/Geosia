@@ -1,9 +1,9 @@
 //! The builtin biome types.
 //! Most of this will be moved to a "base" mod at some point in the future.
 
+use bevy::color::Srgba;
 use gs_schemas::voxel::generation::fbm_noise::Fbm;
 use gs_schemas::{
-    dependencies::rgb::RGBA8,
     range::range,
     registry::RegistryName,
     voxel::{
@@ -36,7 +36,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
     biome_registry
         .push_object(BiomeDefinition {
             name: VOID_BIOME_NAME,
-            representative_color: RGBA8::new(0, 0, 0, 0),
+            representative_color: Srgba::rgba_u8(0, 0, 0, 0),
             elevation: range(-1.0..-1.0),
             temperature: range(-1.0..-1.0),
             moisture: range(-1.0..-1.0),
@@ -51,7 +51,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
     biome_registry
         .push_object(BiomeDefinition {
             name: PLAINS_BIOME_NAME,
-            representative_color: RGBA8::new(20, 180, 10, 255),
+            representative_color: Srgba::rgba_u8(20, 180, 10, 255),
             elevation: range(0.5..1.5),
             temperature: range(..),
             moisture: range(..),
@@ -94,7 +94,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
     biome_registry
         .push_object(BiomeDefinition {
             name: HILLS_BIOME_NAME,
-            representative_color: RGBA8::new(15, 110, 10, 255),
+            representative_color: Srgba::rgba_u8(15, 110, 10, 255),
             elevation: range(1.5..3.0),
             temperature: range(..),
             moisture: range(..),
@@ -139,7 +139,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
     biome_registry
         .push_object(BiomeDefinition {
             name: MOUNTAINS_BIOME_NAME,
-            representative_color: RGBA8::new(220, 220, 220, 255),
+            representative_color: Srgba::rgba_u8(220, 220, 220, 255),
             elevation: range(3.0..),
             temperature: range(..),
             moisture: range(..),
@@ -188,7 +188,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
     biome_registry
         .push_object(BiomeDefinition {
             name: OCEAN_BIOME_NAME,
-            representative_color: RGBA8::new(10, 120, 180, 255),
+            representative_color: Srgba::rgba_u8(10, 120, 180, 255),
             elevation: range(..1.0),
             temperature: range(..),
             moisture: range(2.5..),
@@ -217,7 +217,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
     biome_registry
         .push_object(BiomeDefinition {
             name: BEACH_BIOME_NAME,
-            representative_color: RGBA8::new(224, 200, 130, 255),
+            representative_color: Srgba::rgba_u8(224, 200, 130, 255),
             elevation: range(1.0..),
             temperature: range(..),
             moisture: range(2.5..),
@@ -244,7 +244,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
     biome_registry
         .push_object(BiomeDefinition {
             name: RIVER_BIOME_NAME,
-            representative_color: RGBA8::new(10, 100, 200, 255),
+            representative_color: Srgba::rgba_u8(10, 100, 200, 255),
             elevation: range(..),
             temperature: range(..),
             moisture: range(..),

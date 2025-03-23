@@ -3,9 +3,9 @@
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 
+use bevy_color::Srgba;
 use bevy_math::DVec2;
 use noise::OpenSimplex;
-use rgb::RGBA8;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -52,7 +52,7 @@ pub struct BiomeDefinition {
     /// The unique registry name
     pub name: RegistryName,
     /// A color that can represent the biome on maps, debug views, etc.
-    pub representative_color: RGBA8,
+    pub representative_color: Srgba,
     /// Can this biome generate in the world?
     pub can_generate: bool,
     /// Elevation of this biome.

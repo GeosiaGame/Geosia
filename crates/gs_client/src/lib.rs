@@ -17,6 +17,7 @@ use bevy::audio::AudioPlugin;
 use bevy::core_pipeline::CorePipelinePlugin;
 use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
+use bevy::gizmos::GizmoPlugin;
 use bevy::gltf::GltfPlugin;
 use bevy::input::InputPlugin;
 use bevy::pbr::PbrPlugin;
@@ -115,6 +116,7 @@ pub fn client_main() {
         .add_plugins(PbrPlugin::default())
         .add_plugins(AudioPlugin::default())
         .add_plugins(GilrsPlugin)
+        .add_plugins(GizmoPlugin)
         .add_plugins(AnimationPlugin)
         .add_plugins(GltfPlugin::default());
     // Bevy plugins
@@ -169,6 +171,10 @@ fn control_command_handler_system(world: &mut World) {
 }
 
 mod debug_window {
+    use std::f32::consts::PI;
+
+    use bevy::color::palettes::tailwind;
+    use bevy::math::vec3;
     use bevy::prelude::*;
 
     pub struct DebugWindow;
@@ -186,11 +192,31 @@ mod debug_window {
         commands.spawn((
             DirectionalLight {
                 shadows_enabled: false,
-                illuminance: 1000.0,
+                illuminance: light_consts::lux::AMBIENT_DAYLIGHT * 0.75,
                 ..default()
             },
-            Transform::from_xyz(0., 1000., 0.).looking_at(Vec3::new(300.0, 0.0, 300.0), Vec3::Y),
+            Transform {
+                translation: vec3(0.0, 1000.0, 0.0),
+                rotation: Quat::from_rotation_x(PI / 4.0) * Quat::from_rotation_y(PI / 16.0),
+                scale: Vec3::ONE,
+            },
         ));
+        commands.spawn((
+            DirectionalLight {
+                shadows_enabled: false,
+                illuminance: light_consts::lux::AMBIENT_DAYLIGHT * 0.25,
+                ..default()
+            },
+            Transform {
+                translation: vec3(0.0, 1000.0, 0.0),
+                rotation: Quat::from_rotation_x(PI / 4.0) * Quat::from_rotation_y(PI + PI / 16.0),
+                scale: Vec3::ONE,
+            },
+        ));
+        commands.insert_resource(AmbientLight {
+            color: tailwind::GRAY_50.into(),
+            brightness: 10.0,
+        });
         warn!("Setting up debug window done");
     }
 }
