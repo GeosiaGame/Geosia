@@ -2,13 +2,13 @@
 
 use std::ops::{Deref, DerefMut};
 
-use capnp::message::ReaderOptions;
 use capnp::Word;
+use capnp::message::ReaderOptions;
+use capnp_rpc::RpcSystem;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::VatNetwork;
-use capnp_rpc::RpcSystem;
 use gs_schemas::dependencies::itertools::Itertools;
-use gs_schemas::schemas::{network_capnp as rpc, read_leb128, write_leb128, NetworkStreamHeader};
+use gs_schemas::schemas::{NetworkStreamHeader, network_capnp as rpc, read_leb128, write_leb128};
 use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
 use quinn::{Connection, RecvStream, SendStream};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -17,10 +17,10 @@ use rustls::version::TLS13;
 use rustls::{DigitallySignedStruct, Error, SignatureScheme, SupportedProtocolVersion};
 use tokio_util::bytes::Bytes;
 
-use crate::network::server::{NetworkThreadServerState, Server2ClientEndpoint};
-use crate::network::PeerAddress;
-use crate::prelude::*;
 use crate::GameServer;
+use crate::network::PeerAddress;
+use crate::network::server::{NetworkThreadServerState, Server2ClientEndpoint};
+use crate::prelude::*;
 
 /// The insecure server TLS verifier that does not actually check anything at all.
 #[derive(Debug)]
@@ -364,8 +364,8 @@ pub mod test {
 
     use capnp_rpc::twoparty::VatId;
 
-    use crate::network::transport::*;
     use crate::GameServerControlCommand;
+    use crate::network::transport::*;
 
     /// A dummy client implementation for basic RPC testing
     pub struct TestClient2ServerConnection {

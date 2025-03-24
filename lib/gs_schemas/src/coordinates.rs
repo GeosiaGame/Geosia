@@ -161,7 +161,8 @@ fn test_zpack_3d() {
         let naive = zpack_3d_naive(v);
         let fast = zpack_3d(v);
         assert_eq!(
-            naive, fast,
+            naive,
+            fast,
             "zpack of {v} is not valid.\n    x: {x:032b}\n    y: {y:032b}\n    z: {z:032b}\nnaive: {naive:0128b} ({nones} ones)\n fast: {fast:0128b} ({fones} ones)\n",
             x = v.x as u32,
             y = v.y as u32,

@@ -21,9 +21,10 @@ use bevy::gizmos::GizmoPlugin;
 use bevy::gltf::GltfPlugin;
 use bevy::input::InputPlugin;
 use bevy::pbr::PbrPlugin;
+use bevy::picking::backend::PointerHits;
 use bevy::prelude::*;
-use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::RenderPlugin;
+use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::scene::ScenePlugin;
 use bevy::sprite::SpritePlugin;
 use bevy::state::app::StatesPlugin;
@@ -36,7 +37,7 @@ use bevy::winit::WinitPlugin;
 use bevy_egui::EguiPlugin;
 use gs_common::network::thread::NetworkThread;
 use gs_common::prelude::*;
-use gs_common::{GameBevyCommand, GAME_BRAND_NAME};
+use gs_common::{GAME_BRAND_NAME, GameBevyCommand};
 use gs_schemas::dependencies::smallvec::SmallVec;
 use gs_schemas::registries::GameRegistries;
 use gs_schemas::{GameSide, GsExtraData};
@@ -120,6 +121,7 @@ pub fn client_main() {
         .add_plugins(AnimationPlugin)
         .add_plugins(GltfPlugin::default());
     // Bevy plugins
+    app.add_event::<PointerHits>(); // dummy picking event until bevy_egui gets a feature flag
     app.add_plugins(EguiPlugin);
 
     app.init_state::<ClientAppState>();

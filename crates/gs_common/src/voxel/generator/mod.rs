@@ -1,8 +1,8 @@
 //! Standard world generator.
 
+use gs_schemas::GsExtraData;
 use gs_schemas::coordinates::AbsChunkPos;
 use gs_schemas::voxel::chunk::Chunk;
-use gs_schemas::GsExtraData;
 
 pub mod flat;
 pub mod multi_noise;

@@ -2,8 +2,8 @@
 
 use bevy::app::AppExit;
 use bevy::prelude::*;
-use bevy_egui::egui;
 use bevy_egui::EguiContexts;
+use bevy_egui::egui;
 use gs_common::GAME_BRAND_NAME;
 
 use crate::states::loading_game::LoadingTransitionParams;

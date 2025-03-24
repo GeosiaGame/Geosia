@@ -9,7 +9,7 @@ use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{
     AsBindGroup, RenderPipelineDescriptor, ShaderRef, SpecializedMeshPipelineError, VertexFormat,
 };
-use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, RelBlockPos, CHUNK_DIM};
+use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, CHUNK_DIM, RelBlockPos};
 use gs_schemas::dependencies::itertools::iproduct;
 use gs_schemas::direction::ALL_DIRECTIONS;
 use gs_schemas::voxel::chunk_storage::ChunkStorage;
@@ -17,8 +17,8 @@ use gs_schemas::voxel::neighborhood::ChunkRefNeighborhood;
 use gs_schemas::voxel::standard_shapes::{StandardShapeMetadata, VOXEL_NO_SHAPE};
 use gs_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry};
 
-use crate::voxel::ClientChunk;
 use crate::ClientData;
+use crate::voxel::ClientChunk;
 
 /// Returns is a chunk has any blocks that require rendering a chunk mesh.
 pub fn does_chunk_need_rendering(chunk: &ClientChunk, registry: &BlockRegistry) -> bool {

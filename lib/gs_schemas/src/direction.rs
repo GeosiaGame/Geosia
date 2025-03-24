@@ -248,11 +248,7 @@ impl OctahedralOrientation {
         // 0..4
         let up_idx = {
             let i = self.up.to_index();
-            if i > right_idx {
-                i - 2
-            } else {
-                i
-            }
+            if i > right_idx { i - 2 } else { i }
         };
         // front is always determined by the cross product
         // make it so that 0 is the default orientation (X+ right, Y+ up)

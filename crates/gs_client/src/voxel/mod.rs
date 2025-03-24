@@ -3,23 +3,23 @@
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::prelude::*;
 use capnp::message::TypedReader;
+use gs_common::InGameSystemSet;
 use gs_common::network::transport::RPC_LOCAL_READER_OPTIONS;
 use gs_common::prelude::*;
 use gs_common::voxel::plugin::{
-    BlockRegistryHolder, NetworkVoxelClient, VoxelUniverse, VoxelUniverseBuilder, CHUNK_PACKET_QUEUE_LENGTH,
+    BlockRegistryHolder, CHUNK_PACKET_QUEUE_LENGTH, NetworkVoxelClient, VoxelUniverse, VoxelUniverseBuilder,
 };
-use gs_common::InGameSystemSet;
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos};
 use gs_schemas::mutwatcher::{MutWatcher, RevisionNumber};
 use gs_schemas::schemas::network_capnp as rpc;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
 use meshgen::mesh_from_chunk;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use tokio_util::bytes::Bytes;
 
-use crate::voxel::meshgen::{default_chunk_material, ChunkMeshMaterial};
 use crate::ClientData;
+use crate::voxel::meshgen::{ChunkMeshMaterial, default_chunk_material};
 
 pub mod client_plugin;
 pub mod meshgen;

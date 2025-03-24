@@ -1,9 +1,9 @@
 //! Simple flat world generator
 
 use gs_schemas::{
-    coordinates::{AbsBlockPos, InChunkPos, InChunkRange, CHUNK_DIM},
-    voxel::{chunk::Chunk, chunk_storage::ChunkStorage, voxeltypes::BlockEntry},
     GsExtraData,
+    coordinates::{AbsBlockPos, CHUNK_DIM, InChunkPos, InChunkRange},
+    voxel::{chunk::Chunk, chunk_storage::ChunkStorage, voxeltypes::BlockEntry},
 };
 
 use super::VoxelGenerator;

@@ -2,13 +2,13 @@
 
 use bitvec::prelude::*;
 use either::Either;
-use itertools::{iproduct, Itertools};
-use smallvec::{smallvec, SmallVec};
+use itertools::{Itertools, iproduct};
+use smallvec::{SmallVec, smallvec};
 use thiserror::Error;
 
-use crate::coordinates::{InChunkPos, InChunkRange, CHUNK_DIM, CHUNK_DIM2, CHUNK_DIM3Z};
-use crate::voxel::chunk_storage::{ChunkDataType, ChunkIterator, ChunkStorage};
 use crate::SmallCowVec;
+use crate::coordinates::{CHUNK_DIM, CHUNK_DIM2, CHUNK_DIM3Z, InChunkPos, InChunkRange};
+use crate::voxel::chunk_storage::{ChunkDataType, ChunkIterator, ChunkStorage};
 
 /// Chunk data compressed by storing a list of used values in a `palette` array and indices into that array for every chunk element.
 /// A special case for all data being of the same type has a very small memory footprint.
@@ -52,7 +52,7 @@ impl SafePaletteIndices<'_> {
 
     fn iter_wide(&self) -> impl Iterator<Item = u16> + '_ {
         match self {
-            SafePaletteIndices::Singleton => Either::Left(std::iter::repeat(0).take(CHUNK_DIM3Z)),
+            SafePaletteIndices::Singleton => Either::Left(std::iter::repeat_n(0, CHUNK_DIM3Z)),
             SafePaletteIndices::U8(indices) => Either::Right(Either::Left(indices.iter().map(|&v| v as u16))),
             SafePaletteIndices::U16(indices) => Either::Right(Either::Right(indices.iter().copied())),
         }
@@ -149,7 +149,7 @@ impl<DataType: ChunkDataType + Copy> PaletteStorage<DataType> {
     pub fn iter(&self) -> impl Iterator<Item = &DataType> {
         // Use Either to wrap the iterators to allow varying return types.
         match self.data() {
-            SafePaletteIndices::Singleton => Either::Left(std::iter::repeat(&self.palette[0]).take(CHUNK_DIM3Z)),
+            SafePaletteIndices::Singleton => Either::Left(std::iter::repeat_n(&self.palette[0], CHUNK_DIM3Z)),
             SafePaletteIndices::U8(indices) => {
                 Either::Right(Either::Left(indices.iter().map(|&idx| &self.palette[idx as usize])))
             }

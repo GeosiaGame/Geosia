@@ -3,18 +3,18 @@
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
 
 use bevy::log::*;
-use capnp::capability::Promise;
 use capnp::Error;
+use capnp::capability::Promise;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::{VatId, VatNetwork};
-use capnp_rpc::{pry, Disconnector, RpcSystem};
+use capnp_rpc::{Disconnector, RpcSystem, pry};
+use gs_common::network::PeerAddress;
 use gs_common::network::server::LocalConnectionPipe;
 use gs_common::network::thread::{NetworkThread, NetworkThreadState};
 use gs_common::network::transport::{
-    quinn_client_config, InProcessStream, QuicStream, TransportStream, RPC_CLIENT_READER_OPTIONS,
-    RPC_LOCAL_READER_OPTIONS,
+    InProcessStream, QuicStream, RPC_CLIENT_READER_OPTIONS, RPC_LOCAL_READER_OPTIONS, TransportStream,
+    quinn_client_config,
 };
-use gs_common::network::PeerAddress;
 use gs_common::prelude::*;
 use gs_schemas::schemas::network_capnp as rpc;
 use gs_schemas::schemas::network_capnp::authenticated_client_connection::{
@@ -23,7 +23,7 @@ use gs_schemas::schemas::network_capnp::authenticated_client_connection::{
 use quinn::{Connection, Endpoint, EndpointConfig, RecvStream, SendStream};
 use socket2::{Domain, Socket};
 use tokio::sync::Barrier;
-use tokio::task::{spawn_local, JoinHandle};
+use tokio::task::{JoinHandle, spawn_local};
 use tracing::Instrument;
 
 use crate::GameControlChannel;

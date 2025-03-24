@@ -9,8 +9,8 @@ use capnp::message::TypedBuilder;
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, AbsChunkRange, RelChunkPos};
 use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::mutwatcher::{MutWatcher, RevisionNumber};
-use gs_schemas::schemas::network_capnp::stream_header::StandardTypes;
 use gs_schemas::schemas::NetworkStreamHeader;
+use gs_schemas::schemas::network_capnp::stream_header::StandardTypes;
 use gs_schemas::voxel::biome::BiomeRegistry;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
@@ -20,12 +20,12 @@ use smallvec::SmallVec;
 use tokio::task::JoinSet;
 use tokio_util::bytes::Bytes;
 
+use crate::network::PeerAddress;
 use crate::network::server::ConnectedPlayer;
 use crate::network::thread::{NetworkThread, NetworkThreadState};
 use crate::network::transport::TransportStream;
-use crate::network::PeerAddress;
 use crate::voxel::persistence::ChunkPersistenceLayer;
-use crate::{prelude::*, GameServer, GameServerResource};
+use crate::{GameServer, GameServerResource, prelude::*};
 use crate::{InGameSystemSet, ServerData};
 
 /// The maximum number of stored chunk packets before applying stream backpressure.

@@ -2,9 +2,9 @@
 
 use std::collections::VecDeque;
 
+use gs_schemas::GsExtraData;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::voxeltypes::BlockEntry;
-use gs_schemas::GsExtraData;
 use gs_schemas::{coordinates::AbsChunkPos, mutwatcher::MutWatcher};
 
 use crate::voxel::persistence::{ChunkPersistenceLayer, ChunkPersistenceLayerStats, ChunkProviderResult};

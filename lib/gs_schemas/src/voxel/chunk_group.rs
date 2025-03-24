@@ -2,11 +2,11 @@
 
 use std::collections::BTreeMap;
 
+use crate::GsExtraData;
 use crate::coordinates::AbsChunkPos;
 use crate::mutwatcher::MutWatcher;
 use crate::voxel::chunk::Chunk;
 use crate::voxel::neighborhood::OptionalChunkRefNeighborhood;
-use crate::GsExtraData;
 
 /// A group of loaded chunks in memory, for example a planet, or a movable contraption.
 #[derive(Clone)]

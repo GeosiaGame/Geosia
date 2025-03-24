@@ -2,9 +2,9 @@
 //! Uses the provided task pool for running async generation tasks.
 
 use bevy::tasks::{AsyncComputeTaskPool, Task};
+use gs_schemas::GsExtraData;
 use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::voxel::chunk::Chunk;
-use gs_schemas::GsExtraData;
 use gs_schemas::{coordinates::AbsChunkPos, mutwatcher::MutWatcher};
 
 use crate::prelude::*;
@@ -46,11 +46,11 @@ impl<ExtraData: GsExtraData> ChunkPersistenceLayer<ExtraData> for GeneratorPersi
             self.wip_task_counter.fetch_add(1, AtomicOrdering::Relaxed);
             let counter = Arc::clone(&self.wip_task_counter);
             let counter = CounterDecrOnDrop(counter);
-            let gen = Arc::clone(&self.generator);
+            let generator = Arc::clone(&self.generator);
             let extra_data = self.extra_data.clone();
             let task = AsyncComputeTaskPool::get().spawn(async move {
                 let _counter = counter; // decrement on drop()
-                let chunk = gen.generate_chunk(pos, extra_data);
+                let chunk = generator.generate_chunk(pos, extra_data);
                 (pos, Ok(MutWatcher::new(chunk)))
             });
             let _ = self.live_tasks.try_insert(pos, task);

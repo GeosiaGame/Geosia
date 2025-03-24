@@ -2,12 +2,12 @@
 
 use bevy::prelude::*;
 use clap::Parser;
-use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
+use rustyline::error::ReadlineError;
 
+use crate::GameServer;
 use crate::config::{GameConfig, ServerConfig};
 use crate::prelude::*;
-use crate::GameServer;
 
 #[derive(Parser)]
 #[command(name = "gs_dedi_server", about = "Geosia dedicated server")]
