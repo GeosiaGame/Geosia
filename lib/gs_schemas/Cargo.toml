@@ -6,8 +6,8 @@ description = "Disk and network data serialization schemas for the Geosia game"
 authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
+edition.workspace = true
 repository = "https://github.com/GeosiaGame/Geosia/tree/dev/lib/gs_schemas"
-edition = "2021"
 
 [features]
 default = []

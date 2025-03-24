@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 rust-version = "1.85"
-edition = "2021"
+edition = "2024"
 license = "LGPL-3.0-only"
 authors = ["Geosia team"]
 repository = "https://github.com/GeosiaGame/Geosia"
