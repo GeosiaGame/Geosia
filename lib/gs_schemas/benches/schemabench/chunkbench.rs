@@ -3,7 +3,7 @@ use std::cell::Cell;
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group};
 use gs_schemas::coordinates::{CHUNK_DIM3, CHUNK_DIM3Z, InChunkPos};
 use gs_schemas::voxel::chunk_storage::{ChunkStorage, PaletteStorage};
-use rand::distributions::Uniform;
+use rand::distr::Uniform;
 use rand::prelude::*;
 use rand_pcg::Pcg64Mcg;
 
@@ -19,7 +19,7 @@ pub fn fill_chunk_with_random(block_types: u16, chunk: &mut dyn ChunkStorage<u64
         }
         blocks.push(blk);
     }
-    let blockdist = Uniform::new(0, blocks.len());
+    let blockdist = Uniform::new(0, blocks.len()).unwrap();
     for pos in 0..CHUNK_DIM3Z {
         chunk.put(
             InChunkPos::try_from_index(pos).unwrap(),
