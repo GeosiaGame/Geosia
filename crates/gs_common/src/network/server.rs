@@ -8,33 +8,33 @@ use bevy::ecs::world::DeferredWorld;
 use bevy::log;
 use bevy::prelude::*;
 use capnp_rpc::rpc_twoparty_capnp::Side;
-use capnp_rpc::{pry, RpcSystem};
-use futures::future::BoxFuture;
+use capnp_rpc::{RpcSystem, pry};
 use futures::FutureExt;
-use gs_schemas::dependencies::capnp::capability::Promise;
+use futures::future::BoxFuture;
 use gs_schemas::dependencies::capnp::Error;
+use gs_schemas::dependencies::capnp::capability::Promise;
 use gs_schemas::dependencies::kstring::KString;
 use gs_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
 };
-use gs_schemas::schemas::{network_capnp as rpc, NetworkStreamHeader, SchemaUuidExt};
+use gs_schemas::schemas::{NetworkStreamHeader, SchemaUuidExt, network_capnp as rpc};
 use quinn::{Connection, EndpointConfig};
 use socket2::{Domain, Socket};
 use tokio::select;
-use tokio::task::{spawn_local, JoinHandle, JoinSet};
+use tokio::task::{JoinHandle, JoinSet, spawn_local};
 use tracing::Instrument;
 use uuid::Uuid;
 
+use crate::network::PeerAddress;
 use crate::network::thread::NetworkThreadState;
 use crate::network::transport::{
-    create_local_rpc_server, create_quic_rpc_server, quinn_server_config, InProcessDuplex, InProcessStream, QuicStream,
-    TransportStream,
+    InProcessDuplex, InProcessStream, QuicStream, TransportStream, create_local_rpc_server, create_quic_rpc_server,
+    quinn_server_config,
 };
-use crate::network::PeerAddress;
 use crate::prelude::*;
 use crate::promises::ShutdownHandle;
 use crate::{
-    GameServer, GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE,
+    GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE, GameServer,
 };
 
 /// The network thread game server state, accessible from network functions.

@@ -1,5 +1,5 @@
 use bevy_math::prelude::*;
-use criterion::{black_box, criterion_group, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group};
 use gs_schemas::coordinates::{zpack_3d, zpack_3d_naive};
 
 fn bench_zpack_3d(c: &mut Criterion) {

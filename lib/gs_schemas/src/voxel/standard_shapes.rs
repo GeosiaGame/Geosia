@@ -3,9 +3,9 @@
 
 use std::sync::LazyLock;
 
-use bevy_math::prelude::*;
 use bevy_math::Vec3A;
-use smallvec::{smallvec, SmallVec};
+use bevy_math::prelude::*;
+use smallvec::{SmallVec, smallvec};
 
 use crate::direction::OctahedralOrientation;
 use crate::voxel::voxeltypes::BlockMetadata;

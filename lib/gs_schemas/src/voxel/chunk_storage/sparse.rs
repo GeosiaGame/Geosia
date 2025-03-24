@@ -2,7 +2,7 @@
 
 use hashbrown::HashMap;
 
-use crate::coordinates::{InChunkPos, InChunkRange, CHUNK_DIM3Z};
+use crate::coordinates::{CHUNK_DIM3Z, InChunkPos, InChunkRange};
 use crate::voxel::chunk_storage::{ChunkDataType, ChunkStorage};
 
 /// Storage for sparse chunk data, only allocating data for the data that's present at the cost of slower lookups and writes.

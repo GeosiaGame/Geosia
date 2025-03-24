@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 
-use crate::states::ClientAppState;
 use crate::ClientNetworkThreadHolder;
+use crate::states::ClientAppState;
 
 /// The "plugin" implementing the in game state.
 pub struct InGamePlugin;

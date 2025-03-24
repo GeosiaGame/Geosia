@@ -6,23 +6,23 @@ use std::{cell::RefCell, cmp::Ordering, mem::MaybeUninit, ops::Deref, rc::Rc};
 
 use bevy_math::{DVec2, FloatExt, IVec2, IVec3, Vec3Swizzles};
 use gs_schemas::{
-    coordinates::{AbsChunkPos, InChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIM3V, CHUNK_DIMD, CHUNK_DIMZ},
+    GsExtraData,
+    coordinates::{AbsChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIM3V, CHUNK_DIMD, CHUNK_DIMZ, InChunkPos},
     dependencies::{
-        itertools::{iproduct, Itertools},
+        itertools::{Itertools, iproduct},
         smallvec::SmallVec,
     },
     registry::RegistryId,
     voxel::{
         biome::{
-            biome_map::{EXPECTED_BIOME_COUNT, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD},
             BiomeDefinition, BiomeEntry, BiomeRegistry, Noises, VOID_BIOME_NAME,
+            biome_map::{EXPECTED_BIOME_COUNT, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD},
         },
         chunk::Chunk,
         chunk_storage::ChunkStorage,
-        generation::{fbm_noise::Fbm, positional_random::PositionalRandomFactory, Context, NoiseNDTo2D},
+        generation::{Context, NoiseNDTo2D, fbm_noise::Fbm, positional_random::PositionalRandomFactory},
         voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME},
     },
-    GsExtraData,
 };
 use hashbrown::HashMap;
 use noise::OpenSimplex;

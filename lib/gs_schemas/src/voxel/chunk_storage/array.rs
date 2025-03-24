@@ -2,7 +2,7 @@
 
 use std::iter::repeat_n;
 
-use crate::coordinates::{InChunkPos, InChunkRange, CHUNK_DIM3Z};
+use crate::coordinates::{CHUNK_DIM3Z, InChunkPos, InChunkRange};
 use crate::voxel::chunk_storage::{ChunkDataType, ChunkStorage};
 
 /// Simple XZY dense array storage for chunk data (with strides of X=1, Z=32, Y=32²).

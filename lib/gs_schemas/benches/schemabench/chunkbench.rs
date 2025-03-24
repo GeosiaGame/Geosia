@@ -1,7 +1,7 @@
 use std::cell::Cell;
 
-use criterion::{black_box, criterion_group, BenchmarkId, Criterion};
-use gs_schemas::coordinates::{InChunkPos, CHUNK_DIM3, CHUNK_DIM3Z};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group};
+use gs_schemas::coordinates::{CHUNK_DIM3, CHUNK_DIM3Z, InChunkPos};
 use gs_schemas::voxel::chunk_storage::{ChunkStorage, PaletteStorage};
 use rand::distributions::Uniform;
 use rand::prelude::*;

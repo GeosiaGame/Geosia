@@ -2,13 +2,13 @@
 
 use bitvec::prelude::*;
 use either::Either;
-use itertools::{iproduct, Itertools};
-use smallvec::{smallvec, SmallVec};
+use itertools::{Itertools, iproduct};
+use smallvec::{SmallVec, smallvec};
 use thiserror::Error;
 
-use crate::coordinates::{InChunkPos, InChunkRange, CHUNK_DIM, CHUNK_DIM2, CHUNK_DIM3Z};
-use crate::voxel::chunk_storage::{ChunkDataType, ChunkIterator, ChunkStorage};
 use crate::SmallCowVec;
+use crate::coordinates::{CHUNK_DIM, CHUNK_DIM2, CHUNK_DIM3Z, InChunkPos, InChunkRange};
+use crate::voxel::chunk_storage::{ChunkDataType, ChunkIterator, ChunkStorage};
 
 /// Chunk data compressed by storing a list of used values in a `palette` array and indices into that array for every chunk element.
 /// A special case for all data being of the same type has a very small memory footprint.

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use smart_default::SmartDefault;
 
-use crate::prelude::{async_watch_channel, AsyncWatchReceiver, AsyncWatchSender};
+use crate::prelude::{AsyncWatchReceiver, AsyncWatchSender, async_watch_channel};
 
 /// The server-specific configuration.
 #[derive(Clone, Eq, PartialEq, Debug, SmartDefault)]

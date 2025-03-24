@@ -9,11 +9,11 @@ use gs_common::network::thread::NetworkThread;
 use gs_common::prelude::std_unbounded_channel;
 use gs_common::prelude::*;
 use gs_common::voxel::plugin::VoxelUniverseBuilder;
-use gs_common::{builtin_game_registries, GameBevyCommand, GameServer};
+use gs_common::{GameBevyCommand, GameServer, builtin_game_registries};
+use gs_schemas::GameSide;
 use gs_schemas::dependencies::uuid::Uuid;
 use gs_schemas::registries::GameRegistries;
 use gs_schemas::schemas::SchemaUuidExt;
-use gs_schemas::GameSide;
 
 use crate::network::NetworkThreadClientState;
 use crate::states::{ClientAppState, LoadingGameSystemSet};

@@ -2,9 +2,9 @@
 //! Uses the provided task pool for running async generation tasks.
 
 use bevy::tasks::{AsyncComputeTaskPool, Task};
+use gs_schemas::GsExtraData;
 use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::voxel::chunk::Chunk;
-use gs_schemas::GsExtraData;
 use gs_schemas::{coordinates::AbsChunkPos, mutwatcher::MutWatcher};
 
 use crate::prelude::*;

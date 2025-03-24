@@ -460,12 +460,14 @@ mod test {
             .unwrap();
         assert!(reg.push_object(DummyObject(RegistryName::gs("a"))).is_err());
         assert!(reg.push_object(DummyObject(RegistryName::gs("b"))).is_err());
-        assert!(reg
-            .insert_object_with_id(b_id, DummyObject(RegistryName::gs("new")))
-            .is_err());
-        assert!(reg
-            .insert_object_with_id(c_id, DummyObject(RegistryName::gs("b")))
-            .is_err());
+        assert!(
+            reg.insert_object_with_id(b_id, DummyObject(RegistryName::gs("new")))
+                .is_err()
+        );
+        assert!(
+            reg.insert_object_with_id(c_id, DummyObject(RegistryName::gs("b")))
+                .is_err()
+        );
 
         assert_eq!(reg.lookup_id_to_object(a_id).map(|o| o.0.key.as_str()), Some("a"));
         assert_eq!(reg.lookup_id_to_object(b_id).map(|o| o.0.key.as_str()), Some("b"));
