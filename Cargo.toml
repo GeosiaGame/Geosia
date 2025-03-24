@@ -129,6 +129,13 @@ features = [
     "serialize", # Support for `serde` Serialize/Deserialize
 ]
 
+[workspace.dependencies.bevy_color]
+version = "0.15.0"
+default-features = false
+features = [
+    "serialize", # Support for `serde` Serialize/Deserialize
+]
+
 [workspace.dependencies.bevy_reflect]
 version = "0.15.0"
 features = ["smallvec", "glam", "uuid"]

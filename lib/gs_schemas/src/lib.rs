@@ -45,6 +45,7 @@ pub enum GameSide {
 /// Re-exported dependencies used in API types
 pub mod dependencies {
     pub use anyhow;
+    pub use bevy_color;
     pub use bevy_math;
     pub use bitflags;
     pub use bitvec;
@@ -58,7 +59,6 @@ pub mod dependencies {
     pub use once_cell;
     pub use rand;
     pub use rand_xoshiro;
-    pub use rgb;
     pub use serde;
     pub use smallvec;
     pub use thiserror;

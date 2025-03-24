@@ -17,9 +17,9 @@ pub enum Direction {
     YMinus,
     /// Up/Top
     YPlus,
-    /// Front (into the screen)
+    /// Back (into the screen)
     ZMinus,
-    /// Back (out of the screen)
+    /// Front (out of the screen)
     ZPlus,
 }
 

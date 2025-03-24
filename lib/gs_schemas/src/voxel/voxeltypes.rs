@@ -2,7 +2,7 @@
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 
-use rgb::RGBA8;
+use bevy_color::Srgba;
 use serde::{Deserialize, Serialize};
 
 use crate::registry::{Registry, RegistryId, RegistryName, RegistryNameRef, RegistryObject};
@@ -75,7 +75,7 @@ pub struct BlockDefinition {
     /// The set of shapes available
     pub shape_set: BlockShapeSet,
     /// A color that can represent the block on maps, debug views, etc.
-    pub representative_color: RGBA8,
+    pub representative_color: Srgba,
     /// If the block can be collided with
     pub has_collision_box: bool,
     /// If the block has a mesh that can be rendered
@@ -89,7 +89,7 @@ pub const EMPTY_BLOCK_NAME: RegistryName = RegistryName::gs_const("empty");
 pub static EMPTY_BLOCK: BlockDefinition = BlockDefinition {
     name: EMPTY_BLOCK_NAME,
     shape_set: BlockShapeSet::FullCubeOnly,
-    representative_color: RGBA8::new(0, 0, 0, 0),
+    representative_color: bevy_color::palettes::basic::BLACK,
     has_collision_box: false,
     has_drawable_mesh: false,
 };

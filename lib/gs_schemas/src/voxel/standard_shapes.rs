@@ -100,9 +100,9 @@ pub struct VSVertex {
     /// Barycentric coordinate within the voxel face.
     /// <https://www.asawicki.info/news_1721_how_to_correctly_interpolate_vertex_attributes_on_a_parallelogram_using_modern_gpus>
     /// Archive: <https://web.archive.org/web/20200516133048/https://www.asawicki.info/news_1721_how_to_correctly_interpolate_vertex_attributes_on_a_parallelogram_using_modern_gpus>
-    pub barycentric: Vec3A,
+    pub barycentric: Vec2,
     /// Sign when added to the "extra data" sum for proper quadrilateral interpolation
-    pub barycentric_sign: i32,
+    pub barycentric_sign: f32,
     /// List of blocks to check to calculate the ambient occlusion values.
     pub ao_offsets: SmallVec<[IVec3; 4]>,
 }
@@ -151,19 +151,12 @@ fn init_no_shape() -> VoxelShapeDef {
     }
 }
 
-/// A signum function that returns 0 for values x where |x|<0.1
-fn approx_signum(mut v: Vec3A) -> IVec3 {
-    let abs = v.abs();
-    if abs.x < 0.1 {
-        v.x = 0.0;
-    }
-    if abs.y < 0.1 {
-        v.y = 0.0;
-    }
-    if abs.z < 0.1 {
-        v.z = 0.0;
-    }
-    v.signum().as_ivec3()
+/// A signum function that returns 0 for values x where |x|<=0.1
+fn approx_signum(v: Vec3A) -> IVec3 {
+    let v: Vec3 = v.into();
+    let minuses = v.cmple(Vec3::splat(-0.1));
+    let pluses = v.cmpge(Vec3::splat(0.1));
+    IVec3::select(minuses, IVec3::NEG_ONE, IVec3::select(pluses, IVec3::ONE, IVec3::ZERO))
 }
 
 /// Calculates the set of ambient occlusion neighbors from the position&normal at a given vertex.
@@ -192,46 +185,45 @@ fn corner_ao_set(corner: Vec3A, inormal: IVec3) -> SmallVec<[IVec3; 4]> {
 
 /// Constructs a list of vertices for a quad with the given center and local right&up vectors.
 fn quad_verts(center: Vec3A, right: Vec3A, up: Vec3A) -> SmallVec<[VSVertex; 8]> {
-    let fnormal = -right.cross(up);
+    let fnormal = right.cross(up).normalize();
     let inormal = approx_signum(fnormal);
-    let fnormal = fnormal.normalize();
     smallvec![
         VSVertex {
             offset: center - right - up,
             texcoord: Vec2::new(0.0, 1.0),
             normal: fnormal,
-            barycentric: Vec3A::new(0.0, 1.0, 1.0),
-            barycentric_sign: -1,
+            barycentric: Vec2::new(1.0, 0.0),
+            barycentric_sign: -1.0,
             ao_offsets: corner_ao_set(center - right - up, inormal),
         },
         VSVertex {
             offset: center - right + up,
             texcoord: Vec2::new(0.0, 0.0),
             normal: fnormal,
-            barycentric: Vec3A::new(0.0, 0.0, 1.0),
-            barycentric_sign: 1,
+            barycentric: Vec2::new(0.0, 0.0),
+            barycentric_sign: 1.0,
             ao_offsets: corner_ao_set(center - right + up, inormal),
         },
         VSVertex {
             offset: center + right + up,
             texcoord: Vec2::new(1.0, 0.0),
             normal: fnormal,
-            barycentric: Vec3A::new(1.0, 0.0, 1.0),
-            barycentric_sign: -1,
+            barycentric: Vec2::new(0.0, 1.0),
+            barycentric_sign: -1.0,
             ao_offsets: corner_ao_set(center + right + up, inormal),
         },
         VSVertex {
             offset: center + right - up,
             texcoord: Vec2::new(1.0, 1.0),
             normal: fnormal,
-            barycentric: Vec3A::new(0.0, 0.0, 1.0),
-            barycentric_sign: 1,
+            barycentric: Vec2::new(0.0, 0.0),
+            barycentric_sign: 1.0,
             ao_offsets: corner_ao_set(center + right - up, inormal),
         },
     ]
 }
 
-const QUAD_INDICES: [u32; 6] = [0, 1, 2, 2, 3, 0];
+const QUAD_INDICES: [u32; 6] = [0, 2, 1, 3, 2, 0];
 
 fn init_cube_shape() -> VoxelShapeDef {
     VoxelShapeDef {
@@ -243,7 +235,7 @@ fn init_cube_shape() -> VoxelShapeDef {
                 can_be_clipped: true,
                 vertices: quad_verts(
                     Vec3A::new(-0.5, 0.0, 0.0),
-                    Vec3A::new(0.0, 0.0, -0.5),
+                    Vec3A::new(0.0, 0.0, 0.5),
                     Vec3A::new(0.0, 0.5, 0.0),
                 ),
                 indices: SmallVec::from_slice(&QUAD_INDICES),
@@ -254,7 +246,7 @@ fn init_cube_shape() -> VoxelShapeDef {
                 can_be_clipped: true,
                 vertices: quad_verts(
                     Vec3A::new(0.5, 0.0, 0.0),
-                    Vec3A::new(0.0, 0.0, 0.5),
+                    Vec3A::new(0.0, 0.0, -0.5),
                     Vec3A::new(0.0, 0.5, 0.0),
                 ),
                 indices: SmallVec::from_slice(&QUAD_INDICES),
@@ -266,7 +258,7 @@ fn init_cube_shape() -> VoxelShapeDef {
                 vertices: quad_verts(
                     Vec3A::new(0.0, -0.5, 0.0),
                     Vec3A::new(0.5, 0.0, 0.0),
-                    Vec3A::new(0.0, 0.0, -0.5),
+                    Vec3A::new(0.0, 0.0, 0.5),
                 ),
                 indices: SmallVec::from_slice(&QUAD_INDICES),
             },
@@ -277,28 +269,28 @@ fn init_cube_shape() -> VoxelShapeDef {
                 vertices: quad_verts(
                     Vec3A::new(0.0, 0.5, 0.0),
                     Vec3A::new(0.5, 0.0, 0.0),
-                    Vec3A::new(0.0, 0.0, 0.5),
+                    Vec3A::new(0.0, 0.0, -0.5),
                 ),
                 indices: SmallVec::from_slice(&QUAD_INDICES),
             },
-            // Front Z-
+            // Back Z-
             VSSide {
                 can_clip: true,
                 can_be_clipped: true,
                 vertices: quad_verts(
                     Vec3A::new(0.0, 0.0, -0.5),
-                    Vec3A::new(0.5, 0.0, 0.0),
+                    Vec3A::new(-0.5, 0.0, 0.0),
                     Vec3A::new(0.0, 0.5, 0.0),
                 ),
                 indices: SmallVec::from_slice(&QUAD_INDICES),
             },
-            // Back Z+
+            // Front Z+
             VSSide {
                 can_clip: true,
                 can_be_clipped: true,
                 vertices: quad_verts(
                     Vec3A::new(0.0, 0.0, 0.5),
-                    Vec3A::new(-0.5, 0.0, 0.0),
+                    Vec3A::new(0.5, 0.0, 0.0),
                     Vec3A::new(0.0, 0.5, 0.0),
                 ),
                 indices: SmallVec::from_slice(&QUAD_INDICES),
@@ -320,24 +312,24 @@ fn init_slope_shape() -> VoxelShapeDef {
                         offset: Vec3A::new(-0.5, -0.5, 0.5),
                         texcoord: Vec2::new(0.0, 1.0),
                         normal: Vec3A::new(-1.0, 0.0, 0.0),
-                        barycentric: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, -1.0, 1.0), IVec3::new(-1, 0, 0)),
                     },
                     VSVertex {
                         offset: Vec3A::new(-0.5, 0.5, 0.5),
                         texcoord: Vec2::new(0.0, 0.0),
                         normal: Vec3A::new(-1.0, 0.0, 0.0),
-                        barycentric: Vec3A::new(1.0, 0.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(1.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, 1.0, 1.0), IVec3::new(-1, 0, 0)),
                     },
                     VSVertex {
                         offset: Vec3A::new(-0.5, -0.5, -0.5),
                         texcoord: Vec2::new(1.0, 1.0),
                         normal: Vec3A::new(-1.0, 0.0, 0.0),
-                        barycentric: Vec3A::new(0.0, 1.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 1.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, -1.0, -1.0), IVec3::new(-1, 0, 0)),
                     },
                 ],
@@ -352,24 +344,24 @@ fn init_slope_shape() -> VoxelShapeDef {
                         offset: Vec3A::new(0.5, -0.5, -0.5),
                         texcoord: Vec2::new(0.0, 1.0),
                         normal: Vec3A::new(1.0, 0.0, 0.0),
-                        barycentric: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(1.0, -1.0, -1.0), IVec3::new(1, 0, 0))
                     },
                     VSVertex {
                         offset: Vec3A::new(0.5, 0.5, 0.5),
                         texcoord: Vec2::new(1.0, 0.0),
                         normal: Vec3A::new(1.0, 0.0, 0.0),
-                        barycentric: Vec3A::new(1.0, 0.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(1.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(1.0, 1.0, 1.0), IVec3::new(1, 0, 0))
                     },
                     VSVertex {
                         offset: Vec3A::new(0.5, -0.5, 0.5),
                         texcoord: Vec2::new(1.0, 1.0),
                         normal: Vec3A::new(1.0, 0.0, 0.0),
-                        barycentric: Vec3A::new(0.0, 1.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 1.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(1.0, -1.0, 1.0), IVec3::new(1, 0, 0))
                     },
                 ],
@@ -432,24 +424,24 @@ fn init_corner_shape() -> VoxelShapeDef {
                         offset: Vec3A::new(-0.5, -0.5, 0.5),
                         texcoord: Vec2::new(0.0, 1.0),
                         normal: Vec3A::new(-1.0, 0.0, 0.0),
-                        barycentric: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, -1.0, 1.0), IVec3::new(-1, 0, 0)),
                     },
                     VSVertex {
                         offset: Vec3A::new(-0.5, 0.5, 0.5),
                         texcoord: Vec2::new(0.0, 0.0),
                         normal: Vec3A::new(-1.0, 0.0, 0.0),
-                        barycentric: Vec3A::new(1.0, 0.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(1.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, 1.0, 1.0), IVec3::new(-1, 0, 0)),
                     },
                     VSVertex {
                         offset: Vec3A::new(-0.5, -0.5, -0.5),
                         texcoord: Vec2::new(1.0, 1.0),
                         normal: Vec3A::new(-1.0, 0.0, 0.0),
-                        barycentric: Vec3A::new(0.0, 1.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 1.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, -1.0, -1.0), IVec3::new(-1, 0, 0)),
                     },
                 ],
@@ -482,24 +474,24 @@ fn init_corner_shape() -> VoxelShapeDef {
                         offset: Vec3A::new(0.5, -0.5, -0.5),
                         texcoord: Vec2::new(1.0, 1.0),
                         normal: Vec3A::new(0.0, 1.0, -1.0).normalize(),
-                        barycentric: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(1.0, -1.0, -1.0), IVec3::new(0, 0, -1)),
                     },
                     VSVertex {
                         offset: Vec3A::new(-0.5, -0.5, -0.5),
                         texcoord: Vec2::new(0.0, 1.0),
                         normal: Vec3A::new(0.0, 1.0, -1.0).normalize(),
-                        barycentric: Vec3A::new(1.0, 0.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(1.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, -1.0, -1.0), IVec3::new(0, 0, -1)),
                     },
                     VSVertex {
                         offset: Vec3A::new(-0.5, 0.5, 0.5),
                         texcoord: Vec2::new(0.0, 0.0),
                         normal: Vec3A::new(0.0, 1.0, -1.0).normalize(),
-                        barycentric: Vec3A::new(0.0, 1.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 1.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, 1.0, 1.0), IVec3::new(0, 1, 0)),
                     },
                     //
@@ -507,24 +499,24 @@ fn init_corner_shape() -> VoxelShapeDef {
                         offset: Vec3A::new(-0.5, 0.5, 0.5),
                         texcoord: Vec2::new(1.0, 0.0),
                         normal: Vec3A::new(1.0, 1.0, 0.0).normalize(),
-                        barycentric: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, 1.0, 1.0), IVec3::new(0, 1, 0)),
                     },
                     VSVertex {
                         offset: Vec3A::new(0.5, -0.5, 0.5),
                         texcoord: Vec2::new(1.0, 1.0),
                         normal: Vec3A::new(1.0, 1.0, 0.0).normalize(),
-                        barycentric: Vec3A::new(1.0, 0.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(1.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(1.0, -1.0, 1.0), IVec3::new(1, 0, 0)),
                     },
                     VSVertex {
                         offset: Vec3A::new(0.5, -0.5, -0.5),
                         texcoord: Vec2::new(0.0, 1.0),
                         normal: Vec3A::new(1.0, 1.0, 0.0).normalize(),
-                        barycentric: Vec3A::new(0.0, 1.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 1.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(1.0, -1.0, -1.0), IVec3::new(1, 0, 0)),
                     },
                 ],
@@ -546,24 +538,24 @@ fn init_corner_shape() -> VoxelShapeDef {
                         offset: Vec3A::new(-0.5, 0.5, 0.5),
                         texcoord: Vec2::new(1.0, 1.0),
                         normal: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, 1.0, 1.0), IVec3::new(0, 0, 1)),
                     },
                     VSVertex {
                         offset: Vec3A::new(-0.5, -0.5, 0.5),
                         texcoord: Vec2::new(1.0, 0.0),
                         normal: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric: Vec3A::new(1.0, 0.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(1.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, -1.0, 1.0), IVec3::new(0, 0, 1)),
                     },
                     VSVertex {
                         offset: Vec3A::new(0.5, -0.5, 0.5),
                         texcoord: Vec2::new(0.0, 0.0),
                         normal: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric: Vec3A::new(0.0, 1.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 1.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(1.0, -1.0, 1.0), IVec3::new(0, 0, 1)),
                     },
                 ],
@@ -586,24 +578,24 @@ fn init_inner_corner_shape() -> VoxelShapeDef {
                         offset: Vec3A::new(-0.5, -0.5, 0.5),
                         texcoord: Vec2::new(0.0, 1.0),
                         normal: Vec3A::new(-1.0, 0.0, 0.0),
-                        barycentric: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, -1.0, 1.0), IVec3::new(-1, 0, 0)),
                     },
                     VSVertex {
                         offset: Vec3A::new(-0.5, 0.5, -0.5),
                         texcoord: Vec2::new(1.0, 0.0),
                         normal: Vec3A::new(-1.0, 0.0, 0.0),
-                        barycentric: Vec3A::new(1.0, 0.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(1.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, 1.0, -1.0), IVec3::new(-1, 0, 0)),
                     },
                     VSVertex {
                         offset: Vec3A::new(-0.5, -0.5, -0.5),
                         texcoord: Vec2::new(1.0, 1.0),
                         normal: Vec3A::new(-1.0, 0.0, 0.0),
-                        barycentric: Vec3A::new(0.0, 1.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 1.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, -1.0, -1.0), IVec3::new(-1, 0, 0)),
                     },
                 ],
@@ -640,24 +632,24 @@ fn init_inner_corner_shape() -> VoxelShapeDef {
                         offset: Vec3A::new(0.5, 0.5, -0.5),
                         texcoord: Vec2::new(0.0, 0.0),
                         normal: Vec3A::new(0.0, 1.0, 1.0).normalize(),
-                        barycentric: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(1.0, 1.0, -1.0), IVec3::new(0, 1, 0)),
                     },
                     VSVertex {
                         offset: Vec3A::new(-0.5, 0.5, -0.5),
                         texcoord: Vec2::new(1.0, 0.0),
                         normal: Vec3A::new(0.0, 1.0, 1.0).normalize(),
-                        barycentric: Vec3A::new(1.0, 0.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(1.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, 1.0, -1.0), IVec3::new(0, 1, 0)),
                     },
                     VSVertex {
                         offset: Vec3A::new(-0.5, -0.5, 0.5),
                         texcoord: Vec2::new(1.0, 1.0),
                         normal: Vec3A::new(0.0, 1.0, 1.0).normalize(),
-                        barycentric: Vec3A::new(0.0, 1.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 1.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, -1.0, 1.0), IVec3::new(0, 0, 0)),
                     },
                     //
@@ -665,24 +657,24 @@ fn init_inner_corner_shape() -> VoxelShapeDef {
                         offset: Vec3A::new(-0.5, -0.5, 0.5),
                         texcoord: Vec2::new(0.0, 1.0),
                         normal: Vec3A::new(-1.0, 1.0, 0.0).normalize(),
-                        barycentric: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, -1.0, 1.0), IVec3::new(0, 0, 0)),
                     },
                     VSVertex {
                         offset: Vec3A::new(0.5, 0.5, 0.5),
                         texcoord: Vec2::new(0.0, 0.0),
                         normal: Vec3A::new(-1.0, 1.0, 0.0).normalize(),
-                        barycentric: Vec3A::new(1.0, 0.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(1.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(1.0, 1.0, 1.0), IVec3::new(0, 1, 0)),
                     },
                     VSVertex {
                         offset: Vec3A::new(0.5, 0.5, -0.5),
                         texcoord: Vec2::new(1.0, 0.0),
                         normal: Vec3A::new(-1.0, 1.0, 0.0).normalize(),
-                        barycentric: Vec3A::new(0.0, 1.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 1.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(1.0, 1.0, -1.0), IVec3::new(0, 1, 0)),
                     },
                 ],
@@ -708,24 +700,24 @@ fn init_inner_corner_shape() -> VoxelShapeDef {
                         offset: Vec3A::new(0.5, 0.5, 0.5),
                         texcoord: Vec2::new(0.0, 1.0),
                         normal: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(1.0, 1.0, 1.0), IVec3::new(0, 0, 1)),
                     },
                     VSVertex {
                         offset: Vec3A::new(-0.5, -0.5, 0.5),
                         texcoord: Vec2::new(1.0, 0.0),
                         normal: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric: Vec3A::new(1.0, 0.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(1.0, 0.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(-1.0, -1.0, 1.0), IVec3::new(0, 0, 1)),
                     },
                     VSVertex {
                         offset: Vec3A::new(0.5, -0.5, 0.5),
                         texcoord: Vec2::new(0.0, 0.0),
                         normal: Vec3A::new(0.0, 0.0, 1.0),
-                        barycentric: Vec3A::new(0.0, 1.0, 0.0),
-                        barycentric_sign: 0,
+                        barycentric: Vec2::new(0.0, 1.0),
+                        barycentric_sign: 0.0,
                         ao_offsets: corner_ao_set(Vec3A::new(1.0, -1.0, 1.0), IVec3::new(0, 0, 1)),
                     },
                 ],

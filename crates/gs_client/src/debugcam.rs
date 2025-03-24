@@ -4,7 +4,9 @@
 //
 //THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+use bevy::color::palettes::tailwind;
 use bevy::input::mouse::AccumulatedMouseMotion;
+use bevy::math::vec3;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 
@@ -199,6 +201,18 @@ fn player_look(
     }
 }
 
+fn xyz_gizmo(camera_query: Query<&Transform, With<FlyCam>>, mut gizmos: Gizmos) {
+    let len = 0.5;
+    let Ok(&camera) = camera_query.get_single() else {
+        return;
+    };
+    let arrow_start = camera.transform_point(vec3(0.0, 0.0, -4.0));
+    gizmos.sphere(arrow_start, len, tailwind::GRAY_700);
+    gizmos.arrow(arrow_start, arrow_start + len * Vec3::X, tailwind::RED_600);
+    gizmos.arrow(arrow_start, arrow_start + len * Vec3::Y, tailwind::GREEN_600);
+    gizmos.arrow(arrow_start, arrow_start + len * Vec3::Z, tailwind::BLUE_600);
+}
+
 fn cursor_grab(
     keys: Res<ButtonInput<KeyCode>>,
     key_bindings: Res<KeyBindings>,
@@ -210,22 +224,6 @@ fn cursor_grab(
         }
     } else {
         warn!("Primary window not found for `cursor_grab`!");
-    }
-}
-
-// Grab cursor when an entity with FlyCam is added
-fn initial_grab_on_flycam_spawn(
-    mut primary_window: Query<&mut Window, With<PrimaryWindow>>,
-    query_added: Query<Entity, Added<FlyCam>>,
-) {
-    if query_added.is_empty() {
-        return;
-    }
-
-    if let Ok(window) = &mut primary_window.get_single_mut() {
-        toggle_grab_cursor(window);
-    } else {
-        warn!("Primary window not found for `initial_grab_cursor`!");
     }
 }
 
@@ -281,21 +279,10 @@ impl Plugin for PlayerPlugin {
             .add_systems(OnEnter(ClientAppState::InGame), spawn_debug_text)
             .add_systems(Update, player_move.in_set(InGameSystemSet))
             .add_systems(Update, player_look.in_set(InGameSystemSet))
-            .add_systems(Update, cursor_grab.in_set(InGameSystemSet));
-    }
-}
-
-/// Same as [`PlayerPlugin`] but does not spawn a camera
-pub struct NoCameraPlayerPlugin;
-impl Plugin for NoCameraPlayerPlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<MovementSettings>()
-            .init_resource::<KeyBindings>()
-            .add_systems(OnEnter(ClientAppState::InGame), initial_grab_cursor)
-            .add_systems(OnEnter(ClientAppState::InGame), initial_grab_on_flycam_spawn)
-            .add_systems(OnEnter(ClientAppState::InGame), spawn_debug_text)
-            .add_systems(Update, player_move.in_set(InGameSystemSet))
-            .add_systems(Update, player_look.in_set(InGameSystemSet))
+            .add_systems(
+                Update,
+                xyz_gizmo.in_set(InGameSystemSet).after(player_move).after(player_look),
+            )
             .add_systems(Update, cursor_grab.in_set(InGameSystemSet));
     }
 }
