@@ -1,8 +1,10 @@
 //! Standard voxel shape meshes and metadata implementation
 //! TODO: Replace with a flexible system that can accept user data
+
+use std::sync::LazyLock;
+
 use bevy_math::prelude::*;
 use bevy_math::Vec3A;
-use once_cell::sync::Lazy;
 use smallvec::{smallvec, SmallVec};
 
 use crate::direction::OctahedralOrientation;
@@ -121,15 +123,15 @@ pub struct VSSide {
 }
 
 /// Shape definition for empty voxels.
-pub static VOXEL_NO_SHAPE: Lazy<VoxelShapeDef> = Lazy::new(init_no_shape);
+pub static VOXEL_NO_SHAPE: LazyLock<VoxelShapeDef> = LazyLock::new(init_no_shape);
 /// Shape definitions for cube blocks.
-pub static VOXEL_CUBE_SHAPE: Lazy<VoxelShapeDef> = Lazy::new(init_cube_shape);
+pub static VOXEL_CUBE_SHAPE: LazyLock<VoxelShapeDef> = LazyLock::new(init_cube_shape);
 /// Shape definitions for slope blocks.
-pub static VOXEL_SLOPE_SHAPE: Lazy<VoxelShapeDef> = Lazy::new(init_slope_shape);
+pub static VOXEL_SLOPE_SHAPE: LazyLock<VoxelShapeDef> = LazyLock::new(init_slope_shape);
 /// Shape definitions for corner slope blocks.
-pub static VOXEL_CORNER_SHAPE: Lazy<VoxelShapeDef> = Lazy::new(init_corner_shape);
+pub static VOXEL_CORNER_SHAPE: LazyLock<VoxelShapeDef> = LazyLock::new(init_corner_shape);
 /// Shape definitions for inner corner slope blocks.
-pub static VOXEL_INNER_CORNER_SHAPE: Lazy<VoxelShapeDef> = Lazy::new(init_inner_corner_shape);
+pub static VOXEL_INNER_CORNER_SHAPE: LazyLock<VoxelShapeDef> = LazyLock::new(init_inner_corner_shape);
 
 fn init_no_shape() -> VoxelShapeDef {
     let side = VSSide {

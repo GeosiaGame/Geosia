@@ -508,7 +508,7 @@ impl MultiNoiseGenerator {
                 "found no biome for point {:?}, noise values: {:?}. Picking randomly.",
                 center.point, center.noise
             );
-            let index = rand.gen_range(0..self.generatable_biomes.len());
+            let index = rand.random_range(0..self.generatable_biomes.len());
             center.biome = Some(self.generatable_biomes[index].0);
             warn!(
                 "picked {}",

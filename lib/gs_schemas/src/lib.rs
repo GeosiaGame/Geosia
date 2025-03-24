@@ -56,7 +56,6 @@ pub mod dependencies {
     pub use itertools;
     pub use kstring;
     pub use noise;
-    pub use once_cell;
     pub use rand;
     pub use rand_xoshiro;
     pub use serde;
