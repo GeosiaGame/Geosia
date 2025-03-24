@@ -1,6 +1,6 @@
 //! Array-backed storage
 
-use std::iter::repeat;
+use std::iter::repeat_n;
 
 use crate::coordinates::{InChunkPos, InChunkRange, CHUNK_DIM3Z};
 use crate::voxel::chunk_storage::{ChunkDataType, ChunkStorage};
@@ -26,7 +26,7 @@ impl<T: ChunkDataType> ArrayStorage<T> {
         match self {
             Self::Array(arr) => arr,
             Self::Singleton(e) => {
-                let new_arr: Box<[T; CHUNK_DIM3Z]> = Vec::from_iter(repeat(e.clone()).take(CHUNK_DIM3Z))
+                let new_arr: Box<[T; CHUNK_DIM3Z]> = Vec::from_iter(repeat_n(e.clone(), CHUNK_DIM3Z))
                     .into_boxed_slice()
                     .try_into()
                     .unwrap();

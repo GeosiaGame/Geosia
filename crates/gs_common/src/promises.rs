@@ -112,7 +112,7 @@ impl<OkT: Send + 'static> AsyncResult<OkT> {
     }
 
     async fn async_generic_wait_impl(self) -> Result<()> {
-        self.async_wait().await.map(|_| ()).map_err(anyhow::Error::from)
+        self.async_wait().await.map(|_| ())
     }
 
     /// Spawns a new Tokio async task waiting for the result, and logs the error out if it is a failure.
@@ -143,7 +143,7 @@ impl<OkT: Send + 'static> GenericAsyncResult for AsyncResult<OkT> {
     }
 
     fn blocking_generic_wait(self: Box<Self>) -> Result<()> {
-        self.blocking_wait().map(|_| ()).map_err(anyhow::Error::from)
+        self.blocking_wait().map(|_| ())
     }
 
     fn async_generic_wait(self: Box<Self>) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>> {
