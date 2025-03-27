@@ -86,17 +86,15 @@ fn kickoff_game_transition(world: &mut World) {
 
             let net_thread2 = Arc::clone(&net_thread);
             net_thread
-                .schedule_task(|state| {
-                    Box::pin(async move {
-                        let local_conn = server_pipe
-                            .async_wait()
-                            .await
-                            .context("integ_server.create_local_connection")?;
-                        NetworkThreadClientState::connect_locally(state, net_thread2, local_conn)
-                            .await
-                            .context("NetworkThreadClientState::connect_locally")?;
-                        Ok(())
-                    })
+                .schedule_task(async move |state| {
+                    let local_conn = server_pipe
+                        .async_wait()
+                        .await
+                        .context("integ_server.create_local_connection")?;
+                    NetworkThreadClientState::connect_locally(state, net_thread2, local_conn)
+                        .await
+                        .context("NetworkThreadClientState::connect_locally")?;
+                    Ok(())
                 })
                 .blocking_wait()
                 .expect("Could not connect the client to the integrated server");
@@ -115,13 +113,11 @@ fn kickoff_game_transition(world: &mut World) {
             let net_thread2 = Arc::clone(&net_thread);
 
             net_thread
-                .schedule_task(move |state| {
-                    Box::pin(async move {
-                        NetworkThreadClientState::connect_remotely(state, net_thread2, server_address)
-                            .await
-                            .context("NetworkThreadClientState::connect_remotely")?;
-                        Ok(())
-                    })
+                .schedule_task(async move |state| {
+                    NetworkThreadClientState::connect_remotely(state, net_thread2, server_address)
+                        .await
+                        .context("NetworkThreadClientState::connect_remotely")?;
+                    Ok(())
                 })
                 .blocking_wait()
                 .expect("Could not connect the client to the remote server");
@@ -141,30 +137,28 @@ fn kickoff_connected_game_transition(
         registries: GameRegistries,
     }
     let bootstrap_data = authenticated_net_thread
-        .schedule_task(move |state| {
-            Box::pin(async move {
-                assert!(
-                    state.borrow().server_auth_rpc().is_some(),
-                    "Network state was not authenticated before running kickoff_connected_game_transition"
-                );
-                let bootstrap_request = state
-                    .borrow()
-                    .server_auth_rpc()
-                    .context("Missing auth endpoint")?
-                    .bootstrap_game_data_request();
-                let bootstrap_response = bootstrap_request
-                    .send()
-                    .promise
-                    .await
-                    .context("Failed bootstrap request to the remote server")?;
-                let bootstrap_response = bootstrap_response.get()?.get_data()?;
-                let uuid = Uuid::read_from_message(&bootstrap_response.get_universe_id()?);
-                let registries = default_registries.clone_with_serialized_ids(&bootstrap_response)?;
-                let nblocks = registries.block_types.len();
-                info!("Joining server world {uuid} with {nblocks} block types.");
+        .schedule_task(async move |state| {
+            assert!(
+                state.borrow().server_auth_rpc().is_some(),
+                "Network state was not authenticated before running kickoff_connected_game_transition"
+            );
+            let bootstrap_request = state
+                .borrow()
+                .server_auth_rpc()
+                .context("Missing auth endpoint")?
+                .bootstrap_game_data_request();
+            let bootstrap_response = bootstrap_request
+                .send()
+                .promise
+                .await
+                .context("Failed bootstrap request to the remote server")?;
+            let bootstrap_response = bootstrap_response.get()?.get_data()?;
+            let uuid = Uuid::read_from_message(&bootstrap_response.get_universe_id()?);
+            let registries = default_registries.clone_with_serialized_ids(&bootstrap_response)?;
+            let nblocks = registries.block_types.len();
+            info!("Joining server world {uuid} with {nblocks} block types.");
 
-                Ok(NetBootstrap { registries })
-            })
+            Ok(NetBootstrap { registries })
         })
         .blocking_wait()
         .expect("Could not connect the client to the remote server");
@@ -176,16 +170,14 @@ fn kickoff_connected_game_transition(
     let mut promises = world.resource_mut::<LoadingPromiseHolder>();
     promises
         .promises
-        .push(Box::new(authenticated_net_thread.schedule_task(|state| {
-            Box::pin(async move {
-                let auth_rpc = state.borrow().server_auth_rpc().cloned();
-                if let Some(auth_rpc) = auth_rpc {
-                    let mut rq = auth_rpc.send_chat_message_request();
-                    rq.get().set_text("Hello internet networking!");
-                    let _ = rq.send().promise.await;
-                }
-                Ok(())
-            })
+        .push(Box::new(authenticated_net_thread.schedule_task(async move |state| {
+            let auth_rpc = state.borrow().server_auth_rpc().cloned();
+            if let Some(auth_rpc) = auth_rpc {
+                let mut rq = auth_rpc.send_chat_message_request();
+                rq.get().set_text("Hello internet networking!");
+                let _ = rq.send().promise.await;
+            }
+            Ok(())
         })));
 
     let block_registry = Arc::clone(&client_data.shared_registries.block_types);
@@ -205,11 +197,9 @@ fn kickoff_connected_game_transition(
     let mut promises = world.resource_mut::<LoadingPromiseHolder>();
     promises
         .promises
-        .push(Box::new(authenticated_net_thread.schedule_task(|state| {
-            Box::pin(async move {
-                NetworkThreadClientState::allow_streams(state).await;
-                Ok(())
-            })
+        .push(Box::new(authenticated_net_thread.schedule_task(async move |state| {
+            NetworkThreadClientState::allow_streams(state).await;
+            Ok(())
         })));
 }
 

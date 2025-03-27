@@ -228,8 +228,8 @@ impl GameServer {
     /// Asynchronously creates a new local connection to this server's network runtime.
     pub fn create_local_connection(self: &Arc<Self>) -> AsyncResult<LocalConnectionPipe> {
         let inner_engine = Arc::clone(self);
-        self.network_thread.schedule_task(move |state| {
-            Box::pin(NetworkThreadServerState::accept_local_connection(state, inner_engine))
+        self.network_thread.schedule_task(async move |state| {
+            NetworkThreadServerState::accept_local_connection(state, inner_engine).await
         })
     }
 
@@ -309,12 +309,10 @@ impl GameServer {
         info!("Bootstrapping network");
         engine
             .network_thread
-            .schedule_task(move |state| {
-                Box::pin(async move {
-                    NetworkThreadServerState::bootstrap(state, net_engine).await?;
-                    NetworkThreadServerState::allow_streams(state).await;
-                    Ok(())
-                })
+            .schedule_task(async move |state| {
+                NetworkThreadServerState::bootstrap(state, net_engine).await?;
+                NetworkThreadServerState::allow_streams(state).await;
+                Ok(())
             })
             .blocking_wait()
             .unwrap();
