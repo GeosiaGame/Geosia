@@ -95,9 +95,7 @@ impl<State: NetworkThreadState> NetworkThread<State> {
 
     /// Schedules a future in the network thread, the future is made using the provided factory function.
     pub fn schedule_task<
-        F: (for<'state> FnOnce(&'state Rc<RefCell<State>>) -> NetworkThreadAsyncFuture<'state, Result<Output>>)
-            + Send
-            + 'static,
+        F: (for<'state> AsyncFnOnce(&'state Rc<RefCell<State>>) -> Result<Output>) + Send + 'static,
         Output: Send + 'static,
     >(
         &self,

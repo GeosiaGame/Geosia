@@ -374,62 +374,60 @@ fn send_chunk_to_players(
 
     // TODO: error handling, throttling
     let peers: SmallVec<[_; 8]> = peers.into();
-    let _ = engine.network_thread.schedule_task(move |rstate| {
-        Box::pin(async move {
-            let mut joiner: JoinSet<Result<()>> = JoinSet::new();
-            for addr in peers {
-                let rstate_inner = rstate.clone();
-                let state = rstate.borrow();
-                let my_buffer = buffer.clone();
-                let Some(peer) = state.find_connected_client(addr) else {
-                    bail!("Cannot find connected client {addr:?} anymore");
-                };
-                match &peer.chunk_stream {
-                    Some(chunk_stream) => {
-                        let chunk_stream = chunk_stream.clone();
-                        joiner.spawn_local(async move {
-                            chunk_stream.send(my_buffer).await?;
-                            Ok(())
-                        });
-                    }
-                    None => {
-                        // TODO: encapsulate safe concurrent stream opening
-                        let open_stream = peer.open_stream(NetworkStreamHeader::Standard(StandardTypes::ChunkData));
-                        joiner.spawn_local(async move {
-                            let mut open_stream = open_stream.await?;
-                            {
-                                let mut state = rstate_inner.borrow_mut();
-                                let client = state.find_connected_client_mut(addr).context("Client went missing")?;
-                                if let Some(already_open_stream) = &client.chunk_stream {
-                                    open_stream = already_open_stream.clone();
-                                } else {
-                                    client.chunk_stream = Some(open_stream.clone());
-                                }
+    let _ = engine.network_thread.schedule_task(async move |rstate| {
+        let mut joiner: JoinSet<Result<()>> = JoinSet::new();
+        for addr in peers {
+            let rstate_inner = rstate.clone();
+            let state = rstate.borrow();
+            let my_buffer = buffer.clone();
+            let Some(peer) = state.find_connected_client(addr) else {
+                bail!("Cannot find connected client {addr:?} anymore");
+            };
+            match &peer.chunk_stream {
+                Some(chunk_stream) => {
+                    let chunk_stream = chunk_stream.clone();
+                    joiner.spawn_local(async move {
+                        chunk_stream.send(my_buffer).await?;
+                        Ok(())
+                    });
+                }
+                None => {
+                    // TODO: encapsulate safe concurrent stream opening
+                    let open_stream = peer.open_stream(NetworkStreamHeader::Standard(StandardTypes::ChunkData));
+                    joiner.spawn_local(async move {
+                        let mut open_stream = open_stream.await?;
+                        {
+                            let mut state = rstate_inner.borrow_mut();
+                            let client = state.find_connected_client_mut(addr).context("Client went missing")?;
+                            if let Some(already_open_stream) = &client.chunk_stream {
+                                open_stream = already_open_stream.clone();
+                            } else {
+                                client.chunk_stream = Some(open_stream.clone());
                             }
-                            open_stream.send(my_buffer).await?;
-                            Ok(())
-                        });
-                    }
-                }
-            }
-            while let Some(result) = joiner.join_next().await {
-                match result {
-                    Err(join_error) => {
-                        if join_error.is_cancelled() {
-                            continue;
-                        } else if join_error.is_panic() {
-                            std::panic::resume_unwind(join_error.into_panic())
-                        } else {
-                            unreachable!()
                         }
-                    }
-                    Ok(Err(error)) => {
-                        error!("Error while sending chunk data to player: {error}");
-                    }
-                    Ok(Ok(())) => {}
+                        open_stream.send(my_buffer).await?;
+                        Ok(())
+                    });
                 }
             }
-            Ok(())
-        })
+        }
+        while let Some(result) = joiner.join_next().await {
+            match result {
+                Err(join_error) => {
+                    if join_error.is_cancelled() {
+                        continue;
+                    } else if join_error.is_panic() {
+                        std::panic::resume_unwind(join_error.into_panic())
+                    } else {
+                        unreachable!()
+                    }
+                }
+                Ok(Err(error)) => {
+                    error!("Error while sending chunk data to player: {error}");
+                }
+                Ok(Ok(())) => {}
+            }
+        }
+        Ok(())
     });
 }
