@@ -7,7 +7,7 @@ use std::{cell::RefCell, cmp::Ordering, mem::MaybeUninit, ops::Deref, rc::Rc};
 use bevy_math::{DVec2, FloatExt, IVec2, IVec3, Vec3Swizzles};
 use gs_schemas::{
     GsExtraData,
-    coordinates::{AbsChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIM3V, CHUNK_DIMD, CHUNK_DIMZ, InChunkPos},
+    coordinates::{AbsChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIM3IV, CHUNK_DIMD, CHUNK_DIMZ, InChunkPos},
     dependencies::{
         itertools::{Itertools, iproduct},
         smallvec::SmallVec,
@@ -59,7 +59,7 @@ pub struct MultiNoiseGenerator {
 impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
     /// Generate a single chunk's blocks for the world.
     fn generate_chunk(&self, position: AbsChunkPos, extra_data: <ED as GsExtraData>::ChunkData) -> Chunk<ED> {
-        let point: IVec3 = <IVec3>::from(position) * CHUNK_DIM3V;
+        let point: IVec3 = <IVec3>::from(position) * CHUNK_DIM3IV;
         let offset_point = DVec2Wrapper::new((point.x + CHUNK_DIM / 2) as f64, (point.z + CHUNK_DIM / 2) as f64);
 
         let seed_bytes_be = self.seed.to_be_bytes();

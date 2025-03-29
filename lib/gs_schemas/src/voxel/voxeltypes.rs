@@ -78,6 +78,8 @@ pub struct BlockDefinition {
     pub representative_color: Srgba,
     /// If the block can be collided with
     pub has_collision_box: bool,
+    /// If the block can be hit by raycasts
+    pub has_selection_box: bool,
     /// If the block has a mesh that can be rendered
     pub has_drawable_mesh: bool,
 }
@@ -91,6 +93,7 @@ pub static EMPTY_BLOCK: BlockDefinition = BlockDefinition {
     shape_set: BlockShapeSet::FullCubeOnly,
     representative_color: bevy_color::palettes::basic::BLACK,
     has_collision_box: false,
+    has_selection_box: false,
     has_drawable_mesh: false,
 };
 

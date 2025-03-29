@@ -1,9 +1,22 @@
 //! A collection of strongly typed newtype wrappers for the various coordinate formats within the game's world and related constants.
+//!
+//! The types provided fall into the following categories:
+//!  - World coordinates - [`WorldPos`] - floating-point coordinates of a point in the universe, used for entity positions, raycast positions etc.
+//!  - Chunk coordinates - [`AbsChunkPos`], [`RelChunkPos`] - integer coordinates of an entire chunk in the voxel world
+//!  - Block coordinates - [`AbsBlockPos`], [`RelBlockPos`] - integer coordinates of a specific block in the voxel world
+//!  - Coordinate indices - [`u128`] - [Z-curve](https://en.wikipedia.org/wiki/Z-order_(curve))-packed block coordinates used for spatially sorting block and chunk coordinates
+//!
+//! Absolute coordinates define a point in space and relative coordinates define a vector difference between two such points.
+//!
+//! The coordinate types can be freely converted between each other, the conversions perform the necessary math to make sure they refer to the same physical points in space.
+//!
+//! A solid cube block at `(0,0,0)` has floating-point world bounds of `(0,0,0)` to `(1,1,1)`.
+//!
 
 use std::fmt::{Display, Formatter};
-use std::ops::{Add, Deref};
+use std::ops::{Add, Deref, Sub};
 
-use bevy_math::prelude::*;
+use bevy_math::{DVec3, Vec3A, prelude::*};
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -13,6 +26,8 @@ pub const BLOCK_DIM: f32 = 0.5;
 
 /// Length of a side of a chunk in blocks
 pub const CHUNK_DIM: i32 = 32;
+/// Length of a side of a chunk in blocks
+pub const CHUNK_DIMF: f32 = CHUNK_DIM as f32;
 /// Length of a side of a chunk in blocks
 pub const CHUNK_DIMD: f64 = CHUNK_DIM as f64;
 /// Length of a side of a chunk in blocks
@@ -25,12 +40,152 @@ pub const CHUNK_DIM2Z: usize = (CHUNK_DIM * CHUNK_DIM) as usize;
 pub const CHUNK_DIM3: i32 = CHUNK_DIM * CHUNK_DIM * CHUNK_DIM;
 /// Number of blocks in the volume of the chunk
 pub const CHUNK_DIM3Z: usize = (CHUNK_DIM * CHUNK_DIM * CHUNK_DIM) as usize;
+/// Chunk dimensions in blocks as a [Vec3A] for convenience
+pub const CHUNK_DIM3V: Vec3A = Vec3A::splat(CHUNK_DIMF);
 /// Chunk dimensions in blocks as a [IVec3] for convenience
-pub const CHUNK_DIM3V: IVec3 = IVec3::splat(CHUNK_DIM);
+pub const CHUNK_DIM3IV: IVec3 = IVec3::splat(CHUNK_DIM);
 /// Maximum block position allowed, +-2^30 or 1 billion blocks to have a safe margin to avoid integer overflows.
 pub const MAX_BLOCK_POS: i32 = 1 << 30;
 /// [`MAX_BLOCK_POS`] converted to the unit of chunks.
 pub const MAX_CHUNK_POS: i32 = MAX_BLOCK_POS / CHUNK_DIM;
+
+/// A 3D vector position storing a [`f32`]-based Vec3 offset with a [`AbsChunkPos`] reference point for increased precision
+#[derive(Clone, Copy, PartialEq, Debug, Zeroable)]
+#[repr(C)]
+pub struct WorldPos {
+    /// Floating point offset from the chunk origin
+    pub offset: Vec3A,
+    /// Reference chunk position
+    pub chunk: AbsChunkPos,
+}
+
+impl WorldPos {
+    /// The `(0,0,0)` position
+    pub const ZERO: Self = WorldPos {
+        offset: Vec3A::ZERO,
+        chunk: AbsChunkPos::ZERO,
+    };
+
+    /// Renormalizes and wraps a given f32 vector, try to avoid if possible due to precision loss concerns.
+    #[inline]
+    pub fn from_vec3(vec: Vec3A) -> Self {
+        Self {
+            offset: vec,
+            chunk: AbsChunkPos::ZERO,
+        }
+        .renormalized()
+    }
+
+    /// Renormalizes and wraps a given f64 vector.
+    #[inline]
+    pub fn from_dvec3(vec: DVec3) -> Self {
+        let offset_chunk_units = vec / CHUNK_DIMD;
+        let offset_chunk_count: IVec3 = offset_chunk_units.floor().as_ivec3();
+        Self {
+            offset: (vec - (offset_chunk_count * CHUNK_DIM).as_dvec3()).as_vec3a(),
+            chunk: AbsChunkPos::from_ivec3(offset_chunk_count),
+        }
+    }
+
+    /// Constructs itself from a given block position at a `(0,0,0)` offset.
+    #[inline]
+    pub fn from_blockpos(pos: AbsBlockPos) -> Self {
+        let (cpos, bpos) = pos.split_chunk_component();
+        Self {
+            offset: bpos.as_vec3a(),
+            chunk: cpos,
+        }
+    }
+
+    /// Converts any chunk-sized integer part of [`WorldPos::offset`] to the integer [`WorldPos::chunk`] offset to improve precision for further calculations.
+    ///
+    /// Makes sure that [`WorldPos::offset`] is in the range of `[0, CHUNK_DIMF)`.
+    #[inline]
+    pub fn renormalize(&mut self) {
+        let offset_chunk_units = self.offset / CHUNK_DIMF;
+        let offset_chunk_count: IVec3 = offset_chunk_units.floor().as_ivec3();
+        self.offset -= (offset_chunk_count * CHUNK_DIM).as_vec3a();
+        self.chunk += RelChunkPos::from_ivec3(offset_chunk_count);
+    }
+
+    /// Converts any chunk-sized integer part of [`WorldPos::offset`] to the integer [`WorldPos::chunk`] offset to improve precision for further calculations.
+    ///
+    /// Makes sure that [`WorldPos::offset`] is in the range of `[0, CHUNK_DIMF)`.
+    #[inline]
+    pub fn renormalized(mut self) -> Self {
+        self.renormalize();
+        self
+    }
+
+    /// Calculates which block's space this [`WorldPos`] is inside
+    #[inline]
+    pub fn as_blockpos(self) -> AbsBlockPos {
+        let ioffset = self.offset.floor().as_ivec3();
+        AbsBlockPos::from(self.chunk) + RelBlockPos::from_ivec3(ioffset)
+    }
+
+    /// Computes the world-space position as a 64-bit float vector.
+    #[inline]
+    pub fn as_dvec3(self) -> DVec3 {
+        self.chunk.as_world_dvec3() + self.offset.as_dvec3()
+    }
+
+    /// Adds together two WorldPos structs componentwise and renormalizes the result, used in the implementation of vector math operations.
+    #[inline]
+    fn add_components(self, rhs: Self) -> Self {
+        Self {
+            offset: self.offset + rhs.offset,
+            chunk: self.chunk + RelChunkPos::from_ivec3(*rhs.chunk),
+        }
+        .renormalized()
+    }
+}
+
+impl From<WorldPos> for AbsBlockPos {
+    #[inline]
+    fn from(value: WorldPos) -> Self {
+        value.as_blockpos()
+    }
+}
+
+impl From<AbsBlockPos> for WorldPos {
+    #[inline]
+    fn from(value: AbsBlockPos) -> Self {
+        Self::from_blockpos(value)
+    }
+}
+
+impl Add<Vec3A> for WorldPos {
+    type Output = WorldPos;
+
+    fn add(self, rhs: Vec3A) -> Self::Output {
+        let other_as_pos = WorldPos::from_vec3(rhs);
+        self.add_components(other_as_pos)
+    }
+}
+
+impl Add<DVec3> for WorldPos {
+    type Output = WorldPos;
+
+    fn add(self, rhs: DVec3) -> Self::Output {
+        let other_as_pos = WorldPos::from_dvec3(rhs);
+        self.add_components(other_as_pos)
+    }
+}
+
+impl Sub for WorldPos {
+    type Output = DVec3;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        self.as_dvec3() - rhs.as_dvec3()
+    }
+}
+
+impl Default for WorldPos {
+    fn default() -> Self {
+        Self::ZERO
+    }
+}
 
 // xxx yyy zzz -> zyxzyxzyx bit pattern
 // reference for tests
@@ -326,6 +481,18 @@ macro_rules! impl_rel_abs_pair {
                 $Abs(self.0 + rhs.0)
             }
         }
+        impl std::ops::AddAssign<$Rel> for $Abs {
+            #[inline]
+            fn add_assign(&mut self, rhs: $Rel) {
+                self.0 += rhs.0;
+            }
+        }
+        impl std::ops::AddAssign<$Rel> for $Rel {
+            #[inline]
+            fn add_assign(&mut self, rhs: $Rel) {
+                self.0 += rhs.0;
+            }
+        }
 
         impl std::ops::Sub<$Rel> for $Rel {
             type Output = $Rel;
@@ -353,6 +520,18 @@ macro_rules! impl_rel_abs_pair {
             #[inline]
             fn sub(self, rhs: $Abs) -> Self::Output {
                 $Rel(self.0 - rhs.0)
+            }
+        }
+        impl std::ops::SubAssign<$Rel> for $Abs {
+            #[inline]
+            fn sub_assign(&mut self, rhs: $Rel) {
+                self.0 -= rhs.0;
+            }
+        }
+        impl std::ops::SubAssign<$Rel> for $Rel {
+            #[inline]
+            fn sub_assign(&mut self, rhs: $Rel) {
+                self.0 -= rhs.0;
             }
         }
     };
@@ -441,6 +620,12 @@ impl InChunkPos {
     #[inline]
     pub const fn as_index(self) -> usize {
         (self.0.x + (CHUNK_DIM * self.0.z) + (CHUNK_DIM2 * self.0.y)) as usize
+    }
+
+    /// Gets this position as a relative block position relative to the origin of the chunk it would be in.
+    #[inline]
+    pub const fn offset_from_chunk_origin(self) -> RelBlockPos {
+        RelBlockPos::from_ivec3(self.0)
     }
 }
 
@@ -589,6 +774,18 @@ impl AbsChunkPos {
     pub fn from_zpack(idx: u128) -> Self {
         Self(zunpack_3d(idx).xzy())
     }
+
+    /// Converts the chunk position to a world-space f64 position vector of the chunk origin.
+    #[inline]
+    pub fn as_world_dvec3(self) -> DVec3 {
+        self.0.as_dvec3() * CHUNK_DIMD
+    }
+
+    /// Combines the chunk position with an [`InChunkPos`] to get an absolute block position.
+    #[inline]
+    pub fn block_pos(self, in_pos: InChunkPos) -> AbsBlockPos {
+        AbsBlockPos::from(self) + in_pos.offset_from_chunk_origin()
+    }
 }
 
 #[test]
@@ -678,6 +875,18 @@ impl AbsBlockPos {
     #[inline]
     pub fn from_zpack(idx: u128) -> Self {
         Self(zunpack_3d(idx).xzy())
+    }
+
+    /// Converts the block position to a world-space f64 position vector of the block origin.
+    #[inline]
+    pub fn as_world_dvec3(self) -> DVec3 {
+        self.0.as_dvec3()
+    }
+
+    /// Computes the floating-point center position of this blockspace.
+    #[inline]
+    pub fn block_center(self) -> DVec3 {
+        self.as_dvec3() + DVec3::splat(0.5)
     }
 }
 

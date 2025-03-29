@@ -13,9 +13,10 @@ use smallvec::{Array, SmallVec};
 
 pub mod coordinates;
 pub mod direction;
+pub mod math;
 pub mod mutwatcher;
-pub mod physics;
 pub mod range;
+pub mod raycast;
 pub mod registries;
 pub mod registry;
 pub mod schemas;
