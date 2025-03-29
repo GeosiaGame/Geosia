@@ -28,7 +28,7 @@ impl<Object, CoordType: From<IVec3> + Into<IVec3> + Copy> Neighborhood<Object, C
     ) -> Self {
         let mut out: SmallVec<[Object; 27]> = SmallVec::new();
         let center_raw: IVec3 = center_position.into();
-        for (y, z, x) in iproduct!(0..3, 0..3, 0..3) {
+        for (y, z, x) in iproduct!(-1..=1, -1..=1, -1..=1) {
             let pos_raw = center_raw + IVec3::new(x, y, z);
             out.push(coord_fn(pos_raw.into()));
         }

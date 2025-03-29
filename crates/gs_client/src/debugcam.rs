@@ -6,11 +6,19 @@
 
 use bevy::color::palettes::tailwind;
 use bevy::input::mouse::AccumulatedMouseMotion;
-use bevy::math::vec3;
+use bevy::math::{Vec3A, vec3};
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
+use bevy_egui::EguiContexts;
+use bevy_egui::egui::Align2;
+use gs_common::raycast::{RaycastContext, raycast};
+use gs_common::voxel::plugin::BlockRegistryHolder;
+use gs_schemas::coordinates::{AbsChunkPos, WorldPos};
+use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
+use gs_schemas::voxel::voxeltypes::EMPTY_BLOCK;
 
 use crate::states::{ClientAppState, InGameSystemSet};
+use crate::voxel::ClientVoxelUniverse;
 
 /// Mouse sensitivity and movement speed
 #[derive(Resource)]
@@ -201,7 +209,40 @@ fn player_look(
     }
 }
 
-fn xyz_gizmo(camera_query: Query<&Transform, With<FlyCam>>, mut gizmos: Gizmos) {
+#[derive(Default, Resource)]
+struct DebugGizmoToggles {
+    local_coordinates: bool,
+    current_chunk: bool,
+    raycast: bool,
+}
+
+fn gizmo_toggles(
+    camera_query: Query<&Transform, With<FlyCam>>,
+    mut ui: EguiContexts,
+    mut toggles: ResMut<DebugGizmoToggles>,
+) {
+    use bevy_egui::egui;
+    if camera_query.is_empty() {
+        return;
+    }
+
+    let toggles = &mut *toggles;
+    egui::Window::new("Debug gizmos")
+        .collapsible(true)
+        .resizable(false)
+        .anchor(Align2::RIGHT_BOTTOM, egui::vec2(0.0, 0.0))
+        .auto_sized()
+        .show(ui.ctx_mut(), move |ui| {
+            ui.checkbox(&mut toggles.local_coordinates, "Local Coords");
+            ui.checkbox(&mut toggles.current_chunk, "Current Chunk");
+            ui.checkbox(&mut toggles.raycast, "Raycast");
+        });
+}
+
+fn xyz_gizmo(camera_query: Query<&Transform, With<FlyCam>>, mut gizmos: Gizmos, toggles: Res<DebugGizmoToggles>) {
+    if !toggles.local_coordinates {
+        return;
+    }
     let len = 0.5;
     let Ok(&camera) = camera_query.get_single() else {
         return;
@@ -211,6 +252,91 @@ fn xyz_gizmo(camera_query: Query<&Transform, With<FlyCam>>, mut gizmos: Gizmos) 
     gizmos.arrow(arrow_start, arrow_start + len * Vec3::X, tailwind::RED_600);
     gizmos.arrow(arrow_start, arrow_start + len * Vec3::Y, tailwind::GREEN_600);
     gizmos.arrow(arrow_start, arrow_start + len * Vec3::Z, tailwind::BLUE_600);
+}
+
+fn cur_chunk_gizmo(
+    camera_query: Query<&Transform, With<FlyCam>>,
+    voxels: Query<&ClientVoxelUniverse>,
+    bregistry: Option<Res<BlockRegistryHolder>>,
+    mut gizmos: Gizmos,
+    toggles: Res<DebugGizmoToggles>,
+) {
+    if !toggles.current_chunk {
+        return;
+    }
+    let Ok(&camera) = camera_query.get_single() else {
+        return;
+    };
+    let Ok(voxels) = voxels.get_single() else {
+        return;
+    };
+    let Some(bregistry) = bregistry else {
+        return;
+    };
+    let camera_zero: Vec3A = camera.transform_point(Vec3::ZERO).into();
+
+    let curcpos = AbsChunkPos::from(WorldPos::from_vec3(camera_zero).as_blockpos());
+    // let curcpos = AbsChunkPos::from(AbsBlockPos::from_ivec3(camera_zero.floor().as_ivec3()));
+    let curchunk = voxels.loaded_chunks().get_chunk(curcpos);
+    if let Some(chunk) = curchunk {
+        let chunk = chunk.read();
+        for (pos, entry) in chunk.blocks.iter_with_coords() {
+            let block = bregistry.lookup_id_to_object(entry.id).unwrap_or(&EMPTY_BLOCK);
+            if !block.has_drawable_mesh {
+                continue;
+            }
+            let apos = curcpos.block_pos(pos).block_center().as_vec3();
+            gizmos.cuboid(Transform::from_translation(apos), block.representative_color);
+        }
+    }
+}
+
+fn lookat_gizmo(
+    camera_query: Query<&Transform, With<FlyCam>>,
+    voxels: Query<&ClientVoxelUniverse>,
+    bregistry: Option<Res<BlockRegistryHolder>>,
+    mut gizmos: Gizmos,
+    toggles: Res<DebugGizmoToggles>,
+) {
+    if !toggles.raycast {
+        return;
+    }
+    let limit = 64.0;
+    let Ok(&camera) = camera_query.get_single() else {
+        return;
+    };
+    let Ok(voxels) = voxels.get_single() else {
+        return;
+    };
+    let Some(bregistry) = bregistry else {
+        return;
+    };
+    let rcctx = RaycastContext {
+        block_registry: Some(&bregistry),
+        voxel_world: Some(voxels),
+    };
+    let camera_zero: Vec3A = camera.transform_point(Vec3::ZERO).into();
+    let rcspec = RaycastSpec {
+        start: WorldPos::from_vec3(camera_zero),
+        direction: camera.forward().into(),
+        distance_limit: limit,
+        hit_mask: RaycastHitMask::all(),
+    };
+
+    let rc = raycast(&rcctx, &rcspec);
+    let RaycastResult::BlockHit(rc) = rc else {
+        let limit_sphere = camera.transform_point(vec3(0.0, 0.0, -limit));
+        gizmos.sphere(limit_sphere, 0.5, tailwind::RED_600);
+        return;
+    };
+    let zero_cube = rc.position.as_vec3();
+    let mid_cube = rc.position.block_center().as_vec3();
+    gizmos.cuboid(
+        Transform::from_translation(mid_cube).with_scale(Vec3::splat(1.1)),
+        tailwind::AMBER_500,
+    );
+    gizmos.arrow(mid_cube, mid_cube + Vec3::from(rc.face.as_vec()), tailwind::AMBER_400);
+    gizmos.sphere(zero_cube + Vec3::from(rc.f32_offset), 0.1, tailwind::GREEN_800);
 }
 
 fn cursor_grab(
@@ -274,6 +400,7 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<MovementSettings>()
             .init_resource::<KeyBindings>()
+            .init_resource::<DebugGizmoToggles>()
             .add_systems(OnEnter(ClientAppState::InGame), setup_player)
             .add_systems(OnEnter(ClientAppState::InGame), initial_grab_cursor)
             .add_systems(OnEnter(ClientAppState::InGame), spawn_debug_text)
@@ -281,7 +408,10 @@ impl Plugin for PlayerPlugin {
             .add_systems(Update, player_look.in_set(InGameSystemSet))
             .add_systems(
                 Update,
-                xyz_gizmo.in_set(InGameSystemSet).after(player_move).after(player_look),
+                (gizmo_toggles, xyz_gizmo, cur_chunk_gizmo, lookat_gizmo)
+                    .in_set(InGameSystemSet)
+                    .after(player_move)
+                    .after(player_look),
             )
             .add_systems(Update, cursor_grab.in_set(InGameSystemSet));
     }

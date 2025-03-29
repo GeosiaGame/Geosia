@@ -25,7 +25,7 @@ pub struct RaycastContext<'world, ExtraData: GsExtraData> {
 }
 
 /// Compute a single raycast in the given context
-pub fn raycast<ED: GsExtraData>(context: RaycastContext<ED>, spec: &RaycastSpec) -> RaycastResult {
+pub fn raycast<ED: GsExtraData>(context: &RaycastContext<ED>, spec: &RaycastSpec) -> RaycastResult {
     let distance_limit = spec.distance_limit.min(1000.0);
     let direction = spec.direction.normalize_or(Direction::ZMinus.as_vec());
     let ddirection = direction.as_dvec3();
@@ -83,7 +83,7 @@ pub fn raycast<ED: GsExtraData>(context: RaycastContext<ED>, spec: &RaycastSpec)
                 let datum = chunk.blocks.get_copy(inpos);
                 let vdef = registry.lookup_id_to_object(datum.id).unwrap_or(&EMPTY_BLOCK);
                 if vdef.has_selection_box {
-                    let block_position = cpos.get_block_pos(inpos);
+                    let block_position = cpos.block_pos(inpos);
                     let intersect_pos = spec.start + direction * t_total;
                     // hit!
                     return RaycastResult::BlockHit(RaycastBlockResult {

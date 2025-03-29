@@ -783,7 +783,7 @@ impl AbsChunkPos {
 
     /// Combines the chunk position with an [`InChunkPos`] to get an absolute block position.
     #[inline]
-    pub fn get_block_pos(self, in_pos: InChunkPos) -> AbsBlockPos {
+    pub fn block_pos(self, in_pos: InChunkPos) -> AbsBlockPos {
         AbsBlockPos::from(self) + in_pos.offset_from_chunk_origin()
     }
 }
@@ -881,6 +881,12 @@ impl AbsBlockPos {
     #[inline]
     pub fn as_world_dvec3(self) -> DVec3 {
         self.0.as_dvec3()
+    }
+
+    /// Computes the floating-point center position of this blockspace.
+    #[inline]
+    pub fn block_center(self) -> DVec3 {
+        self.as_dvec3() + DVec3::splat(0.5)
     }
 }
 

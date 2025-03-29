@@ -1,6 +1,6 @@
 //! Ray-world intersection query API types
 
-use bevy_math::Vec3A;
+use bevy_math::{Dir3A, Vec3A};
 use bytemuck::{Pod, Zeroable};
 
 use crate::{
@@ -29,8 +29,8 @@ bitflags! {
 pub struct RaycastSpec {
     /// Position to start the cast from
     pub start: WorldPos,
-    /// Direction to cast towards, normalized when the query is started and adjusted to Z- if zero
-    pub direction: Vec3A,
+    /// Direction to cast towards, Z- by default
+    pub direction: Dir3A,
     /// Distance at which the raycast should fail to resolve
     pub distance_limit: f32,
     /// Flags determining which type of objects to search for
@@ -45,7 +45,7 @@ impl Default for RaycastSpec {
     fn default() -> Self {
         Self {
             start: WorldPos::ZERO,
-            direction: Direction::ZMinus.as_vec(),
+            direction: Dir3A::NEG_Z,
             distance_limit: DEFAULT_RAYCAST_RANGE,
             hit_mask: RaycastHitMask::all(),
         }
