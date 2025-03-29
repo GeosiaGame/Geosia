@@ -28,6 +28,7 @@ pub fn setup_basic_blocks(registry: &mut BlockRegistry) {
             shape_set: StandardShapedMaterial,
             representative_color: Srgba::rgba_u8(64, 64, 64, 255),
             has_collision_box: true,
+            has_selection_box: true,
             has_drawable_mesh: true,
         })
         .unwrap();
@@ -37,6 +38,7 @@ pub fn setup_basic_blocks(registry: &mut BlockRegistry) {
             shape_set: StandardShapedMaterial,
             representative_color: Srgba::rgba_u8(110, 81, 0, 255),
             has_collision_box: true,
+            has_selection_box: true,
             has_drawable_mesh: true,
         })
         .unwrap();
@@ -46,6 +48,7 @@ pub fn setup_basic_blocks(registry: &mut BlockRegistry) {
             shape_set: StandardShapedMaterial,
             representative_color: Srgba::rgba_u8(30, 230, 30, 255),
             has_collision_box: true,
+            has_selection_box: true,
             has_drawable_mesh: true,
         })
         .unwrap();
@@ -55,6 +58,7 @@ pub fn setup_basic_blocks(registry: &mut BlockRegistry) {
             shape_set: StandardShapedMaterial,
             representative_color: Srgba::rgba_u8(200, 200, 200, 255),
             has_collision_box: true,
+            has_selection_box: true,
             has_drawable_mesh: true,
         })
         .unwrap();
@@ -64,6 +68,7 @@ pub fn setup_basic_blocks(registry: &mut BlockRegistry) {
             shape_set: StandardShapedMaterial,
             representative_color: Srgba::rgba_u8(0, 0, 200, 100),
             has_collision_box: false,
+            has_selection_box: false,
             has_drawable_mesh: true,
         })
         .unwrap();
@@ -73,6 +78,7 @@ pub fn setup_basic_blocks(registry: &mut BlockRegistry) {
             shape_set: StandardShapedMaterial,
             representative_color: Srgba::rgba_u8(224, 200, 130, 255),
             has_collision_box: true,
+            has_selection_box: true,
             has_drawable_mesh: true,
         })
         .unwrap();

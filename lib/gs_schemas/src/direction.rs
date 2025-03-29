@@ -87,7 +87,7 @@ impl Direction {
     }
 
     /// Converts the direction into an axis-aligned integer unit vector.
-    pub fn to_ivec(self) -> IVec3 {
+    pub fn as_ivec(self) -> IVec3 {
         use Direction::*;
         match self {
             XMinus => IVec3::new(-1, 0, 0),
@@ -100,7 +100,7 @@ impl Direction {
     }
 
     /// Converts the direction into an axis-aligned floating point unit vector.
-    pub fn to_vec(self) -> Vec3A {
+    pub fn as_vec(self) -> Vec3A {
         use Direction::*;
         match self {
             XMinus => Vec3A::new(-1.0, 0.0, 0.0),
@@ -127,7 +127,7 @@ impl Direction {
     }
 
     /// Provides the index of the axis of the direction: 0 for X, 1 for Y and 2 for Z.
-    pub fn to_axis_index(self) -> usize {
+    pub fn as_axis_index(self) -> usize {
         use Direction::*;
         match self {
             XMinus => 0,
@@ -141,7 +141,7 @@ impl Direction {
 
     /// Converts the direction into an index:
     /// 0 for X-, 1 for X+, 2 for Y-, 3 for Y+, 4 for Z-, 5 for Z+.
-    pub fn to_index(self) -> usize {
+    pub fn as_index(self) -> usize {
         use Direction::*;
         match self {
             XMinus => 0,
@@ -173,8 +173,8 @@ impl Direction {
 
     /// Vector cross product of two directions (right-handed)
     pub fn cross(a: Self, b: Self) -> Option<Self> {
-        let aidx = a.to_index();
-        let bidx = b.to_index();
+        let aidx = a.as_index();
+        let bidx = b.as_index();
         DIRECTION_CROSS_TABLE[aidx * 6 + bidx]
     }
 }
@@ -244,10 +244,10 @@ impl OctahedralOrientation {
     /// Converts itself into an index in the range 0..24 (not inclusive)
     pub fn to_index(self) -> usize {
         // 0..6
-        let right_idx = self.right.to_index();
+        let right_idx = self.right.as_index();
         // 0..4
         let up_idx = {
-            let i = self.up.to_index();
+            let i = self.up.as_index();
             if i > right_idx { i - 2 } else { i }
         };
         // front is always determined by the cross product
@@ -278,15 +278,15 @@ impl OctahedralOrientation {
     /// M * v will rotate the vector v to match this orientation
     pub fn to_matrix(self) -> Mat3A {
         Mat3A::from_cols(
-            self.right().to_ivec().as_vec3a(),
-            self.up().to_ivec().as_vec3a(),
-            self.front().to_ivec().as_vec3a(),
+            self.right().as_ivec().as_vec3a(),
+            self.up().as_ivec().as_vec3a(),
+            self.front().as_ivec().as_vec3a(),
         )
     }
 
     /// Rotates a global direction to the local space of this orientation.
     pub fn apply_to_dir(self, dir: Direction) -> Direction {
-        APPLY_UNAPPLY_LUT[dir.to_index() * 24 + self.to_index()].0
+        APPLY_UNAPPLY_LUT[dir.as_index() * 24 + self.to_index()].0
     }
 
     /// Rotates a global direction vector to the local space of this orientation.
@@ -301,7 +301,7 @@ impl OctahedralOrientation {
 
     /// Rotates a direction in the local space of this orientation to the global space.
     pub fn unapply_to_dir(self, dir: Direction) -> Direction {
-        APPLY_UNAPPLY_LUT[dir.to_index() * 24 + self.to_index()].1
+        APPLY_UNAPPLY_LUT[dir.as_index() * 24 + self.to_index()].1
     }
 
     /// Rotates a direction vector in the local space of this orientation to the global space.
@@ -358,8 +358,8 @@ mod test {
             for orientation_idx in 0..24 {
                 let dir = Direction::try_from_index(dir_idx).unwrap();
                 let orientation = OctahedralOrientation::try_from_index(orientation_idx).unwrap();
-                let applied = Direction::from_approx_vec(orientation.to_matrix() * dir.to_vec());
-                let unapplied = Direction::from_approx_vec(orientation.to_matrix().transpose() * dir.to_vec());
+                let applied = Direction::from_approx_vec(orientation.to_matrix() * dir.as_vec());
+                let unapplied = Direction::from_approx_vec(orientation.to_matrix().transpose() * dir.as_vec());
                 lut[dir_idx * 24 + orientation_idx] = (applied, unapplied);
             }
         }
@@ -435,8 +435,8 @@ mod test {
         let mut non_zero = 0;
         for &d1 in &ALL_DIRECTIONS {
             for &d2 in &ALL_DIRECTIONS {
-                let v1 = d1.to_ivec();
-                let v2 = d2.to_ivec();
+                let v1 = d1.as_ivec();
+                let v2 = d2.as_ivec();
                 let vcross = v1.cross(v2);
                 let vdcross = Direction::try_from_ivec(vcross);
                 let dcross = Direction::cross(d1, d2);

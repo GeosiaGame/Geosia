@@ -10,14 +10,18 @@
 
 ## World representation and processing
 
-- A savefile is made up of the following components from smallest to largest:
+- A savefile is made up of the following components ordered by size:
 1. Universe - top-level container for everything
+   - A single shared main voxel space for everything
+     - The maximum coordinate value allowed is +-2^30 or 1 billion blocks to have a safe margin to avoid integer overflows.
+     - Block coordinates are 32-bit integers, entity coordinates use block units and are stored as 32-bit float vectors relative to a chunk coordinate (this retains the performance of 32-bit float math while allowing for high precision anywhere in the world)
 2. Planet
    - Options for shape (needs a decision):
      - Flat world
      - "Flat" world with X/Y/Z wrapping (at some point the world loops around in every direction, with the vertical part mirroring to show crossing the planet center)
      - "Flat" world mapped onto a sphere
      - Cube world (voxels form a real cube)
+   - Not an independent voxel space, instead it's a region of space reserved in the 3d voxel space with a defined boundary behaviour (wrap, wall, etc)
 3. Biome
    - Usually ~1000 m across, to provide enough building space and space for interesting features to spawn
 4. Chunk

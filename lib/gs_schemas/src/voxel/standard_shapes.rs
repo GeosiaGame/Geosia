@@ -8,6 +8,7 @@ use bevy_math::prelude::*;
 use smallvec::{SmallVec, smallvec};
 
 use crate::direction::OctahedralOrientation;
+use crate::math::ZeroRespectingSignumToInt;
 use crate::voxel::voxeltypes::BlockMetadata;
 
 /// Helper for determining the shape&orientation of a standard-shaped block from its metadata.
@@ -153,17 +154,9 @@ fn init_no_shape() -> VoxelShapeDef {
     }
 }
 
-/// A signum function that returns 0 for values x where |x|<=0.1
-fn approx_signum(v: Vec3A) -> IVec3 {
-    let v: Vec3 = v.into();
-    let minuses = v.cmple(Vec3::splat(-0.1));
-    let pluses = v.cmpge(Vec3::splat(0.1));
-    IVec3::select(minuses, IVec3::NEG_ONE, IVec3::select(pluses, IVec3::ONE, IVec3::ZERO))
-}
-
 /// Calculates the set of ambient occlusion neighbors from the position&normal at a given vertex.
 fn corner_ao_set(corner: Vec3A, inormal: IVec3) -> SmallVec<[IVec3; 4]> {
-    let icorner = approx_signum(corner);
+    let icorner = corner.zero_respecting_signum_int();
     let mut sv = SmallVec::new();
     sv.push(icorner);
     sv.push(inormal);
@@ -188,7 +181,7 @@ fn corner_ao_set(corner: Vec3A, inormal: IVec3) -> SmallVec<[IVec3; 4]> {
 /// Constructs a list of vertices for a quad with the given center and local right&up vectors.
 fn quad_verts(center: Vec3A, right: Vec3A, up: Vec3A) -> SmallVec<[VSVertex; 8]> {
     let fnormal = right.cross(up).normalize();
-    let inormal = approx_signum(fnormal);
+    let inormal = fnormal.zero_respecting_signum_int();
     smallvec![
         VSVertex {
             offset: center - right - up,

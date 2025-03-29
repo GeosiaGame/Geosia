@@ -143,11 +143,11 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
 
         for &side_dir in &ALL_DIRECTIONS {
             let rot_side_dir = vor.unapply_to_dir(side_dir);
-            let side = &vshape.sides[rot_side_dir.to_index()];
+            let side = &vshape.sides[rot_side_dir.as_index()];
             if side.indices.is_empty() {
                 continue;
             }
-            let ioffset = RelBlockPos::from(side_dir.to_ivec());
+            let ioffset = RelBlockPos::from(side_dir.as_ivec());
 
             // hidden face removal
             let touchside = side_dir.opposite();
@@ -162,7 +162,7 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
             };
             let tor = tstdmeta.orientation();
             let touchrotside = tor.unapply_to_dir(touchside);
-            let tside = &tshape.sides[touchrotside.to_index()];
+            let tside = &tshape.sides[touchrotside.as_index()];
 
             if side.can_be_clipped && tdef.has_drawable_mesh && tside.can_clip {
                 continue;

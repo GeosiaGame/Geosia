@@ -13,6 +13,7 @@ pub mod dedicated_server;
 pub mod network;
 pub mod prelude;
 pub mod promises;
+pub mod raycast;
 pub mod voxel;
 
 use std::thread::JoinHandle;
