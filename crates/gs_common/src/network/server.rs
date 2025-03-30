@@ -7,7 +7,6 @@ use bevy::ecs::component::{ComponentHooks, StorageType};
 use bevy::ecs::world::DeferredWorld;
 use bevy::log;
 use bevy::prelude::*;
-use bevy_math::{vec3, Vec3A};
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::{RpcSystem, pry};
 use futures::FutureExt;
@@ -24,8 +23,7 @@ use tokio::task::{JoinHandle, JoinSet, spawn_local};
 use tracing::Instrument;
 use uuid::Uuid;
 use gs_schemas::actions::{PositionData, ThrowAction};
-use gs_schemas::coordinates::{AbsChunkPos, WorldPos};
-use gs_schemas::dependencies::bevy_color::palettes::tailwind;
+use gs_schemas::coordinates::WorldPos;
 use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
 use gs_schemas::voxel::chunk_storage::ChunkStorage;
 use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
@@ -662,7 +660,7 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
                 return Ok(());
             };
             let rcctx = RaycastContext {
-                block_registry: Some(&bregistry),
+                block_registry: Some(bregistry),
                 voxel_world: Some(voxels),
             };
             let rcspec = RaycastSpec {
@@ -689,7 +687,7 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
             let Ok(voxels) = &mut voxel_query.get_single_mut(world) else {
                 return Ok(());
             };
-            if let Some(mut chunk) = voxels.loaded_chunks_mut().get_chunk_mut(chunk) {
+            if let Some(chunk) = voxels.loaded_chunks_mut().get_chunk_mut(chunk) {
                 match throw {
                     ThrowAction::ThrowBlock() => {
                         chunk.mutate_stored().blocks.put(local, BlockEntry::new(i_stone, 0));

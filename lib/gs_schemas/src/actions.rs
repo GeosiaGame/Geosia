@@ -21,15 +21,15 @@ impl TryFrom<position_data::Reader<'_>> for PositionData {
 
     fn try_from(value: position_data::Reader) -> Result<Self, Self::Error> {
         let position = {
-            let pos = value.reborrow().get_position().map_err(|_| {()})?;
-            AbsBlockPos { 0: IVec3 {
+            let pos = value.reborrow().get_position().map_err(|_| {})?;
+            AbsBlockPos(IVec3 {
                 x: pos.get_x(),
                 y: pos.get_y(),
                 z: pos.get_z()
-            }}
+            })
         };
         let offset = {
-            let offset = value.reborrow().get_offset().map_err(|_| {()})?;
+            let offset = value.reborrow().get_offset().map_err(|_| {})?;
             Vec3 {
                 x: offset.get_x(),
                 y: offset.get_y(),
@@ -37,7 +37,7 @@ impl TryFrom<position_data::Reader<'_>> for PositionData {
             }
         };
         let look = {
-            let look = value.reborrow().get_look().map_err(|_| {()})?;
+            let look = value.reborrow().get_look().map_err(|_| {})?;
             Vec3 {
                 x: look.get_x(),
                 y: look.get_y(),
@@ -76,7 +76,9 @@ impl PositionData {
 /// Throw Action, for world interaction
 #[derive(Debug, Copy, Clone)]
 pub enum ThrowAction {
+    /// Throw a block
     ThrowBlock(),
+    /// Throw an item
     ThrowItem(),
 }
 
