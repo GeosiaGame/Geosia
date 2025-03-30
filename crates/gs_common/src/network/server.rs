@@ -12,11 +12,14 @@ use capnp_rpc::{RpcSystem, pry};
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use gs_schemas::actions::{PositionData, ThrowAction};
+use gs_schemas::capnp_adapters::{adapt_i_vec3, adapt_throw_action, adapt_vec3};
 use gs_schemas::coordinates::WorldPos;
 use gs_schemas::dependencies::capnp::Error;
 use gs_schemas::dependencies::capnp::capability::Promise;
 use gs_schemas::dependencies::kstring::KString;
 use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
+use gs_schemas::schemas::game_types_capnp::throw_action::WhichReader;
+use gs_schemas::schemas::game_types_capnp::{i_vec3, throw_action};
 use gs_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
     SendThrowActionParams, SendThrowActionResults,
@@ -645,8 +648,10 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
 
     fn send_throw_action(&mut self, params: SendThrowActionParams, _: SendThrowActionResults) -> Promise<(), Error> {
         let params = pry!(params.get());
-        let position: PositionData = pry!(params.get_position()).try_into().unwrap();
-        let throw: ThrowAction = pry!(params.get_throw()).try_into().unwrap();
+        let position = pry!(params.get_position());
+        // have to adapt because Readers can't be sent across threads,
+        // and schedule_bevy counts as one.
+        let throw = adapt_throw_action(pry!(params.get_throw())).unwrap();
         info!(
             "Client {} ({:?}) sent a throw packet `{:?}`, `{:?}`",
             self.0.borrow().username,
@@ -654,33 +659,37 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
             position,
             throw
         );
+        let ray_spec = RaycastSpec {
+            start: WorldPos::from_offset_blockpos(
+                adapt_i_vec3(position.get_position().unwrap()).into(),
+                adapt_vec3(position.get_offset().unwrap()).into(),
+            ),
+            direction: Dir3::new(adapt_vec3(position.get_look().unwrap()).into())
+                .unwrap()
+                .into(),
+            distance_limit: 64.0,
+            hit_mask: RaycastHitMask::all(),
+        };
         let _ = self.0.borrow().server.schedule_bevy(move |world| {
             let mut voxel_query = world.query::<&VoxelUniverse<ServerData>>();
-            let bregistry = { &world.get_resource::<BlockRegistryHolder>() };
-            let limit = 64.0;
+            let block_reg = { &world.get_resource::<BlockRegistryHolder>() };
             let Ok(voxels) = &voxel_query.get_single(world) else {
                 return Ok(());
             };
-            let Some(bregistry) = bregistry else {
+            let Some(bregistry) = block_reg else {
                 return Ok(());
             };
-            let rcctx = RaycastContext {
+            let ray_ctx = RaycastContext {
                 block_registry: Some(bregistry),
                 voxel_world: Some(voxels),
             };
-            let rcspec = RaycastSpec {
-                start: WorldPos::from_offset(position.position, position.offset.into()),
-                direction: Dir3::new(position.look).unwrap().into(),
-                distance_limit: limit,
-                hit_mask: RaycastHitMask::all(),
-            };
 
-            let rc = raycast(&rcctx, &rcspec);
+            let rc = raycast(&ray_ctx, &ray_spec);
             let RaycastResult::BlockHit(rc) = rc else {
                 return Ok(());
             };
             let pos = if let ThrowAction::ThrowBlock() = throw {
-                rc.face.offset(&rc.position, 1)
+                rc.position.direction_offset(rc.face, 1)
             } else {
                 rc.position
             };

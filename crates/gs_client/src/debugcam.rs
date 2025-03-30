@@ -218,38 +218,28 @@ fn player_look(
 /// Handles input for actions
 fn player_action(
     net_thread: Res<ClientNetworkThreadHolder>,
-    mut promises: ResMut<in_game::InGamePromiseHolder>,
     mut voxels: Query<&mut ClientVoxelUniverse>,
-    bregistry: Res<BlockRegistryHolder>,
+    block_reg: Res<BlockRegistryHolder>,
     _: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
-    time: Res<Time>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
-    settings: Res<MovementSettings>,
     key_bindings: Res<KeyBindings>,
     mut camera_query: Query<(&FlyCam, &mut Transform)>, //    mut query: Query<&mut Transform, With<FlyCam>>,
 ) {
     if let Ok(window) = primary_window.get_single() {
-        for (_camera, mut transform) in camera_query.iter_mut() {
-            let mut velocity = Vec3::ZERO;
-            for button in mouse.get_just_pressed() {
+        for (_camera, transform) in camera_query.iter_mut() {
+            for &button in mouse.get_just_pressed() {
                 match window.cursor_options.grab_mode {
                     CursorGrabMode::None => (),
                     _ => {
-                        let button = *button;
                         if button == key_bindings.throw_block {
-                            let Vec3 { x, y, z } = transform.translation;
-                            let pos = AbsBlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
-                            let offset = Vec3 {
-                                x: x - pos.x as f32,
-                                y: y - pos.y as f32,
-                                z: z - pos.z as f32,
-                            };
+                            let pos = transform.translation.floor();
+                            let offset = transform.translation - pos;
+                            let pos = AbsBlockPos::from_ivec3(pos.as_ivec3());
                             in_game::ingame_send_throw_packet(
                                 &net_thread,
-                                &mut promises,
                                 &mut voxels,
-                                &bregistry,
+                                &block_reg,
                                 PositionData {
                                     position: pos,
                                     offset,
@@ -267,9 +257,8 @@ fn player_action(
                             };
                             in_game::ingame_send_throw_packet(
                                 &net_thread,
-                                &mut promises,
                                 &mut voxels,
-                                &bregistry,
+                                &block_reg,
                                 PositionData {
                                     position: pos,
                                     offset,
@@ -280,10 +269,6 @@ fn player_action(
                         }
                     }
                 }
-
-                velocity = velocity.normalize_or_zero();
-
-                transform.translation += velocity * time.delta_secs() * settings.speed;
             }
         }
     } else {
@@ -393,19 +378,19 @@ fn lookat_gizmo(
     let Some(bregistry) = bregistry else {
         return;
     };
-    let rcctx = RaycastContext {
+    let ray_ctx = RaycastContext {
         block_registry: Some(&bregistry),
         voxel_world: Some(voxels),
     };
     let camera_zero: Vec3A = camera.transform_point(Vec3::ZERO).into();
-    let rcspec = RaycastSpec {
+    let ray_spec = RaycastSpec {
         start: WorldPos::from_vec3(camera_zero),
         direction: camera.forward().into(),
         distance_limit: limit,
         hit_mask: RaycastHitMask::all(),
     };
 
-    let rc = raycast(&rcctx, &rcspec);
+    let rc = raycast(&ray_ctx, &ray_spec);
     let RaycastResult::BlockHit(rc) = rc else {
         let limit_sphere = camera.transform_point(vec3(0.0, 0.0, -limit));
         gizmos.sphere(limit_sphere, 0.5, tailwind::RED_600);

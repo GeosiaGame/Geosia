@@ -1,6 +1,6 @@
 //! Actions that are generally triggered by clients and handled on the server.
 
-use bevy_math::{IVec3, Vec3};
+use bevy_math::Vec3;
 
 use crate::actions::ThrowAction::{ThrowBlock, ThrowItem};
 use crate::coordinates::AbsBlockPos;
@@ -15,38 +15,6 @@ pub struct PositionData {
     pub offset: Vec3,
     /// look vector
     pub look: Vec3,
-}
-
-impl TryFrom<position_data::Reader<'_>> for PositionData {
-    type Error = ();
-
-    fn try_from(value: position_data::Reader) -> Result<Self, Self::Error> {
-        let position = {
-            let pos = value.reborrow().get_position().map_err(|_| {})?;
-            AbsBlockPos(IVec3 {
-                x: pos.get_x(),
-                y: pos.get_y(),
-                z: pos.get_z(),
-            })
-        };
-        let offset = {
-            let offset = value.reborrow().get_offset().map_err(|_| {})?;
-            Vec3 {
-                x: offset.get_x(),
-                y: offset.get_y(),
-                z: offset.get_z(),
-            }
-        };
-        let look = {
-            let look = value.reborrow().get_look().map_err(|_| {})?;
-            Vec3 {
-                x: look.get_x(),
-                y: look.get_y(),
-                z: look.get_z(),
-            }
-        };
-        Ok(PositionData { position, offset, look })
-    }
 }
 
 impl PositionData {
@@ -80,18 +48,6 @@ pub enum ThrowAction {
     ThrowBlock(),
     /// Throw an item
     ThrowItem(),
-}
-
-impl TryFrom<throw_action::Reader<'_>> for ThrowAction {
-    type Error = ();
-
-    fn try_from(value: throw_action::Reader) -> Result<Self, Self::Error> {
-        match value.reborrow().which() {
-            Ok(throw_action::Which::ThrowItem(_)) => Ok(ThrowItem()),
-            Ok(throw_action::Which::ThrowBlock(_)) => Ok(ThrowBlock()),
-            _ => Err(()),
-        }
-    }
 }
 
 impl ThrowAction {
