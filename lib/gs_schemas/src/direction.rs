@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use bevy_math::prelude::*;
 use bevy_math::{Mat3A, Vec3A};
 use itertools::Itertools;
+
 use crate::coordinates::AbsBlockPos;
 use crate::direction::Direction::{XMinus, XPlus, YMinus, YPlus, ZMinus, ZPlus};
 
@@ -60,7 +61,7 @@ impl Direction {
 
     /// offsets the given absolute block pos in this direction by the given amount
     pub fn offset(&self, pos: &AbsBlockPos, offset: i32) -> AbsBlockPos {
-        let AbsBlockPos { 0: IVec3 { x, y, z} } = pos;
+        let AbsBlockPos { 0: IVec3 { x, y, z } } = pos;
         match self {
             XMinus => AbsBlockPos::new(*x - offset, *y, *z),
             XPlus => AbsBlockPos::new(*x + offset, *y, *z),

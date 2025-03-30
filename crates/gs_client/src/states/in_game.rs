@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use gs_common::prelude::GenericAsyncResult;
-use gs_common::raycast::{raycast, RaycastContext};
+use gs_common::raycast::{RaycastContext, raycast};
 use gs_common::voxel::blocks::STONE_BLOCK_NAME;
 use gs_common::voxel::plugin::BlockRegistryHolder;
 use gs_schemas::actions::{PositionData, ThrowAction};
@@ -10,6 +10,7 @@ use gs_schemas::coordinates::WorldPos;
 use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
 use gs_schemas::voxel::chunk_storage::ChunkStorage;
 use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
+
 use crate::ClientNetworkThreadHolder;
 use crate::states::ClientAppState;
 use crate::voxel::ClientVoxelUniverse;
@@ -34,7 +35,14 @@ fn ingame_cleanup_on_exit(net_thread: ResMut<ClientNetworkThreadHolder>) {
 }
 
 /// sends a throw packet over the given net thread and promise holder
-pub(crate) fn ingame_send_throw_packet(net_thread: &Res<ClientNetworkThreadHolder>,  promises: &mut ResMut<InGamePromiseHolder>, voxel_query: &mut Query<&mut ClientVoxelUniverse>, bregistry: &Res<BlockRegistryHolder>, position: PositionData, throw: ThrowAction) {
+pub(crate) fn ingame_send_throw_packet(
+    net_thread: &Res<ClientNetworkThreadHolder>,
+    promises: &mut ResMut<InGamePromiseHolder>,
+    voxel_query: &mut Query<&mut ClientVoxelUniverse>,
+    bregistry: &Res<BlockRegistryHolder>,
+    position: PositionData,
+    throw: ThrowAction,
+) {
     promises
         .promises
         .push(Box::new(net_thread.0.schedule_task(async move |state| {
@@ -47,7 +55,7 @@ pub(crate) fn ingame_send_throw_packet(net_thread: &Res<ClientNetworkThreadHolde
             }
             Ok(())
         })));
-    
+
     let limit = 64.0;
     let Ok(voxels) = &mut voxel_query.get_single_mut() else {
         return;

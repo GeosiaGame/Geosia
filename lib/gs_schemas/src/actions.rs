@@ -1,6 +1,7 @@
 //! Actions that are generally triggered by clients and handled on the server.
 
 use bevy_math::{IVec3, Vec3};
+
 use crate::actions::ThrowAction::{ThrowBlock, ThrowItem};
 use crate::coordinates::AbsBlockPos;
 use crate::schemas::game_types_capnp::{position_data, throw_action};
@@ -25,7 +26,7 @@ impl TryFrom<position_data::Reader<'_>> for PositionData {
             AbsBlockPos(IVec3 {
                 x: pos.get_x(),
                 y: pos.get_y(),
-                z: pos.get_z()
+                z: pos.get_z(),
             })
         };
         let offset = {
@@ -49,7 +50,6 @@ impl TryFrom<position_data::Reader<'_>> for PositionData {
 }
 
 impl PositionData {
-
     /// writes this position data to the given builder
     pub fn to_builder(self, builder: &mut position_data::Builder<'_>) {
         {
@@ -87,19 +87,14 @@ impl TryFrom<throw_action::Reader<'_>> for ThrowAction {
 
     fn try_from(value: throw_action::Reader) -> Result<Self, Self::Error> {
         match value.reborrow().which() {
-            Ok(throw_action::Which::ThrowItem(_)) => {
-                Ok(ThrowItem())
-            }
-            Ok(throw_action::Which::ThrowBlock(_)) => {
-                Ok(ThrowBlock())
-            }
-            _ => Err(())
+            Ok(throw_action::Which::ThrowItem(_)) => Ok(ThrowItem()),
+            Ok(throw_action::Which::ThrowBlock(_)) => Ok(ThrowBlock()),
+            _ => Err(()),
         }
     }
 }
 
 impl ThrowAction {
-
     /// writes this throw action to the given builder
     pub fn to_builder(self, builder: &mut throw_action::Builder<'_>) {
         match self {

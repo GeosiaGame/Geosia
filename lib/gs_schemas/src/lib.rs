@@ -11,6 +11,7 @@ extern crate core;
 
 use smallvec::{Array, SmallVec};
 
+pub mod actions;
 pub mod coordinates;
 pub mod direction;
 pub mod math;
@@ -21,7 +22,6 @@ pub mod registries;
 pub mod registry;
 pub mod schemas;
 pub mod voxel;
-pub mod actions;
 
 /// A trait implemented by the game server and client, specifying the concrete types to attach as extra metadata for every chunk, chunk group, entity, etc.
 /// Used to inject side-specific data into common data structures.

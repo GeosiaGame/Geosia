@@ -11,22 +11,26 @@ use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::{RpcSystem, pry};
 use futures::FutureExt;
 use futures::future::BoxFuture;
+use gs_schemas::actions::{PositionData, ThrowAction};
+use gs_schemas::coordinates::WorldPos;
 use gs_schemas::dependencies::capnp::Error;
 use gs_schemas::dependencies::capnp::capability::Promise;
 use gs_schemas::dependencies::kstring::KString;
-use gs_schemas::schemas::network_capnp::authenticated_server_connection::{BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults, SendThrowActionParams, SendThrowActionResults};
+use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
+use gs_schemas::schemas::network_capnp::authenticated_server_connection::{
+    BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
+    SendThrowActionParams, SendThrowActionResults,
+};
 use gs_schemas::schemas::{NetworkStreamHeader, SchemaUuidExt, network_capnp as rpc};
+use gs_schemas::voxel::chunk_storage::ChunkStorage;
+use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use quinn::{Connection, EndpointConfig};
 use socket2::{Domain, Socket};
 use tokio::select;
 use tokio::task::{JoinHandle, JoinSet, spawn_local};
 use tracing::Instrument;
 use uuid::Uuid;
-use gs_schemas::actions::{PositionData, ThrowAction};
-use gs_schemas::coordinates::WorldPos;
-use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
-use gs_schemas::voxel::chunk_storage::ChunkStorage;
-use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
+
 use crate::network::PeerAddress;
 use crate::network::thread::NetworkThreadState;
 use crate::network::transport::{
@@ -35,10 +39,13 @@ use crate::network::transport::{
 };
 use crate::prelude::*;
 use crate::promises::ShutdownHandle;
-use crate::{GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE, GameServer, ServerData};
-use crate::raycast::{raycast, RaycastContext};
+use crate::raycast::{RaycastContext, raycast};
 use crate::voxel::blocks::STONE_BLOCK_NAME;
 use crate::voxel::plugin::{BlockRegistryHolder, VoxelUniverse};
+use crate::{
+    GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE,
+    GameServer, ServerData,
+};
 
 /// The network thread game server state, accessible from network functions.
 pub struct NetworkThreadServerState {
@@ -649,9 +656,7 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
         );
         let _ = self.0.borrow().server.schedule_bevy(move |world| {
             let mut voxel_query = world.query::<&VoxelUniverse<ServerData>>();
-            let bregistry = {
-                &world.get_resource::<BlockRegistryHolder>()
-            };
+            let bregistry = { &world.get_resource::<BlockRegistryHolder>() };
             let limit = 64.0;
             let Ok(voxels) = &voxel_query.get_single(world) else {
                 return Ok(());

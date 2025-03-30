@@ -17,8 +17,9 @@ use gs_schemas::actions::{PositionData, ThrowAction};
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, WorldPos};
 use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
 use gs_schemas::voxel::voxeltypes::EMPTY_BLOCK;
+
 use crate::ClientNetworkThreadHolder;
-use crate::states::{in_game, ClientAppState, InGameSystemSet};
+use crate::states::{ClientAppState, InGameSystemSet, in_game};
 use crate::voxel::ClientVoxelUniverse;
 
 /// Mouse sensitivity and movement speed
@@ -237,19 +238,45 @@ fn player_action(
                     _ => {
                         let button = *button;
                         if button == key_bindings.throw_block {
-                            let Vec3 {x, y, z} = transform.translation;
+                            let Vec3 { x, y, z } = transform.translation;
                             let pos = AbsBlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
-                            let offset = Vec3 {x: x - pos.x as f32, y: y - pos.y as f32, z: z - pos.z as f32};
-                            in_game::ingame_send_throw_packet(&net_thread, &mut promises, &mut voxels, &bregistry,
-                                                              PositionData {position: pos, offset, look: transform.forward().into() },
-                                                              ThrowAction::ThrowBlock());
+                            let offset = Vec3 {
+                                x: x - pos.x as f32,
+                                y: y - pos.y as f32,
+                                z: z - pos.z as f32,
+                            };
+                            in_game::ingame_send_throw_packet(
+                                &net_thread,
+                                &mut promises,
+                                &mut voxels,
+                                &bregistry,
+                                PositionData {
+                                    position: pos,
+                                    offset,
+                                    look: transform.forward().into(),
+                                },
+                                ThrowAction::ThrowBlock(),
+                            );
                         } else if button == key_bindings.throw_item {
-                            let Vec3 {x, y, z} = transform.translation;
+                            let Vec3 { x, y, z } = transform.translation;
                             let pos = AbsBlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
-                            let offset = Vec3 {x: x - pos.x as f32, y: y - pos.y as f32, z: z - pos.z as f32};
-                            in_game::ingame_send_throw_packet(&net_thread, &mut promises, &mut voxels, &bregistry,
-                                                              PositionData {position: pos, offset, look: transform.forward().into() },
-                                                              ThrowAction::ThrowItem());
+                            let offset = Vec3 {
+                                x: x - pos.x as f32,
+                                y: y - pos.y as f32,
+                                z: z - pos.z as f32,
+                            };
+                            in_game::ingame_send_throw_packet(
+                                &net_thread,
+                                &mut promises,
+                                &mut voxels,
+                                &bregistry,
+                                PositionData {
+                                    position: pos,
+                                    offset,
+                                    look: transform.forward().into(),
+                                },
+                                ThrowAction::ThrowItem(),
+                            );
                         }
                     }
                 }
