@@ -41,6 +41,7 @@ pub(crate) fn ingame_send_throw_packet(
             let mut rq = auth_rpc.send_throw_action_request();
             position.to_builder(&mut rq.get().init_position());
             throw.to_builder(&mut rq.get().init_throw());
+            rq.get().set_tick(0); // TODO send the actual client tick
             let _ = rq.send().promise.await;
         }
         Ok(())

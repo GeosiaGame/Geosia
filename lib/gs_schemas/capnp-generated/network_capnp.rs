@@ -4532,6 +4532,10 @@ pub mod authenticated_server_connection {
         self.reader.total_size()
       }
       #[inline]
+      pub fn get_tick(self) -> u64 {
+        self.reader.get_data_field::<u64>(0)
+      }
+      #[inline]
       pub fn get_position(self) -> ::capnp::Result<crate::schemas::game_types_capnp::position_data::Reader<'a>> {
         ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(0), ::core::option::Option::None)
       }
@@ -4551,7 +4555,7 @@ pub mod authenticated_server_connection {
 
     pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
     impl <> ::capnp::traits::HasStructSize for Builder<'_,>  {
-      const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 0, pointers: 2 };
+      const STRUCT_SIZE: ::capnp::private::layout::StructSize = ::capnp::private::layout::StructSize { data: 1, pointers: 2 };
     }
     impl <> ::capnp::traits::HasTypeId for Builder<'_,>  {
       const TYPE_ID: u64 = _private::TYPE_ID;
@@ -4602,6 +4606,14 @@ pub mod authenticated_server_connection {
         self.builder.as_reader().total_size()
       }
       #[inline]
+      pub fn get_tick(self) -> u64 {
+        self.builder.get_data_field::<u64>(0)
+      }
+      #[inline]
+      pub fn set_tick(&mut self, value: u64)  {
+        self.builder.set_data_field::<u64>(0, value);
+      }
+      #[inline]
       pub fn get_position(self) -> ::capnp::Result<crate::schemas::game_types_capnp::position_data::Builder<'a>> {
         ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(0), ::core::option::Option::None)
       }
@@ -4650,10 +4662,10 @@ pub mod authenticated_server_connection {
       }
     }
     mod _private {
-      pub static ENCODED_NODE: [::capnp::Word; 54] = [
+      pub static ENCODED_NODE: [::capnp::Word; 69] = [
         ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
         ::capnp::word(127, 229, 98, 229, 115, 231, 60, 224),
-        ::capnp::word(44, 0, 0, 0, 1, 0, 0, 0),
+        ::capnp::word(44, 0, 0, 0, 1, 0, 1, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(2, 0, 7, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
@@ -4661,7 +4673,7 @@ pub mod authenticated_server_connection {
         ::capnp::word(21, 0, 0, 0, 26, 2, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-        ::capnp::word(45, 0, 0, 0, 119, 0, 0, 0),
+        ::capnp::word(45, 0, 0, 0, 175, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(110, 101, 116, 119, 111, 114, 107, 46),
@@ -4673,21 +4685,36 @@ pub mod authenticated_server_connection {
         ::capnp::word(84, 104, 114, 111, 119, 65, 99, 116),
         ::capnp::word(105, 111, 110, 36, 80, 97, 114, 97),
         ::capnp::word(109, 115, 0, 0, 0, 0, 0, 0),
-        ::capnp::word(8, 0, 0, 0, 3, 0, 4, 0),
+        ::capnp::word(12, 0, 0, 0, 3, 0, 4, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 1, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-        ::capnp::word(41, 0, 0, 0, 74, 0, 0, 0),
+        ::capnp::word(69, 0, 0, 0, 42, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-        ::capnp::word(40, 0, 0, 0, 3, 0, 1, 0),
-        ::capnp::word(52, 0, 0, 0, 2, 0, 1, 0),
-        ::capnp::word(1, 0, 0, 0, 1, 0, 0, 0),
+        ::capnp::word(64, 0, 0, 0, 3, 0, 1, 0),
+        ::capnp::word(76, 0, 0, 0, 2, 0, 1, 0),
+        ::capnp::word(1, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 1, 0, 1, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-        ::capnp::word(49, 0, 0, 0, 50, 0, 0, 0),
+        ::capnp::word(73, 0, 0, 0, 74, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-        ::capnp::word(44, 0, 0, 0, 3, 0, 1, 0),
-        ::capnp::word(56, 0, 0, 0, 2, 0, 1, 0),
+        ::capnp::word(72, 0, 0, 0, 3, 0, 1, 0),
+        ::capnp::word(84, 0, 0, 0, 2, 0, 1, 0),
+        ::capnp::word(2, 0, 0, 0, 1, 0, 0, 0),
+        ::capnp::word(0, 0, 1, 0, 2, 0, 0, 0),
+        ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
+        ::capnp::word(81, 0, 0, 0, 50, 0, 0, 0),
+        ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
+        ::capnp::word(76, 0, 0, 0, 3, 0, 1, 0),
+        ::capnp::word(88, 0, 0, 0, 2, 0, 1, 0),
+        ::capnp::word(116, 105, 99, 107, 0, 0, 0, 0),
+        ::capnp::word(9, 0, 0, 0, 0, 0, 0, 0),
+        ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
+        ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
+        ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
+        ::capnp::word(9, 0, 0, 0, 0, 0, 0, 0),
+        ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
+        ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(112, 111, 115, 105, 116, 105, 111, 110),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(16, 0, 0, 0, 0, 0, 0, 0),
@@ -4708,8 +4735,9 @@ pub mod authenticated_server_connection {
       ];
       pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
         match index {
-          0 => <crate::schemas::game_types_capnp::position_data::Owned as ::capnp::introspect::Introspect>::introspect(),
-          1 => <crate::schemas::game_types_capnp::throw_action::Owned as ::capnp::introspect::Introspect>::introspect(),
+          0 => <u64 as ::capnp::introspect::Introspect>::introspect(),
+          1 => <crate::schemas::game_types_capnp::position_data::Owned as ::capnp::introspect::Introspect>::introspect(),
+          2 => <crate::schemas::game_types_capnp::throw_action::Owned as ::capnp::introspect::Introspect>::introspect(),
           _ => panic!("invalid field index {}", index),
         }
       }
@@ -4722,9 +4750,9 @@ pub mod authenticated_server_connection {
         members_by_discriminant: MEMBERS_BY_DISCRIMINANT,
         members_by_name: MEMBERS_BY_NAME,
       };
-      pub static NONUNION_MEMBERS : &[u16] = &[0,1];
+      pub static NONUNION_MEMBERS : &[u16] = &[0,1,2];
       pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-      pub static MEMBERS_BY_NAME : &[u16] = &[0,1];
+      pub static MEMBERS_BY_NAME : &[u16] = &[1,2,0];
       pub const TYPE_ID: u64 = 0xe03c_e773_e562_e57f;
     }
   }
@@ -5110,7 +5138,7 @@ pub mod chunk_data_stream_packet {
       ::capnp::word(203, 38, 210, 159, 176, 70, 145, 184),
       ::capnp::word(2, 0, 7, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(88, 11, 0, 0, 164, 12, 0, 0),
+      ::capnp::word(102, 11, 0, 0, 178, 12, 0, 0),
       ::capnp::word(21, 0, 0, 0, 34, 1, 0, 0),
       ::capnp::word(37, 0, 0, 0, 7, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
