@@ -53,4 +53,10 @@ impl<ED: GsExtraData> ChunkGroup<ED> {
     pub fn get_chunk(&self, pos: AbsChunkPos) -> Option<&MutWatcher<Chunk<ED>>> {
         self.chunks.get(&pos)
     }
+
+    /// Accesses the chunk mutably at the given position if loaded.
+    #[inline]
+    pub fn get_chunk_mut(&mut self, pos: AbsChunkPos) -> Option<&mut MutWatcher<Chunk<ED>>> {
+        self.chunks.get_mut(&pos)
+    }
 }

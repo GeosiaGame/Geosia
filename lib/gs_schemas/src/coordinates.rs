@@ -97,6 +97,16 @@ impl WorldPos {
         }
     }
 
+    /// Constructs itself from a given block position at the given offset.
+    #[inline]
+    pub fn from_offset(pos: AbsBlockPos, offset: Vec3A) -> Self {
+        let (cpos, bpos) = pos.split_chunk_component();
+        Self {
+            offset: bpos.as_vec3a() + offset,
+            chunk: cpos,
+        }
+    }
+
     /// Converts any chunk-sized integer part of [`WorldPos::offset`] to the integer [`WorldPos::chunk`] offset to improve precision for further calculations.
     ///
     /// Makes sure that [`WorldPos::offset`] is in the range of `[0, CHUNK_DIMF)`.
