@@ -2,9 +2,9 @@
 
 use bevy_math::Vec3;
 
-use crate::actions::ThrowAction::{ThrowBlock, ThrowItem};
+use crate::actions::BlockAction::{BreakBlock, PlaceBlock};
 use crate::coordinates::AbsBlockPos;
-use crate::schemas::game_types_capnp::{position_data, throw_action};
+use crate::schemas::game_types_capnp::{block_action, position_data};
 
 /// Position data
 #[derive(Debug, Copy, Clone)]
@@ -41,24 +41,26 @@ impl PositionData {
     }
 }
 
-/// Throw Action, for world interaction
+/// Block Action, for world interaction by placing or breaking blocks.
+/// For the debug cam era only, should be replaced with a more generalized,
+/// item-driven system once the player is implemented.
 #[derive(Debug, Copy, Clone)]
-pub enum ThrowAction {
-    /// Throw a block
-    ThrowBlock(),
-    /// Throw an item
-    ThrowItem(),
+pub enum BlockAction {
+    /// Place a block
+    PlaceBlock(),
+    /// Break a block
+    BreakBlock(),
 }
 
-impl ThrowAction {
+impl BlockAction {
     /// writes this throw action to the given builder
-    pub fn to_builder(self, builder: &mut throw_action::Builder<'_>) {
+    pub fn to_builder(self, builder: &mut block_action::Builder<'_>) {
         match self {
-            ThrowBlock() => {
-                builder.reborrow().init_throw_block().set_unused(());
+            PlaceBlock() => {
+                builder.reborrow().init_place_block().set_unused(());
             }
-            ThrowItem() => {
-                builder.reborrow().init_throw_item().set_unused(());
+            BreakBlock() => {
+                builder.reborrow().init_break_block().set_unused(());
             }
         }
     }

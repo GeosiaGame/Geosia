@@ -13,7 +13,7 @@ use bevy_egui::EguiContexts;
 use bevy_egui::egui::Align2;
 use gs_common::raycast::{RaycastContext, raycast};
 use gs_common::voxel::plugin::BlockRegistryHolder;
-use gs_schemas::actions::{PositionData, ThrowAction};
+use gs_schemas::actions::{BlockAction, PositionData};
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, WorldPos};
 use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
 use gs_schemas::voxel::voxeltypes::EMPTY_BLOCK;
@@ -245,7 +245,7 @@ fn player_action(
                                     offset,
                                     look: transform.forward().into(),
                                 },
-                                ThrowAction::ThrowBlock(),
+                                BlockAction::PlaceBlock(),
                             );
                         } else if button == key_bindings.throw_item {
                             let Vec3 { x, y, z } = transform.translation;
@@ -264,7 +264,7 @@ fn player_action(
                                     offset,
                                     look: transform.forward().into(),
                                 },
-                                ThrowAction::ThrowItem(),
+                                BlockAction::BreakBlock(),
                             );
                         }
                     }

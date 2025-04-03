@@ -76,8 +76,8 @@ interface AuthenticatedServerConnection @0xcc65c2f3643e6ae0 {
     bootstrapGameData @0 () -> (data: GameTypes.GameBootstrapData);
     # Sends a chat message to the server.
     sendChatMessage @1 (text: Text) -> ();
-    # Sends a throw action to the server.
-    sendThrowAction @2 (tick: UInt64, position: GameTypes.PositionData, throw: GameTypes.ThrowAction) -> ();
+    # Sends a block action to the server.
+    sendBlockAction @2 (tick: UInt64, position: GameTypes.PositionData, action: GameTypes.BlockAction) -> ();
 }
 
 struct ChunkDataStreamPacket {

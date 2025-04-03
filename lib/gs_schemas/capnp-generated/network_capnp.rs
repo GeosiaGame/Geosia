@@ -3601,8 +3601,8 @@ pub mod authenticated_server_connection {
   pub type BootstrapGameDataResults<> = ::capnp::capability::Results<crate::schemas::network_capnp::authenticated_server_connection::bootstrap_game_data_results::Owned>;
   pub type SendChatMessageParams<> = ::capnp::capability::Params<crate::schemas::network_capnp::authenticated_server_connection::send_chat_message_params::Owned>;
   pub type SendChatMessageResults<> = ::capnp::capability::Results<crate::schemas::network_capnp::authenticated_server_connection::send_chat_message_results::Owned>;
-  pub type SendThrowActionParams<> = ::capnp::capability::Params<crate::schemas::network_capnp::authenticated_server_connection::send_throw_action_params::Owned>;
-  pub type SendThrowActionResults<> = ::capnp::capability::Results<crate::schemas::network_capnp::authenticated_server_connection::send_throw_action_results::Owned>;
+  pub type SendBlockActionParams<> = ::capnp::capability::Params<crate::schemas::network_capnp::authenticated_server_connection::send_block_action_params::Owned>;
+  pub type SendBlockActionResults<> = ::capnp::capability::Results<crate::schemas::network_capnp::authenticated_server_connection::send_block_action_results::Owned>;
 
   pub struct Client {
     pub client: ::capnp::capability::Client,
@@ -3658,14 +3658,14 @@ pub mod authenticated_server_connection {
     pub fn send_chat_message_request(&self) -> ::capnp::capability::Request<crate::schemas::network_capnp::authenticated_server_connection::send_chat_message_params::Owned,crate::schemas::network_capnp::authenticated_server_connection::send_chat_message_results::Owned> {
       self.client.new_call(_private::TYPE_ID, 1, ::core::option::Option::None)
     }
-    pub fn send_throw_action_request(&self) -> ::capnp::capability::Request<crate::schemas::network_capnp::authenticated_server_connection::send_throw_action_params::Owned,crate::schemas::network_capnp::authenticated_server_connection::send_throw_action_results::Owned> {
+    pub fn send_block_action_request(&self) -> ::capnp::capability::Request<crate::schemas::network_capnp::authenticated_server_connection::send_block_action_params::Owned,crate::schemas::network_capnp::authenticated_server_connection::send_block_action_results::Owned> {
       self.client.new_call(_private::TYPE_ID, 2, ::core::option::Option::None)
     }
   }
   pub trait Server<>   {
     fn bootstrap_game_data(&mut self, _: BootstrapGameDataParams<>, _: BootstrapGameDataResults<>) -> ::capnp::capability::Promise<(), ::capnp::Error> { ::capnp::capability::Promise::err(::capnp::Error::unimplemented("method authenticated_server_connection::Server::bootstrap_game_data not implemented".to_string())) }
     fn send_chat_message(&mut self, _: SendChatMessageParams<>, _: SendChatMessageResults<>) -> ::capnp::capability::Promise<(), ::capnp::Error> { ::capnp::capability::Promise::err(::capnp::Error::unimplemented("method authenticated_server_connection::Server::send_chat_message not implemented".to_string())) }
-    fn send_throw_action(&mut self, _: SendThrowActionParams<>, _: SendThrowActionResults<>) -> ::capnp::capability::Promise<(), ::capnp::Error> { ::capnp::capability::Promise::err(::capnp::Error::unimplemented("method authenticated_server_connection::Server::send_throw_action not implemented".to_string())) }
+    fn send_block_action(&mut self, _: SendBlockActionParams<>, _: SendBlockActionResults<>) -> ::capnp::capability::Promise<(), ::capnp::Error> { ::capnp::capability::Promise::err(::capnp::Error::unimplemented("method authenticated_server_connection::Server::send_block_action not implemented".to_string())) }
   }
   pub struct ServerDispatch<_T,> {
     pub server: _T,
@@ -3696,7 +3696,7 @@ pub mod authenticated_server_connection {
       match method_id {
         0 => ::capnp::capability::DispatchCallResult::new(server.bootstrap_game_data(::capnp::private::capability::internal_get_typed_params(params), ::capnp::private::capability::internal_get_typed_results(results)), false),
         1 => ::capnp::capability::DispatchCallResult::new(server.send_chat_message(::capnp::private::capability::internal_get_typed_params(params), ::capnp::private::capability::internal_get_typed_results(results)), false),
-        2 => ::capnp::capability::DispatchCallResult::new(server.send_throw_action(::capnp::private::capability::internal_get_typed_params(params), ::capnp::private::capability::internal_get_typed_results(results)), false),
+        2 => ::capnp::capability::DispatchCallResult::new(server.send_block_action(::capnp::private::capability::internal_get_typed_params(params), ::capnp::private::capability::internal_get_typed_results(results)), false),
         _ => { ::capnp::capability::DispatchCallResult::new(::capnp::capability::Promise::err(::capnp::Error::unimplemented("Method not implemented.".to_string())), false) }
       }
     }
@@ -4470,7 +4470,7 @@ pub mod authenticated_server_connection {
     }
   }
 
-  pub mod send_throw_action_params {
+  pub mod send_block_action_params {
     #[derive(Copy, Clone)]
     pub struct Owned(());
     impl ::capnp::introspect::Introspect for Owned { fn introspect() -> ::capnp::introspect::Type { ::capnp::introspect::TypeVariant::Struct(::capnp::introspect::RawBrandedStructSchema { generic: &_private::RAW_SCHEMA, field_types: _private::get_field_types, annotation_types: _private::get_annotation_types }).into() } }
@@ -4544,11 +4544,11 @@ pub mod authenticated_server_connection {
         !self.reader.get_pointer_field(0).is_null()
       }
       #[inline]
-      pub fn get_throw(self) -> ::capnp::Result<crate::schemas::game_types_capnp::throw_action::Reader<'a>> {
+      pub fn get_action(self) -> ::capnp::Result<crate::schemas::game_types_capnp::block_action::Reader<'a>> {
         ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(1), ::core::option::Option::None)
       }
       #[inline]
-      pub fn has_throw(&self) -> bool {
+      pub fn has_action(&self) -> bool {
         !self.reader.get_pointer_field(1).is_null()
       }
     }
@@ -4630,19 +4630,19 @@ pub mod authenticated_server_connection {
         !self.builder.is_pointer_field_null(0)
       }
       #[inline]
-      pub fn get_throw(self) -> ::capnp::Result<crate::schemas::game_types_capnp::throw_action::Builder<'a>> {
+      pub fn get_action(self) -> ::capnp::Result<crate::schemas::game_types_capnp::block_action::Builder<'a>> {
         ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(1), ::core::option::Option::None)
       }
       #[inline]
-      pub fn set_throw(&mut self, value: crate::schemas::game_types_capnp::throw_action::Reader<'_>) -> ::capnp::Result<()> {
+      pub fn set_action(&mut self, value: crate::schemas::game_types_capnp::block_action::Reader<'_>) -> ::capnp::Result<()> {
         ::capnp::traits::SetterInput::set_pointer_builder(self.builder.reborrow().get_pointer_field(1), value, false)
       }
       #[inline]
-      pub fn init_throw(self, ) -> crate::schemas::game_types_capnp::throw_action::Builder<'a> {
+      pub fn init_action(self, ) -> crate::schemas::game_types_capnp::block_action::Builder<'a> {
         ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(1), 0)
       }
       #[inline]
-      pub fn has_throw(&self) -> bool {
+      pub fn has_action(&self) -> bool {
         !self.builder.is_pointer_field_null(1)
       }
     }
@@ -4657,7 +4657,7 @@ pub mod authenticated_server_connection {
       pub fn get_position(&self) -> crate::schemas::game_types_capnp::position_data::Pipeline {
         ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(0))
       }
-      pub fn get_throw(&self) -> crate::schemas::game_types_capnp::throw_action::Pipeline {
+      pub fn get_action(&self) -> crate::schemas::game_types_capnp::block_action::Pipeline {
         ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(1))
       }
     }
@@ -4682,7 +4682,7 @@ pub mod authenticated_server_connection {
         ::capnp::word(116, 101, 100, 83, 101, 114, 118, 101),
         ::capnp::word(114, 67, 111, 110, 110, 101, 99, 116),
         ::capnp::word(105, 111, 110, 46, 115, 101, 110, 100),
-        ::capnp::word(84, 104, 114, 111, 119, 65, 99, 116),
+        ::capnp::word(66, 108, 111, 99, 107, 65, 99, 116),
         ::capnp::word(105, 111, 110, 36, 80, 97, 114, 97),
         ::capnp::word(109, 115, 0, 0, 0, 0, 0, 0),
         ::capnp::word(12, 0, 0, 0, 3, 0, 4, 0),
@@ -4703,7 +4703,7 @@ pub mod authenticated_server_connection {
         ::capnp::word(2, 0, 0, 0, 1, 0, 0, 0),
         ::capnp::word(0, 0, 1, 0, 2, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-        ::capnp::word(81, 0, 0, 0, 50, 0, 0, 0),
+        ::capnp::word(81, 0, 0, 0, 58, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(76, 0, 0, 0, 3, 0, 1, 0),
         ::capnp::word(88, 0, 0, 0, 2, 0, 1, 0),
@@ -4724,9 +4724,9 @@ pub mod authenticated_server_connection {
         ::capnp::word(16, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-        ::capnp::word(116, 104, 114, 111, 119, 0, 0, 0),
+        ::capnp::word(97, 99, 116, 105, 111, 110, 0, 0),
         ::capnp::word(16, 0, 0, 0, 0, 0, 0, 0),
-        ::capnp::word(155, 58, 165, 109, 213, 129, 125, 200),
+        ::capnp::word(114, 249, 128, 56, 240, 42, 102, 129),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(16, 0, 0, 0, 0, 0, 0, 0),
@@ -4737,7 +4737,7 @@ pub mod authenticated_server_connection {
         match index {
           0 => <u64 as ::capnp::introspect::Introspect>::introspect(),
           1 => <crate::schemas::game_types_capnp::position_data::Owned as ::capnp::introspect::Introspect>::introspect(),
-          2 => <crate::schemas::game_types_capnp::throw_action::Owned as ::capnp::introspect::Introspect>::introspect(),
+          2 => <crate::schemas::game_types_capnp::block_action::Owned as ::capnp::introspect::Introspect>::introspect(),
           _ => panic!("invalid field index {}", index),
         }
       }
@@ -4752,12 +4752,12 @@ pub mod authenticated_server_connection {
       };
       pub static NONUNION_MEMBERS : &[u16] = &[0,1,2];
       pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-      pub static MEMBERS_BY_NAME : &[u16] = &[1,2,0];
+      pub static MEMBERS_BY_NAME : &[u16] = &[2,1,0];
       pub const TYPE_ID: u64 = 0xe03c_e773_e562_e57f;
     }
   }
 
-  pub mod send_throw_action_results {
+  pub mod send_block_action_results {
     #[derive(Copy, Clone)]
     pub struct Owned(());
     impl ::capnp::introspect::Introspect for Owned { fn introspect() -> ::capnp::introspect::Type { ::capnp::introspect::TypeVariant::Struct(::capnp::introspect::RawBrandedStructSchema { generic: &_private::RAW_SCHEMA, field_types: _private::get_field_types, annotation_types: _private::get_annotation_types }).into() } }
@@ -4903,7 +4903,7 @@ pub mod authenticated_server_connection {
         ::capnp::word(116, 101, 100, 83, 101, 114, 118, 101),
         ::capnp::word(114, 67, 111, 110, 110, 101, 99, 116),
         ::capnp::word(105, 111, 110, 46, 115, 101, 110, 100),
-        ::capnp::word(84, 104, 114, 111, 119, 65, 99, 116),
+        ::capnp::word(66, 108, 111, 99, 107, 65, 99, 116),
         ::capnp::word(105, 111, 110, 36, 82, 101, 115, 117),
         ::capnp::word(108, 116, 115, 0, 0, 0, 0, 0),
       ];
@@ -5138,7 +5138,7 @@ pub mod chunk_data_stream_packet {
       ::capnp::word(203, 38, 210, 159, 176, 70, 145, 184),
       ::capnp::word(2, 0, 7, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(102, 11, 0, 0, 178, 12, 0, 0),
+      ::capnp::word(103, 11, 0, 0, 179, 12, 0, 0),
       ::capnp::word(21, 0, 0, 0, 34, 1, 0, 0),
       ::capnp::word(37, 0, 0, 0, 7, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),

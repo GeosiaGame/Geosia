@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use gs_common::raycast::{RaycastContext, raycast};
 use gs_common::voxel::blocks::STONE_BLOCK_NAME;
 use gs_common::voxel::plugin::BlockRegistryHolder;
-use gs_schemas::actions::{PositionData, ThrowAction};
+use gs_schemas::actions::{BlockAction, PositionData};
 use gs_schemas::coordinates::WorldPos;
 use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
 use gs_schemas::voxel::chunk_storage::ChunkStorage;
@@ -33,14 +33,14 @@ pub(crate) fn ingame_send_throw_packet(
     voxel_query: &mut Query<&mut ClientVoxelUniverse>,
     block_reg: &Res<BlockRegistryHolder>,
     position: PositionData,
-    throw: ThrowAction,
+    action: BlockAction,
 ) {
     let _ = net_thread.0.schedule_task(async move |state| {
         let auth_rpc = state.borrow().server_auth_rpc().cloned();
         if let Some(auth_rpc) = auth_rpc {
-            let mut rq = auth_rpc.send_throw_action_request();
+            let mut rq = auth_rpc.send_block_action_request();
             position.to_builder(&mut rq.get().init_position());
-            throw.to_builder(&mut rq.get().init_throw());
+            action.to_builder(&mut rq.get().init_action());
             rq.get().set_tick(0); // TODO send the actual client tick
             let _ = rq.send().promise.await;
         }
@@ -66,7 +66,7 @@ pub(crate) fn ingame_send_throw_packet(
     let RaycastResult::BlockHit(rc) = rc else {
         return;
     };
-    let pos = if let ThrowAction::ThrowBlock() = throw {
+    let pos = if let BlockAction::PlaceBlock() = action {
         rc.position.direction_offset(rc.face, 1)
     } else {
         rc.position
@@ -76,11 +76,11 @@ pub(crate) fn ingame_send_throw_packet(
 
     let (chunk, local) = pos.split_chunk_component();
     if let Some(chunk) = voxels.loaded_chunks_mut().get_chunk_mut(chunk) {
-        match throw {
-            ThrowAction::ThrowBlock() => {
+        match action {
+            BlockAction::PlaceBlock() => {
                 chunk.mutate_predicted().blocks.put(local, BlockEntry::new(i_stone, 0));
             }
-            ThrowAction::ThrowItem() => {
+            BlockAction::BreakBlock() => {
                 chunk.mutate_predicted().blocks.put(local, BlockEntry::new(i_empty, 0));
             }
         }

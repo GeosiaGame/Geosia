@@ -110,12 +110,14 @@ struct PositionData {
     look @2 :Vec3;
 }
 
-struct ThrowAction {
+struct BlockAction {
     union {
-        throwBlock :group {
+        placeBlock :group {
+            # should eventually contain information on what is being placed
             unused @0 :Void;
         }
-        throwItem :group {
+        breakBlock :group {
+            # not used
             unused @1 :Void;
         }
     }

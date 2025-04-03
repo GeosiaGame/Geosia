@@ -4284,8 +4284,8 @@ pub mod position_data {
   }
 }
 
-pub mod throw_action {
-  pub use self::Which::{ThrowBlock,ThrowItem};
+pub mod block_action {
+  pub use self::Which::{PlaceBlock,BreakBlock};
 
   #[derive(Copy, Clone)]
   pub struct Owned(());
@@ -4351,12 +4351,12 @@ pub mod throw_action {
     pub fn which(self) -> ::core::result::Result<WhichReader<'a,>, ::capnp::NotInSchema> {
       match self.reader.get_data_field::<u16>(0) {
         0 => {
-          ::core::result::Result::Ok(ThrowBlock(
+          ::core::result::Result::Ok(PlaceBlock(
             self.reader.into()
           ))
         }
         1 => {
-          ::core::result::Result::Ok(ThrowItem(
+          ::core::result::Result::Ok(BreakBlock(
             self.reader.into()
           ))
         }
@@ -4418,12 +4418,12 @@ pub mod throw_action {
       self.builder.as_reader().total_size()
     }
     #[inline]
-    pub fn init_throw_block(self, ) -> crate::schemas::game_types_capnp::throw_action::throw_block::Builder<'a> {
+    pub fn init_place_block(self, ) -> crate::schemas::game_types_capnp::block_action::place_block::Builder<'a> {
       self.builder.set_data_field::<u16>(0, 0);
       self.builder.into()
     }
     #[inline]
-    pub fn init_throw_item(self, ) -> crate::schemas::game_types_capnp::throw_action::throw_item::Builder<'a> {
+    pub fn init_break_block(self, ) -> crate::schemas::game_types_capnp::block_action::break_block::Builder<'a> {
       self.builder.set_data_field::<u16>(0, 1);
       self.builder.into()
     }
@@ -4431,12 +4431,12 @@ pub mod throw_action {
     pub fn which(self) -> ::core::result::Result<WhichBuilder<'a,>, ::capnp::NotInSchema> {
       match self.builder.get_data_field::<u16>(0) {
         0 => {
-          ::core::result::Result::Ok(ThrowBlock(
+          ::core::result::Result::Ok(PlaceBlock(
             self.builder.into()
           ))
         }
         1 => {
-          ::core::result::Result::Ok(ThrowItem(
+          ::core::result::Result::Ok(BreakBlock(
             self.builder.into()
           ))
         }
@@ -4456,12 +4456,12 @@ pub mod throw_action {
   mod _private {
     pub static ENCODED_NODE: [::capnp::Word; 37] = [
       ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
-      ::capnp::word(155, 58, 165, 109, 213, 129, 125, 200),
+      ::capnp::word(114, 249, 128, 56, 240, 42, 102, 129),
       ::capnp::word(17, 0, 0, 0, 1, 0, 1, 0),
       ::capnp::word(76, 179, 72, 237, 196, 148, 233, 165),
       ::capnp::word(0, 0, 7, 0, 0, 0, 2, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(175, 8, 0, 0, 92, 9, 0, 0),
+      ::capnp::word(175, 8, 0, 0, 192, 9, 0, 0),
       ::capnp::word(21, 0, 0, 0, 234, 0, 0, 0),
       ::capnp::word(33, 0, 0, 0, 7, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
@@ -4470,33 +4470,33 @@ pub mod throw_action {
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(103, 97, 109, 101, 95, 116, 121, 112),
       ::capnp::word(101, 115, 46, 99, 97, 112, 110, 112),
-      ::capnp::word(58, 84, 104, 114, 111, 119, 65, 99),
+      ::capnp::word(58, 66, 108, 111, 99, 107, 65, 99),
       ::capnp::word(116, 105, 111, 110, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 1, 0, 1, 0),
       ::capnp::word(8, 0, 0, 0, 3, 0, 4, 0),
       ::capnp::word(0, 0, 255, 255, 0, 0, 0, 0),
       ::capnp::word(1, 0, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(225, 219, 73, 38, 86, 112, 128, 197),
+      ::capnp::word(166, 66, 239, 122, 70, 87, 20, 152),
       ::capnp::word(41, 0, 0, 0, 90, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(1, 0, 254, 255, 0, 0, 0, 0),
       ::capnp::word(1, 0, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(105, 2, 82, 110, 32, 121, 20, 211),
-      ::capnp::word(21, 0, 0, 0, 82, 0, 0, 0),
+      ::capnp::word(229, 210, 106, 137, 7, 131, 107, 139),
+      ::capnp::word(21, 0, 0, 0, 90, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(116, 104, 114, 111, 119, 66, 108, 111),
+      ::capnp::word(112, 108, 97, 99, 101, 66, 108, 111),
       ::capnp::word(99, 107, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(116, 104, 114, 111, 119, 73, 116, 101),
-      ::capnp::word(109, 0, 0, 0, 0, 0, 0, 0),
+      ::capnp::word(98, 114, 101, 97, 107, 66, 108, 111),
+      ::capnp::word(99, 107, 0, 0, 0, 0, 0, 0),
     ];
     pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
       match index {
-        0 => <crate::schemas::game_types_capnp::throw_action::throw_block::Owned as ::capnp::introspect::Introspect>::introspect(),
-        1 => <crate::schemas::game_types_capnp::throw_action::throw_item::Owned as ::capnp::introspect::Introspect>::introspect(),
+        0 => <crate::schemas::game_types_capnp::block_action::place_block::Owned as ::capnp::introspect::Introspect>::introspect(),
+        1 => <crate::schemas::game_types_capnp::block_action::break_block::Owned as ::capnp::introspect::Introspect>::introspect(),
         _ => panic!("invalid field index {}", index),
       }
     }
@@ -4511,17 +4511,17 @@ pub mod throw_action {
     };
     pub static NONUNION_MEMBERS : &[u16] = &[];
     pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[0,1];
-    pub static MEMBERS_BY_NAME : &[u16] = &[0,1];
-    pub const TYPE_ID: u64 = 0xc87d_81d5_6da5_3a9b;
+    pub static MEMBERS_BY_NAME : &[u16] = &[1,0];
+    pub const TYPE_ID: u64 = 0x8166_2af0_3880_f972;
   }
   pub enum Which<A0,A1> {
-    ThrowBlock(A0),
-    ThrowItem(A1),
+    PlaceBlock(A0),
+    BreakBlock(A1),
   }
-  pub type WhichReader<'a,> = Which<crate::schemas::game_types_capnp::throw_action::throw_block::Reader<'a>,crate::schemas::game_types_capnp::throw_action::throw_item::Reader<'a>>;
-  pub type WhichBuilder<'a,> = Which<crate::schemas::game_types_capnp::throw_action::throw_block::Builder<'a>,crate::schemas::game_types_capnp::throw_action::throw_item::Builder<'a>>;
+  pub type WhichReader<'a,> = Which<crate::schemas::game_types_capnp::block_action::place_block::Reader<'a>,crate::schemas::game_types_capnp::block_action::break_block::Reader<'a>>;
+  pub type WhichBuilder<'a,> = Which<crate::schemas::game_types_capnp::block_action::place_block::Builder<'a>,crate::schemas::game_types_capnp::block_action::break_block::Builder<'a>>;
 
-  pub mod throw_block {
+  pub mod place_block {
     #[derive(Copy, Clone)]
     pub struct Owned(());
     impl ::capnp::introspect::Introspect for Owned { fn introspect() -> ::capnp::introspect::Type { ::capnp::introspect::TypeVariant::Struct(::capnp::introspect::RawBrandedStructSchema { generic: &_private::RAW_SCHEMA, field_types: _private::get_field_types, annotation_types: _private::get_annotation_types }).into() } }
@@ -4660,9 +4660,9 @@ pub mod throw_action {
     mod _private {
       pub static ENCODED_NODE: [::capnp::Word; 34] = [
         ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
-        ::capnp::word(225, 219, 73, 38, 86, 112, 128, 197),
+        ::capnp::word(166, 66, 239, 122, 70, 87, 20, 152),
         ::capnp::word(29, 0, 0, 0, 1, 0, 1, 0),
-        ::capnp::word(155, 58, 165, 109, 213, 129, 125, 200),
+        ::capnp::word(114, 249, 128, 56, 240, 42, 102, 129),
         ::capnp::word(0, 0, 7, 0, 1, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
@@ -4674,9 +4674,9 @@ pub mod throw_action {
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(103, 97, 109, 101, 95, 116, 121, 112),
         ::capnp::word(101, 115, 46, 99, 97, 112, 110, 112),
-        ::capnp::word(58, 84, 104, 114, 111, 119, 65, 99),
-        ::capnp::word(116, 105, 111, 110, 46, 116, 104, 114),
-        ::capnp::word(111, 119, 66, 108, 111, 99, 107, 0),
+        ::capnp::word(58, 66, 108, 111, 99, 107, 65, 99),
+        ::capnp::word(116, 105, 111, 110, 46, 112, 108, 97),
+        ::capnp::word(99, 101, 66, 108, 111, 99, 107, 0),
         ::capnp::word(4, 0, 0, 0, 3, 0, 4, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 1, 0, 0, 0, 0, 0),
@@ -4712,11 +4712,11 @@ pub mod throw_action {
       pub static NONUNION_MEMBERS : &[u16] = &[0];
       pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
       pub static MEMBERS_BY_NAME : &[u16] = &[0];
-      pub const TYPE_ID: u64 = 0xc580_7056_2649_dbe1;
+      pub const TYPE_ID: u64 = 0x9814_5746_7aef_42a6;
     }
   }
 
-  pub mod throw_item {
+  pub mod break_block {
     #[derive(Copy, Clone)]
     pub struct Owned(());
     impl ::capnp::introspect::Introspect for Owned { fn introspect() -> ::capnp::introspect::Type { ::capnp::introspect::TypeVariant::Struct(::capnp::introspect::RawBrandedStructSchema { generic: &_private::RAW_SCHEMA, field_types: _private::get_field_types, annotation_types: _private::get_annotation_types }).into() } }
@@ -4855,13 +4855,13 @@ pub mod throw_action {
     mod _private {
       pub static ENCODED_NODE: [::capnp::Word; 34] = [
         ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
-        ::capnp::word(105, 2, 82, 110, 32, 121, 20, 211),
+        ::capnp::word(229, 210, 106, 137, 7, 131, 107, 139),
         ::capnp::word(29, 0, 0, 0, 1, 0, 1, 0),
-        ::capnp::word(155, 58, 165, 109, 213, 129, 125, 200),
+        ::capnp::word(114, 249, 128, 56, 240, 42, 102, 129),
         ::capnp::word(0, 0, 7, 0, 1, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-        ::capnp::word(21, 0, 0, 0, 58, 1, 0, 0),
+        ::capnp::word(21, 0, 0, 0, 66, 1, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(29, 0, 0, 0, 63, 0, 0, 0),
@@ -4869,9 +4869,9 @@ pub mod throw_action {
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(103, 97, 109, 101, 95, 116, 121, 112),
         ::capnp::word(101, 115, 46, 99, 97, 112, 110, 112),
-        ::capnp::word(58, 84, 104, 114, 111, 119, 65, 99),
-        ::capnp::word(116, 105, 111, 110, 46, 116, 104, 114),
-        ::capnp::word(111, 119, 73, 116, 101, 109, 0, 0),
+        ::capnp::word(58, 66, 108, 111, 99, 107, 65, 99),
+        ::capnp::word(116, 105, 111, 110, 46, 98, 114, 101),
+        ::capnp::word(97, 107, 66, 108, 111, 99, 107, 0),
         ::capnp::word(4, 0, 0, 0, 3, 0, 4, 0),
         ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ::capnp::word(0, 0, 1, 0, 1, 0, 0, 0),
@@ -4907,7 +4907,7 @@ pub mod throw_action {
       pub static NONUNION_MEMBERS : &[u16] = &[0];
       pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
       pub static MEMBERS_BY_NAME : &[u16] = &[0];
-      pub const TYPE_ID: u64 = 0xd314_7920_6e52_0269;
+      pub const TYPE_ID: u64 = 0x8b6b_8307_896a_d2e5;
     }
   }
 }

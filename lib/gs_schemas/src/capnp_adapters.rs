@@ -4,9 +4,9 @@
 
 use bevy_math::{IVec3, Vec3};
 
-use crate::actions::ThrowAction;
-use crate::actions::ThrowAction::{ThrowBlock, ThrowItem};
-use crate::schemas::game_types_capnp::{i_vec3, throw_action, vec3};
+use crate::actions::BlockAction;
+use crate::actions::BlockAction::{BreakBlock, PlaceBlock};
+use crate::schemas::game_types_capnp::{block_action, i_vec3, vec3};
 
 pub fn adapt_i_vec3(reader: i_vec3::Reader) -> IVec3 {
     IVec3 {
@@ -24,10 +24,10 @@ pub fn adapt_vec3(reader: vec3::Reader) -> Vec3 {
     }
 }
 
-pub fn adapt_throw_action(reader: throw_action::Reader) -> Result<ThrowAction, ()> {
+pub fn adapt_block_action(reader: block_action::Reader) -> Result<BlockAction, ()> {
     match reader.which() {
-        Ok(throw_action::Which::ThrowItem(_)) => Ok(ThrowItem()),
-        Ok(throw_action::Which::ThrowBlock(_)) => Ok(ThrowBlock()),
+        Ok(block_action::Which::BreakBlock(_)) => Ok(BreakBlock()),
+        Ok(block_action::Which::PlaceBlock(_)) => Ok(PlaceBlock()),
         _ => Err(()),
     }
 }

@@ -11,18 +11,17 @@ use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::{RpcSystem, pry};
 use futures::FutureExt;
 use futures::future::BoxFuture;
-use gs_schemas::actions::{PositionData, ThrowAction};
-use gs_schemas::capnp_adapters::{adapt_i_vec3, adapt_throw_action, adapt_vec3};
+use gs_schemas::actions::{BlockAction, PositionData};
+use gs_schemas::capnp_adapters::{adapt_block_action, adapt_i_vec3, adapt_vec3};
 use gs_schemas::coordinates::WorldPos;
 use gs_schemas::dependencies::capnp::Error;
 use gs_schemas::dependencies::capnp::capability::Promise;
 use gs_schemas::dependencies::kstring::KString;
 use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
-use gs_schemas::schemas::game_types_capnp::throw_action::WhichReader;
-use gs_schemas::schemas::game_types_capnp::{i_vec3, throw_action};
+use gs_schemas::schemas::game_types_capnp::i_vec3;
 use gs_schemas::schemas::network_capnp::authenticated_server_connection::{
-    BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
-    SendThrowActionParams, SendThrowActionResults,
+    BootstrapGameDataParams, BootstrapGameDataResults, SendBlockActionParams, SendBlockActionResults,
+    SendChatMessageParams, SendChatMessageResults,
 };
 use gs_schemas::schemas::{NetworkStreamHeader, SchemaUuidExt, network_capnp as rpc};
 use gs_schemas::voxel::chunk_storage::ChunkStorage;
@@ -646,18 +645,18 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
         Promise::ok(())
     }
 
-    fn send_throw_action(&mut self, params: SendThrowActionParams, _: SendThrowActionResults) -> Promise<(), Error> {
+    fn send_block_action(&mut self, params: SendBlockActionParams, _: SendBlockActionResults) -> Promise<(), Error> {
         let params = pry!(params.get());
         let position = pry!(params.get_position());
         // have to adapt because Readers can't be sent across threads,
         // and schedule_bevy counts as one.
-        let throw = adapt_throw_action(pry!(params.get_throw())).unwrap();
+        let action = adapt_block_action(pry!(params.get_action())).unwrap();
         info!(
             "Client {} ({:?}) sent a throw packet `{:?}`, `{:?}`",
             self.0.borrow().username,
             self.0.borrow().peer,
             position,
-            throw
+            action
         );
         let ray_spec = RaycastSpec {
             start: WorldPos::from_offset_blockpos(
@@ -688,7 +687,7 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
             let RaycastResult::BlockHit(rc) = rc else {
                 return Ok(());
             };
-            let pos = if let ThrowAction::ThrowBlock() = throw {
+            let pos = if let BlockAction::PlaceBlock() = action {
                 rc.position.direction_offset(rc.face, 1)
             } else {
                 rc.position
@@ -702,11 +701,11 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
                 return Ok(());
             };
             if let Some(chunk) = voxels.loaded_chunks_mut().get_chunk_mut(chunk) {
-                match throw {
-                    ThrowAction::ThrowBlock() => {
+                match action {
+                    BlockAction::PlaceBlock() => {
                         chunk.mutate_stored().blocks.put(local, BlockEntry::new(i_stone, 0));
                     }
-                    ThrowAction::ThrowItem() => {
+                    BlockAction::BreakBlock() => {
                         chunk.mutate_stored().blocks.put(local, BlockEntry::new(i_empty, 0));
                     }
                 }
