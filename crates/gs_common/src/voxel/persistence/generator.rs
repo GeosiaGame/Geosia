@@ -8,7 +8,7 @@ use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::{coordinates::AbsChunkPos, mutwatcher::MutWatcher};
 
 use crate::prelude::*;
-use crate::voxel::generator::VoxelGenerator;
+use gs_schemas::voxel::generation::VoxelGenerator;
 use crate::voxel::persistence::{ChunkPersistenceLayer, ChunkPersistenceLayerStats, ChunkProviderResult};
 
 /// Asynchronous persistence layer wrapping a generator.

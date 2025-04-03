@@ -6,7 +6,7 @@ use gs_schemas::{
     voxel::{chunk::Chunk, chunk_storage::ChunkStorage, voxeltypes::BlockEntry},
 };
 
-use super::VoxelGenerator;
+use gs_schemas::voxel::generation::VoxelGenerator;
 use crate::prelude::*;
 
 /// A layer of blocks to generate.

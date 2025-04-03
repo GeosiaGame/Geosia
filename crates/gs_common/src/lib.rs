@@ -332,8 +332,13 @@ impl GameServer {
         app.insert_resource(SharedRegistryHolder(engine.shared_registries.clone()));
         let block_registry = Arc::clone(&engine.shared_registries.block_types);
         let biome_registry = Arc::clone(&engine.shared_registries.biome_types);
+        let decor_registry = Arc::clone(&engine.shared_registries.decor_types);
 
-        let generator = MultiNoiseGenerator::new(123456789, Arc::clone(&biome_registry), Arc::clone(&block_registry));
+        let generator = MultiNoiseGenerator::new(
+            123456789,
+            Arc::clone(&biome_registry),
+            Arc::clone(&block_registry),
+            Arc::clone(&decor_registry));
         let gen_world = GeneratorPersistenceLayer::new(Arc::new(generator), default());
         let persistence = SavefilePersistenceLayer::new(engine.savefile.clone(), Arc::new(Mutex::new(gen_world)))?;
 
@@ -411,10 +416,13 @@ pub fn builtin_game_registries() -> GameRegistries {
     voxel::blocks::setup_basic_blocks(&mut block_types);
     let mut biome_types = Registry::default();
     voxel::biomes::setup_basic_biomes(&mut biome_types);
+    let mut decor_types = Registry::default();
+    voxel::decorators::setup_basic_decorators(&mut decor_types);
 
     GameRegistries {
         block_types: Arc::new(block_types),
         biome_types: Arc::new(biome_types),
+        decor_types: Arc::new(decor_types),
     }
 }
 

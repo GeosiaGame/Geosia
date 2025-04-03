@@ -3,10 +3,12 @@
 use std::f64::consts::TAU;
 
 use noise::{NoiseFn, Seedable};
-
-use self::positional_random::PositionalRandomFactory;
+use crate::coordinates::AbsChunkPos;
+use crate::GsExtraData;
+use crate::voxel::chunk::Chunk;
 use super::{chunk_storage::PaletteStorage, voxeltypes::BlockEntry};
 
+pub mod decorator;
 pub mod fbm_noise;
 pub mod positional_random;
 
@@ -16,8 +18,6 @@ pub struct Context<'a> {
     pub seed: u64,
     /// The chunk. Unmodifiable through here.
     pub chunk: &'a PaletteStorage<BlockEntry>,
-    /// A positional random factory.
-    pub random: PositionalRandomFactory<rand_xoshiro::Xoshiro512StarStar>,
     /// The ground Y level in this block position.
     pub ground_y: i32,
     /// The sea level for this planet.
@@ -78,4 +78,10 @@ where
     fn get_2d(&self, point: [f64; 2]) -> f64 {
         self.get(point)
     }
+}
+
+/// A chunk generator
+pub trait VoxelGenerator<ExtraData: GsExtraData>: Send + Sync {
+    /// Generates a single chunk at the given coordinates, with the given pre-filled extra data.
+    fn generate_chunk(&self, position: AbsChunkPos, extra_data: ExtraData::ChunkData) -> Chunk<ExtraData>;
 }

@@ -1,12 +1,13 @@
 //! A data structure for keeping track of a stable mapping between: namespaced strings, numerical IDs and objects.
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
+use std::marker::PhantomData;
 use std::num::{NonZeroU32, TryFromIntError};
 use std::str::Utf8Error;
 use std::sync::Arc;
 
 use bytemuck::{PodInOption, TransparentWrapper, ZeroableInOption};
-use hashbrown::{Equivalent, HashMap};
+use hashbrown::{Equivalent, HashMap, HashSet};
 use itertools::Itertools;
 use kstring::{KString, KStringRef};
 use rusqlite::ToSql;
@@ -191,14 +192,14 @@ impl<'a> RegistryNameRef<'a> {
     }
 }
 
-impl Equivalent<RegistryName> for RegistryNameRef<'_> {
+impl<'a> Equivalent<RegistryName> for RegistryNameRef<'a> {
     /// Enabled heterogeneous lookup in [`HashMap`] and related types.
     fn equivalent(&self, key: &RegistryName) -> bool {
         key.as_ref() == *self
     }
 }
 
-impl Equivalent<RegistryNameRef<'_>> for RegistryName {
+impl<'a> Equivalent<RegistryNameRef<'a>> for RegistryName {
     /// Enabled heterogeneous lookup in [`HashMap`] and related types.
     fn equivalent(&self, key: &RegistryNameRef) -> bool {
         *key == self.as_ref()
@@ -333,7 +334,7 @@ impl Display for RegistryName {
     }
 }
 
-impl Display for RegistryNameRef<'_> {
+impl<'a> Display for RegistryNameRef<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}", self.ns, self.key)
     }
@@ -586,6 +587,54 @@ impl<Object: RegistryObject> Registry<Object> {
         }
 
         Ok(out)
+    }
+}
+
+/// A registry data set, like tags in *Minecraft*.
+// TODO fix deserialization
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegistryDataSet<Object: RegistryObject> {
+    names: HashSet<RegistryName>,
+    phantom_data: PhantomData<Object>,
+}
+
+impl<Object: RegistryObject> RegistryDataSet<Object> {
+    /// Utility to create a new RegistyDataSet.
+    pub fn new(names: HashSet<RegistryName>) -> Self {
+        Self {
+            names,
+            phantom_data: PhantomData,
+        }
+    }
+
+    /// Get the values of this RegistryDataSet, or an error if it isn't loaded yet.
+    pub fn values<'a>(&'a self, registry: &'a Registry<Object>) -> Vec<(RegistryId, &'a Object)> {
+        self.names
+            .iter()
+            .map(|name| {
+                registry
+                    .lookup_name_to_object(name.as_ref())
+                    .unwrap_or_else(|| panic!("registry key {name} not found in registry."))
+            })
+            .collect_vec()
+    }
+
+    /// Does this RegistryDataSet contain the given key?
+    /// NOTE: only returns true if the set is filled.
+    pub fn contains_key(&self, obj: &RegistryName) -> bool {
+        self.names.iter().any(|name| name == obj)
+    }
+
+    /// Does this RegistryDataSet contain the given key?
+    /// NOTE: only returns true if the set is filled.
+    pub fn contains_key_ref(&self, obj: RegistryNameRef<'_>) -> bool {
+        self.names.iter().any(|name| *name == obj.to_owned())
+    }
+
+    /// Does this RegistryDataSet contain the given value?
+    /// NOTE: only returns true if the set is filled.
+    pub fn contains_value(&self, obj: &Object, registry: &Registry<Object>) -> bool {
+        self.values(registry).iter().any(|(_, value)| *value == obj)
     }
 }
 
