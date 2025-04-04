@@ -13,11 +13,13 @@ use bevy_egui::EguiContexts;
 use bevy_egui::egui::Align2;
 use gs_common::raycast::{RaycastContext, raycast};
 use gs_common::voxel::plugin::BlockRegistryHolder;
-use gs_schemas::coordinates::{AbsChunkPos, WorldPos};
+use gs_schemas::actions::{BlockAction, PositionData};
+use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, WorldPos};
 use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
 use gs_schemas::voxel::voxeltypes::EMPTY_BLOCK;
 
-use crate::states::{ClientAppState, InGameSystemSet};
+use crate::ClientNetworkThreadHolder;
+use crate::states::{ClientAppState, InGameSystemSet, in_game};
 use crate::voxel::ClientVoxelUniverse;
 
 /// Mouse sensitivity and movement speed
@@ -46,6 +48,8 @@ pub struct KeyBindings {
     pub move_ascend: KeyCode,
     pub move_descend: KeyCode,
     pub toggle_grab_cursor: KeyCode,
+    pub throw_block: MouseButton,
+    pub throw_item: MouseButton,
 }
 
 impl Default for KeyBindings {
@@ -58,6 +62,8 @@ impl Default for KeyBindings {
             move_ascend: KeyCode::Space,
             move_descend: KeyCode::ShiftLeft,
             toggle_grab_cursor: KeyCode::Escape,
+            throw_block: MouseButton::Left,
+            throw_item: MouseButton::Right,
         }
     }
 }
@@ -107,7 +113,7 @@ fn setup_player(mut commands: Commands) {
     ));
 }
 
-/// Handles keyboard input and movement
+/// Handles input for movement
 fn player_move(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
@@ -206,6 +212,67 @@ fn player_look(
         }
     } else {
         warn!("Primary window not found for `player_look`!");
+    }
+}
+
+/// Handles input for actions
+fn player_action(
+    net_thread: Res<ClientNetworkThreadHolder>,
+    mut voxels: Query<&mut ClientVoxelUniverse>,
+    block_reg: Res<BlockRegistryHolder>,
+    _: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
+    key_bindings: Res<KeyBindings>,
+    mut camera_query: Query<(&FlyCam, &mut Transform)>, //    mut query: Query<&mut Transform, With<FlyCam>>,
+) {
+    if let Ok(window) = primary_window.get_single() {
+        for (_camera, transform) in camera_query.iter_mut() {
+            for &button in mouse.get_just_pressed() {
+                match window.cursor_options.grab_mode {
+                    CursorGrabMode::None => (),
+                    _ => {
+                        if button == key_bindings.throw_block {
+                            let pos = transform.translation.floor();
+                            let offset = transform.translation - pos;
+                            let pos = AbsBlockPos::from_ivec3(pos.as_ivec3());
+                            in_game::ingame_send_throw_packet(
+                                &net_thread,
+                                &mut voxels,
+                                &block_reg,
+                                PositionData {
+                                    position: pos,
+                                    offset,
+                                    look: transform.forward().into(),
+                                },
+                                BlockAction::PlaceBlock(),
+                            );
+                        } else if button == key_bindings.throw_item {
+                            let Vec3 { x, y, z } = transform.translation;
+                            let pos = AbsBlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
+                            let offset = Vec3 {
+                                x: x - pos.x as f32,
+                                y: y - pos.y as f32,
+                                z: z - pos.z as f32,
+                            };
+                            in_game::ingame_send_throw_packet(
+                                &net_thread,
+                                &mut voxels,
+                                &block_reg,
+                                PositionData {
+                                    position: pos,
+                                    offset,
+                                    look: transform.forward().into(),
+                                },
+                                BlockAction::BreakBlock(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        warn!("Primary window not found for `player_action`!");
     }
 }
 
@@ -311,19 +378,19 @@ fn lookat_gizmo(
     let Some(bregistry) = bregistry else {
         return;
     };
-    let rcctx = RaycastContext {
+    let ray_ctx = RaycastContext {
         block_registry: Some(&bregistry),
         voxel_world: Some(voxels),
     };
     let camera_zero: Vec3A = camera.transform_point(Vec3::ZERO).into();
-    let rcspec = RaycastSpec {
+    let ray_spec = RaycastSpec {
         start: WorldPos::from_vec3(camera_zero),
         direction: camera.forward().into(),
         distance_limit: limit,
         hit_mask: RaycastHitMask::all(),
     };
 
-    let rc = raycast(&rcctx, &rcspec);
+    let rc = raycast(&ray_ctx, &ray_spec);
     let RaycastResult::BlockHit(rc) = rc else {
         let limit_sphere = camera.transform_point(vec3(0.0, 0.0, -limit));
         gizmos.sphere(limit_sphere, 0.5, tailwind::RED_600);
@@ -406,12 +473,14 @@ impl Plugin for PlayerPlugin {
             .add_systems(OnEnter(ClientAppState::InGame), spawn_debug_text)
             .add_systems(Update, player_move.in_set(InGameSystemSet))
             .add_systems(Update, player_look.in_set(InGameSystemSet))
+            .add_systems(Update, player_action.in_set(InGameSystemSet))
             .add_systems(
                 Update,
                 (gizmo_toggles, xyz_gizmo, cur_chunk_gizmo, lookat_gizmo)
                     .in_set(InGameSystemSet)
                     .after(player_move)
-                    .after(player_look),
+                    .after(player_look)
+                    .after(player_action),
             )
             .add_systems(Update, cursor_grab.in_set(InGameSystemSet));
     }

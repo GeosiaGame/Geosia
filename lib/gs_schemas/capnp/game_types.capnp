@@ -102,3 +102,23 @@ struct FullChunkData {
     blockPalette @0 :List(UInt64);
     blockData @1 :List(UInt16);
 }
+
+# Action Data
+struct PositionData {
+    position @0 :IVec3;
+    offset @1 :Vec3;
+    look @2 :Vec3;
+}
+
+struct BlockAction {
+    union {
+        placeBlock :group {
+            # should eventually contain information on what is being placed
+            unused @0 :Void;
+        }
+        breakBlock :group {
+            # not used
+            unused @1 :Void;
+        }
+    }
+}

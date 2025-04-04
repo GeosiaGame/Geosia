@@ -11,13 +11,21 @@ use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::{RpcSystem, pry};
 use futures::FutureExt;
 use futures::future::BoxFuture;
+use gs_schemas::actions::{BlockAction, PositionData};
+use gs_schemas::capnp_adapters::{adapt_block_action, adapt_i_vec3, adapt_vec3};
+use gs_schemas::coordinates::WorldPos;
 use gs_schemas::dependencies::capnp::Error;
 use gs_schemas::dependencies::capnp::capability::Promise;
 use gs_schemas::dependencies::kstring::KString;
+use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
+use gs_schemas::schemas::game_types_capnp::i_vec3;
 use gs_schemas::schemas::network_capnp::authenticated_server_connection::{
-    BootstrapGameDataParams, BootstrapGameDataResults, SendChatMessageParams, SendChatMessageResults,
+    BootstrapGameDataParams, BootstrapGameDataResults, SendBlockActionParams, SendBlockActionResults,
+    SendChatMessageParams, SendChatMessageResults,
 };
 use gs_schemas::schemas::{NetworkStreamHeader, SchemaUuidExt, network_capnp as rpc};
+use gs_schemas::voxel::chunk_storage::ChunkStorage;
+use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 use quinn::{Connection, EndpointConfig};
 use socket2::{Domain, Socket};
 use tokio::select;
@@ -33,8 +41,12 @@ use crate::network::transport::{
 };
 use crate::prelude::*;
 use crate::promises::ShutdownHandle;
+use crate::raycast::{RaycastContext, raycast};
+use crate::voxel::blocks::STONE_BLOCK_NAME;
+use crate::voxel::plugin::{BlockRegistryHolder, VoxelUniverse};
 use crate::{
-    GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE, GameServer,
+    GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE,
+    GameServer, ServerData,
 };
 
 /// The network thread game server state, accessible from network functions.
@@ -630,6 +642,76 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
             self.0.borrow().peer,
             text
         );
+        Promise::ok(())
+    }
+
+    fn send_block_action(&mut self, params: SendBlockActionParams, _: SendBlockActionResults) -> Promise<(), Error> {
+        let params = pry!(params.get());
+        let position = pry!(params.get_position());
+        // have to adapt because Readers can't be sent across threads,
+        // and schedule_bevy counts as one.
+        let action = adapt_block_action(pry!(params.get_action())).unwrap();
+        info!(
+            "Client {} ({:?}) sent a throw packet `{:?}`, `{:?}`",
+            self.0.borrow().username,
+            self.0.borrow().peer,
+            position,
+            action
+        );
+        let ray_spec = RaycastSpec {
+            start: WorldPos::from_offset_blockpos(
+                adapt_i_vec3(position.get_position().unwrap()).into(),
+                adapt_vec3(position.get_offset().unwrap()).into(),
+            ),
+            direction: Dir3::new(adapt_vec3(position.get_look().unwrap()).into())
+                .unwrap()
+                .into(),
+            distance_limit: 64.0,
+            hit_mask: RaycastHitMask::all(),
+        };
+        let _ = self.0.borrow().server.schedule_bevy(move |world| {
+            let mut voxel_query = world.query::<&VoxelUniverse<ServerData>>();
+            let block_reg = { &world.get_resource::<BlockRegistryHolder>() };
+            let Ok(voxels) = &voxel_query.get_single(world) else {
+                return Ok(());
+            };
+            let Some(bregistry) = block_reg else {
+                return Ok(());
+            };
+            let ray_ctx = RaycastContext {
+                block_registry: Some(bregistry),
+                voxel_world: Some(voxels),
+            };
+
+            let rc = raycast(&ray_ctx, &ray_spec);
+            let RaycastResult::BlockHit(rc) = rc else {
+                return Ok(());
+            };
+            let pos = if let BlockAction::PlaceBlock() = action {
+                rc.position.direction_offset(rc.face, 1)
+            } else {
+                rc.position
+            };
+            let (i_stone, _) = bregistry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
+            let (i_empty, _) = bregistry.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
+
+            let (chunk, local) = pos.split_chunk_component();
+            let mut voxel_query = world.query::<&mut VoxelUniverse<ServerData>>();
+            let Ok(voxels) = &mut voxel_query.get_single_mut(world) else {
+                return Ok(());
+            };
+            if let Some(chunk) = voxels.loaded_chunks_mut().get_chunk_mut(chunk) {
+                match action {
+                    BlockAction::PlaceBlock() => {
+                        chunk.mutate_stored().blocks.put(local, BlockEntry::new(i_stone, 0));
+                    }
+                    BlockAction::BreakBlock() => {
+                        chunk.mutate_stored().blocks.put(local, BlockEntry::new(i_empty, 0));
+                    }
+                }
+            }
+            Ok(())
+        });
         Promise::ok(())
     }
 }

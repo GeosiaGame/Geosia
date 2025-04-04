@@ -11,6 +11,8 @@ extern crate core;
 
 use smallvec::{Array, SmallVec};
 
+pub mod actions;
+pub mod capnp_adapters;
 pub mod coordinates;
 pub mod direction;
 pub mod math;

@@ -21,6 +21,8 @@ use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::direction::Direction;
+
 /// Length of a side of a block in meters
 pub const BLOCK_DIM: f32 = 0.5;
 
@@ -93,6 +95,16 @@ impl WorldPos {
         let (cpos, bpos) = pos.split_chunk_component();
         Self {
             offset: bpos.as_vec3a(),
+            chunk: cpos,
+        }
+    }
+
+    /// Constructs itself from a given block position at the given offset.
+    #[inline]
+    pub fn from_offset_blockpos(pos: AbsBlockPos, offset: Vec3A) -> Self {
+        let (cpos, bpos) = pos.split_chunk_component();
+        Self {
+            offset: bpos.as_vec3a() + offset,
             chunk: cpos,
         }
     }
@@ -887,6 +899,14 @@ impl AbsBlockPos {
     #[inline]
     pub fn block_center(self) -> DVec3 {
         self.as_dvec3() + DVec3::splat(0.5)
+    }
+
+    /// Moves the block position in the given direction by the given amount.
+    #[inline]
+    pub fn direction_offset(self, direction: Direction, offset: i32) -> AbsBlockPos {
+        AbsBlockPos {
+            0: self.0 + direction.as_ivec() * offset,
+        }
     }
 }
 
