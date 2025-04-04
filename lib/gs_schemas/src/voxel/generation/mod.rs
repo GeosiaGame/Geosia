@@ -10,7 +10,6 @@ use super::{chunk_storage::PaletteStorage, voxeltypes::BlockEntry};
 
 pub mod decorator;
 pub mod fbm_noise;
-pub mod positional_random;
 
 /// Context data for world generation.
 pub struct Context<'a> {

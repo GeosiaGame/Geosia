@@ -20,7 +20,7 @@ use gs_schemas::{
         },
         chunk::Chunk,
         chunk_storage::ChunkStorage,
-        generation::{Context, NoiseNDTo2D, fbm_noise::Fbm, positional_random::PositionalRandomFactory},
+        generation::{Context, NoiseNDTo2D, fbm_noise::Fbm},
         voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME},
     },
 };
@@ -60,14 +60,14 @@ const NOISE_TABLE_OFFSET: i32 = CHUNK_DIM * 2;
 /// offset for noise value lists so that they can contain values `-1..1` chunks around the current chunk.
 const NOISE_TABLE_OFFSETZ: usize = CHUNK_DIMZ * 2;
 /// size of list 3x3 chunk area-sized list offset by [NOISE_TABLE_OFFSETZ] so that no values are negative.
-const NOISE_TABLE_SIZE: usize = CHUNK_DIM2Z * 3 + NOISE_TABLE_OFFSETZ;
+const NOISE_TABLE_SIZE: usize = CHUNK_DIM2Z * 9 + NOISE_TABLE_OFFSETZ;
 
 const fn table_index(x: i32, y: i32) -> usize {
     assert!(x < NOISE_TABLE_OFFSET && x >= -CHUNK_DIM);
     assert!(y < NOISE_TABLE_OFFSET && y >= -CHUNK_DIM);
     let x = x as usize + CHUNK_DIMZ;
     let y = y as usize + CHUNK_DIMZ;
-    x + y * CHUNK_DIMZ
+    x + y * THREE_CHUNK_DIMZ
 }
 
 /// Standard world generator implementation
