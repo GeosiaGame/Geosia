@@ -11,14 +11,13 @@ use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::{RpcSystem, pry};
 use futures::FutureExt;
 use futures::future::BoxFuture;
-use gs_schemas::actions::{BlockAction, PositionData};
+use gs_schemas::actions::BlockAction;
 use gs_schemas::capnp_adapters::{adapt_block_action, adapt_i_vec3, adapt_vec3};
 use gs_schemas::coordinates::WorldPos;
 use gs_schemas::dependencies::capnp::Error;
 use gs_schemas::dependencies::capnp::capability::Promise;
 use gs_schemas::dependencies::kstring::KString;
 use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
-use gs_schemas::schemas::game_types_capnp::i_vec3;
 use gs_schemas::schemas::network_capnp::authenticated_server_connection::{
     BootstrapGameDataParams, BootstrapGameDataResults, SendBlockActionParams, SendBlockActionResults,
     SendChatMessageParams, SendChatMessageResults,
@@ -663,9 +662,7 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
                 adapt_i_vec3(position.get_position().unwrap()).into(),
                 adapt_vec3(position.get_offset().unwrap()).into(),
             ),
-            direction: Dir3::new(adapt_vec3(position.get_look().unwrap()).into())
-                .unwrap()
-                .into(),
+            direction: Dir3::new(adapt_vec3(position.get_look().unwrap())).unwrap().into(),
             distance_limit: 64.0,
             hit_mask: RaycastHitMask::all(),
         };

@@ -904,9 +904,7 @@ impl AbsBlockPos {
     /// Moves the block position in the given direction by the given amount.
     #[inline]
     pub fn direction_offset(self, direction: Direction, offset: i32) -> AbsBlockPos {
-        AbsBlockPos {
-            0: self.0 + direction.as_ivec() * offset,
-        }
+        AbsBlockPos::from_ivec3(self.0 + direction.as_ivec() * offset)
     }
 }
 
