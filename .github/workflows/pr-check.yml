@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-24.04 ]
-        rust: [ stable, nightly-2025-03-23 ]
+        rust: [ '1.86.0', nightly-2025-04-03 ]
         include:
           - os: ubuntu-24.04
 #          - os: macos-latest
@@ -41,7 +41,7 @@ jobs:
           sudo apt-get install --yes --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev libvulkan-dev
       - uses: actions/checkout@v4
       - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.8
       - name: Install Rust ${{ matrix.rust }}
         uses: dtolnay/rust-toolchain@stable
         with:
