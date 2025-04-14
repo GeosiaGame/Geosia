@@ -31,10 +31,10 @@ bytemuck = { version = "1.22.0", features = [
     "zeroable_maybe_uninit",
     "zeroable_atomics",
 ] }
-capnp = { version = "0.20.6" }
-capnp-futures = "0.20.1"
-capnp-rpc = "0.20.3"
-capnpc = "0.20.1"
+capnp = { version = "0.21.0" }
+capnp-futures = "0.21.0"
+capnp-rpc = "0.21.0"
+capnpc = "0.21.0"
 clap = { version = "4.5.32", features = ["derive"] }
 either = "1.13.0"
 futures = "0.3.31"
@@ -46,7 +46,7 @@ hashbrown = { version = "0.15.2", features = ["serde"] }
 image = "0.25.2" # Keep in sync with bevy
 itertools = "0.14.0"
 kstring = { version = "2.0.2", features = ["serde"] }
-lru = "0.12.5"
+lru = "0.14.0"
 noise = "0.9.0"
 quinn = { version = "0.11.7", features = ["futures-io", "runtime-tokio"] }
 rand = "0.9.0"
