@@ -8,8 +8,8 @@ use bevy::color::palettes::tailwind;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::math::{Vec3A, vec3};
 use bevy::window::{CursorGrabMode, PrimaryWindow};
-use bevy_egui::EguiContexts;
 use bevy_egui::egui::Align2;
+use bevy_egui::{EguiContextPass, EguiContexts};
 use gs_common::raycast::{RaycastContext, raycast};
 use gs_common::voxel::plugin::BlockRegistryHolder;
 use gs_schemas::actions::{BlockAction, PositionData};
@@ -474,9 +474,10 @@ impl Plugin for PlayerPlugin {
             .add_systems(Update, player_move.in_set(InGameSystemSet))
             .add_systems(Update, player_look.in_set(InGameSystemSet))
             .add_systems(Update, player_action.in_set(InGameSystemSet))
+            .add_systems(EguiContextPass, gizmo_toggles.in_set(InGameSystemSet))
             .add_systems(
                 Update,
-                (gizmo_toggles, xyz_gizmo, cur_chunk_gizmo, lookat_gizmo)
+                (xyz_gizmo, cur_chunk_gizmo, lookat_gizmo)
                     .in_set(InGameSystemSet)
                     .after(player_move)
                     .after(player_look)

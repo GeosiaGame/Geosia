@@ -33,7 +33,7 @@ use bevy::ui::UiPlugin;
 use bevy::utils::synccell::SyncCell;
 use bevy::window::{ExitCondition, PresentMode};
 use bevy::winit::WinitPlugin;
-use bevy_egui::EguiPlugin;
+use bevy_egui::{EguiContextPass, EguiPlugin};
 use gs_common::network::thread::NetworkThread;
 use gs_common::{GAME_BRAND_NAME, GameBevyCommand};
 use gs_schemas::dependencies::smallvec::SmallVec;
@@ -132,6 +132,7 @@ pub fn client_main() {
             ),
         );
     }
+    configure_sets(&mut app, EguiContextPass);
     configure_sets(&mut app, PreUpdate);
     configure_sets(&mut app, Update);
     configure_sets(&mut app, PostUpdate);

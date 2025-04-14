@@ -1,6 +1,7 @@
 //! The main menu state that lets the user start a single player game or connect to a server.
 
 use bevy::app::AppExit;
+use bevy_egui::EguiContextPass;
 use bevy_egui::EguiContexts;
 use bevy_egui::egui;
 use gs_common::GAME_BRAND_NAME;
@@ -14,7 +15,7 @@ pub struct MainMenuPlugin;
 
 impl Plugin for MainMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (main_menu_ui,).in_set(MainMenuSystemSet));
+        app.add_systems(EguiContextPass, (main_menu_ui,).in_set(MainMenuSystemSet));
     }
 }
 
