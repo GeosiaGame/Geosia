@@ -1,11 +1,9 @@
 //! Client-side voxel world rendering
 
 use bevy::ecs::schedule::ScheduleLabel;
-use bevy::prelude::*;
 use capnp::message::TypedReader;
 use gs_common::InGameSystemSet;
 use gs_common::network::transport::RPC_LOCAL_READER_OPTIONS;
-use gs_common::prelude::*;
 use gs_common::voxel::plugin::{
     BlockRegistryHolder, CHUNK_PACKET_QUEUE_LENGTH, NetworkVoxelClient, VoxelUniverse, VoxelUniverseBuilder,
 };
@@ -19,6 +17,7 @@ use smallvec::{SmallVec, smallvec};
 use tokio_util::bytes::Bytes;
 
 use crate::ClientData;
+use crate::prelude::*;
 use crate::voxel::meshgen::{ChunkMeshMaterial, default_chunk_material};
 
 pub mod client_plugin;
@@ -81,10 +80,10 @@ fn client_chunk_packet_receiver_system(
     mut voxel_q: Query<&mut ClientVoxelUniverse>,
 ) {
     let mut voxels = voxel_q
-        .get_single_mut()
+        .single_mut()
         .context("Missing universe while handling chunk packet, did the game already shut down?")
         .unwrap();
-    let mut nvc = nvc_q.single_mut();
+    let mut nvc = nvc_q.single_mut().unwrap();
     let mut batch: SmallVec<[Bytes; CHUNK_PACKET_QUEUE_LENGTH]> = SmallVec::new();
     for _ in 0..CHUNK_PACKET_QUEUE_LENGTH {
         if let Ok(packet) = nvc.chunk_packet_receiver.try_recv() {
@@ -129,7 +128,7 @@ fn client_chunk_mesher_system(
     mut meshes: ResMut<Assets<Mesh>>,
     mut commands: Commands,
 ) {
-    let Ok(mut voxels) = voxel_q.get_single_mut() else {
+    let Ok(mut voxels) = voxel_q.single_mut() else {
         return;
     };
     let voxels = &mut *voxels;
@@ -193,8 +192,8 @@ fn client_chunk_mesher_system(
                 meshes.remove(mesh);
             }
             for &entity in old_mesh.entities.iter() {
-                if let Some(entity) = commands.get_entity(entity) {
-                    entity.despawn_recursive();
+                if let Ok(mut entity) = commands.get_entity(entity) {
+                    entity.despawn();
                 }
             }
         }

@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use bevy::prelude::*;
 use capnp::message::TypedBuilder;
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, AbsChunkRange, RelChunkPos};
 use gs_schemas::dependencies::itertools::Itertools;
@@ -24,8 +23,9 @@ use crate::network::PeerAddress;
 use crate::network::server::ConnectedPlayer;
 use crate::network::thread::{NetworkThread, NetworkThreadState};
 use crate::network::transport::TransportStream;
+use crate::prelude::*;
 use crate::voxel::persistence::ChunkPersistenceLayer;
-use crate::{GameServer, GameServerResource, prelude::*};
+use crate::{GameServer, GameServerResource};
 use crate::{InGameSystemSet, ServerData};
 
 /// The maximum number of stored chunk packets before applying stream backpressure.
@@ -246,7 +246,7 @@ fn server_system_process_chunk_loading(
     )>,
     chunk_loaders: Query<(&ChunkLoader, &VoxelPosition)>,
 ) {
-    let Ok((mut voxels, mut persistence, _)) = voxel_q.get_single_mut() else {
+    let Ok((mut voxels, mut persistence, _)) = voxel_q.single_mut() else {
         return;
     };
     // TODO: do not fully scan every frame, this is really simple code to get it going right now
@@ -316,7 +316,7 @@ fn server_system_process_chunk_sending(
         return;
     }
 
-    let Ok(mut voxels) = voxel_q.get_single_mut() else {
+    let Ok(mut voxels) = voxel_q.single_mut() else {
         return;
     };
     let voxels = &mut *voxels;

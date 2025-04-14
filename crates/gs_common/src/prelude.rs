@@ -44,3 +44,8 @@ pub use crate::promises::{GenericAsyncResult, AsyncResult};
 
 // Capnp namespaces
 pub use gs_schemas::schemas::network_capnp as rpc;
+
+// Bevy prelude
+pub use bevy::prelude::*;
+// Prefer `tracing` logging methods to `log`.
+pub use bevy::log::tracing::{debug, error, info, trace, warn};

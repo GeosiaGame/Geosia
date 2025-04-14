@@ -1,8 +1,8 @@
 //! Bevy [`Plugin`] for the client voxel universe functionality.
-use bevy::prelude::*;
 use gs_common::voxel::plugin::VoxelUniversePlugin;
 
 use crate::ClientData;
+use crate::prelude::*;
 use crate::voxel::meshgen::ChunkMeshMaterial;
 
 /// Initializes the required plugins for client-side voxel universe support.

@@ -2,7 +2,6 @@
 
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
 
-use bevy::log::*;
 use capnp::Error;
 use capnp::capability::Promise;
 use capnp_rpc::rpc_twoparty_capnp::Side;
@@ -15,7 +14,6 @@ use gs_common::network::transport::{
     InProcessStream, QuicStream, RPC_CLIENT_READER_OPTIONS, RPC_LOCAL_READER_OPTIONS, TransportStream,
     quinn_client_config,
 };
-use gs_common::prelude::*;
 use gs_schemas::schemas::network_capnp as rpc;
 use gs_schemas::schemas::network_capnp::authenticated_client_connection::{
     AddChatMessageParams, AddChatMessageResults, TerminateConnectionParams, TerminateConnectionResults,
@@ -27,6 +25,7 @@ use tokio::task::{JoinHandle, spawn_local};
 use tracing::Instrument;
 
 use crate::GameControlChannel;
+use crate::prelude::*;
 
 /// Pre-authentication
 pub struct NetworkThreadClientConnectingState {

@@ -9,6 +9,7 @@
 //! The clientside of Geosia
 mod debugcam;
 pub mod network;
+pub mod prelude;
 pub mod states;
 pub mod voxel;
 
@@ -21,8 +22,6 @@ use bevy::gizmos::GizmoPlugin;
 use bevy::gltf::GltfPlugin;
 use bevy::input::InputPlugin;
 use bevy::pbr::PbrPlugin;
-use bevy::picking::backend::PointerHits;
-use bevy::prelude::*;
 use bevy::render::RenderPlugin;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::scene::ScenePlugin;
@@ -36,7 +35,6 @@ use bevy::window::{ExitCondition, PresentMode};
 use bevy::winit::WinitPlugin;
 use bevy_egui::EguiPlugin;
 use gs_common::network::thread::NetworkThread;
-use gs_common::prelude::*;
 use gs_common::{GAME_BRAND_NAME, GameBevyCommand};
 use gs_schemas::dependencies::smallvec::SmallVec;
 use gs_schemas::registries::GameRegistries;
@@ -44,6 +42,7 @@ use gs_schemas::{GameSide, GsExtraData};
 use states::{ClientAppState, InGameSystemSet, LoadingGameSystemSet, MainMenuSystemSet};
 
 use crate::network::NetworkThreadClientState;
+use crate::prelude::*;
 use crate::voxel::client_plugin::VoxelUniverseClientPlugin;
 
 /// An [`GsExtraData`] implementation containing the client-side data for the game engine.
@@ -75,20 +74,20 @@ pub fn client_main() {
     // Bevy Base
     app.add_plugins(TaskPoolPlugin {
         task_pool_options: TaskPoolOptions {
-            compute: bevy::core::TaskPoolThreadAssignmentPolicy {
+            compute: bevy::app::TaskPoolThreadAssignmentPolicy {
                 min_threads: 1,
                 max_threads: 10,
                 percent: 0.5,
+                on_thread_spawn: None,
+                on_thread_destroy: None,
             },
             ..default()
         },
     });
-    app.add_plugins(TypeRegistrationPlugin)
-        .add_plugins(StatesPlugin)
-        .add_plugins(FrameCountPlugin)
+    app.add_plugins(StatesPlugin)
+        .add_plugins(bevy::diagnostic::FrameCountPlugin)
         .add_plugins(TimePlugin)
         .add_plugins(TransformPlugin)
-        .add_plugins(HierarchyPlugin)
         .add_plugins(DiagnosticsPlugin)
         .add_plugins(InputPlugin)
         .add_plugins(WindowPlugin {
@@ -108,12 +107,9 @@ pub fn client_main() {
         .add_plugins(ImagePlugin::default())
         .add_plugins(PipelinedRenderingPlugin)
         .add_plugins(CorePipelinePlugin)
-        .add_plugins(SpritePlugin { add_picking: false })
+        .add_plugins(SpritePlugin)
         .add_plugins(TextPlugin)
-        .add_plugins(UiPlugin {
-            add_picking: false,
-            enable_rendering: true,
-        })
+        .add_plugins(UiPlugin { enable_rendering: true })
         .add_plugins(PbrPlugin::default())
         .add_plugins(AudioPlugin::default())
         .add_plugins(GilrsPlugin)
@@ -121,8 +117,9 @@ pub fn client_main() {
         .add_plugins(AnimationPlugin)
         .add_plugins(GltfPlugin::default());
     // Bevy plugins
-    app.add_event::<PointerHits>(); // dummy picking event until bevy_egui gets a feature flag
-    app.add_plugins(EguiPlugin);
+    app.add_plugins(EguiPlugin {
+        enable_multipass_for_primary_context: true,
+    });
 
     app.init_state::<ClientAppState>();
     fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {
@@ -177,7 +174,8 @@ mod debug_window {
 
     use bevy::color::palettes::tailwind;
     use bevy::math::vec3;
-    use bevy::prelude::*;
+
+    use crate::prelude::*;
 
     pub struct DebugWindow;
 
@@ -218,6 +216,7 @@ mod debug_window {
         commands.insert_resource(AmbientLight {
             color: tailwind::GRAY_50.into(),
             brightness: 10.0,
+            affects_lightmapped_meshes: true,
         });
         warn!("Setting up debug window done");
     }

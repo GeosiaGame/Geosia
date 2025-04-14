@@ -7,7 +7,6 @@
 use bevy::color::palettes::tailwind;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::math::{Vec3A, vec3};
-use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use bevy_egui::EguiContexts;
 use bevy_egui::egui::Align2;
@@ -19,6 +18,7 @@ use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
 use gs_schemas::voxel::voxeltypes::EMPTY_BLOCK;
 
 use crate::ClientNetworkThreadHolder;
+use crate::prelude::*;
 use crate::states::{ClientAppState, InGameSystemSet, in_game};
 use crate::voxel::ClientVoxelUniverse;
 
@@ -95,7 +95,7 @@ fn toggle_grab_cursor(window: &mut Window) {
 
 /// Grabs the cursor when game first starts
 fn initial_grab_cursor(mut primary_window: Query<&mut Window, With<PrimaryWindow>>) {
-    if let Ok(mut window) = primary_window.get_single_mut() {
+    if let Ok(mut window) = primary_window.single_mut() {
         if window.focused {
             toggle_grab_cursor(&mut window);
         }
@@ -124,7 +124,7 @@ fn player_move(
     mut text_writer: TextUiWriter,
     mut set: ParamSet<(Query<Entity, With<BiomeText>>, Query<Entity, With<PositionText>>)>,
 ) {
-    if let Ok(window) = primary_window.get_single() {
+    if let Ok(window) = primary_window.single() {
         let mut camera_pos = Vec3::ZERO;
         let mut camera_angle = Quat::IDENTITY;
         for (_camera, mut transform) in camera_query.iter_mut() {
@@ -192,7 +192,7 @@ fn player_look(
     motion: Res<AccumulatedMouseMotion>,
     mut camera_query: Query<&mut Transform, With<FlyCam>>,
 ) {
-    if let Ok(window) = primary_window.get_single() {
+    if let Ok(window) = primary_window.single() {
         for mut transform in camera_query.iter_mut() {
             let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
             match window.cursor_options.grab_mode {
@@ -226,7 +226,7 @@ fn player_action(
     key_bindings: Res<KeyBindings>,
     mut camera_query: Query<(&FlyCam, &mut Transform)>, //    mut query: Query<&mut Transform, With<FlyCam>>,
 ) {
-    if let Ok(window) = primary_window.get_single() {
+    if let Ok(window) = primary_window.single() {
         for (_camera, transform) in camera_query.iter_mut() {
             for &button in mouse.get_just_pressed() {
                 match window.cursor_options.grab_mode {
@@ -311,7 +311,7 @@ fn xyz_gizmo(camera_query: Query<&Transform, With<FlyCam>>, mut gizmos: Gizmos, 
         return;
     }
     let len = 0.5;
-    let Ok(&camera) = camera_query.get_single() else {
+    let Ok(&camera) = camera_query.single() else {
         return;
     };
     let arrow_start = camera.transform_point(vec3(0.0, 0.0, -4.0));
@@ -331,10 +331,10 @@ fn cur_chunk_gizmo(
     if !toggles.current_chunk {
         return;
     }
-    let Ok(&camera) = camera_query.get_single() else {
+    let Ok(&camera) = camera_query.single() else {
         return;
     };
-    let Ok(voxels) = voxels.get_single() else {
+    let Ok(voxels) = voxels.single() else {
         return;
     };
     let Some(bregistry) = bregistry else {
@@ -369,10 +369,10 @@ fn lookat_gizmo(
         return;
     }
     let limit = 64.0;
-    let Ok(&camera) = camera_query.get_single() else {
+    let Ok(&camera) = camera_query.single() else {
         return;
     };
-    let Ok(voxels) = voxels.get_single() else {
+    let Ok(voxels) = voxels.single() else {
         return;
     };
     let Some(bregistry) = bregistry else {
@@ -411,7 +411,7 @@ fn cursor_grab(
     key_bindings: Res<KeyBindings>,
     mut primary_window: Query<&mut Window, With<PrimaryWindow>>,
 ) {
-    if let Ok(mut window) = primary_window.get_single_mut() {
+    if let Ok(mut window) = primary_window.single_mut() {
         if keys.just_pressed(key_bindings.toggle_grab_cursor) {
             toggle_grab_cursor(&mut window);
         }
