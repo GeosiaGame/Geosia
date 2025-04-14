@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-24.04 ]
-        rust: [ '1.86.0', nightly-2025-04-03 ]
+        rust: [ '1.86.0', nightly-2025-04-12 ]
         include:
           - os: ubuntu-24.04
 #          - os: macos-latest

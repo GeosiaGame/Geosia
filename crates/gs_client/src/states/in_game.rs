@@ -1,6 +1,5 @@
 //! The state for when the player is in game, with all basic gameplay resources fully loaded.
 
-use bevy::prelude::*;
 use gs_common::raycast::{RaycastContext, raycast};
 use gs_common::voxel::blocks::STONE_BLOCK_NAME;
 use gs_common::voxel::plugin::BlockRegistryHolder;
@@ -11,6 +10,7 @@ use gs_schemas::voxel::chunk_storage::ChunkStorage;
 use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 
 use crate::ClientNetworkThreadHolder;
+use crate::prelude::*;
 use crate::states::ClientAppState;
 use crate::voxel::ClientVoxelUniverse;
 
@@ -48,7 +48,7 @@ pub(crate) fn ingame_send_throw_packet(
     });
 
     let limit = 64.0;
-    let Ok(voxels) = &mut voxel_query.get_single_mut() else {
+    let Ok(voxels) = &mut voxel_query.single_mut() else {
         return;
     };
     let ray_ctx = RaycastContext {

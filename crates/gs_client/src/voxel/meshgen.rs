@@ -3,7 +3,6 @@
 use anyhow::Context;
 use bevy::color::palettes::tailwind;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline};
-use bevy::prelude::*;
 use bevy::render::mesh::{Indices, MeshVertexAttribute, MeshVertexBufferLayoutRef, PrimitiveTopology};
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{
@@ -18,6 +17,7 @@ use gs_schemas::voxel::standard_shapes::{StandardShapeMetadata, VOXEL_NO_SHAPE};
 use gs_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry};
 
 use crate::ClientData;
+use crate::prelude::*;
 use crate::voxel::ClientChunk;
 
 /// Returns is a chunk has any blocks that require rendering a chunk mesh.

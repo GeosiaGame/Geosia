@@ -23,7 +23,6 @@ use bevy::app::{AppExit, ScheduleRunnerPlugin};
 use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::log::LogPlugin;
-use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
 use bevy::time::TimePlugin;
 use bevy::utils::synccell::SyncCell;
@@ -248,20 +247,20 @@ impl GameServer {
         let mut app = App::new();
         app.add_plugins(TaskPoolPlugin {
             task_pool_options: TaskPoolOptions {
-                compute: bevy::core::TaskPoolThreadAssignmentPolicy {
+                compute: bevy::app::TaskPoolThreadAssignmentPolicy {
                     min_threads: 1,
                     max_threads: 10,
                     percent: 0.75,
+                    on_thread_spawn: None,
+                    on_thread_destroy: None,
                 },
                 ..default()
             },
         });
-        app.add_plugins(TypeRegistrationPlugin)
-            .add_plugins(StatesPlugin)
-            .add_plugins(FrameCountPlugin)
+        app.add_plugins(StatesPlugin)
+            .add_plugins(bevy::diagnostic::FrameCountPlugin)
             .add_plugins(TimePlugin)
             .add_plugins(TransformPlugin)
-            .add_plugins(HierarchyPlugin)
             .add_plugins(DiagnosticsPlugin)
             .add_plugins(AssetPlugin::default())
             .add_plugins(AnimationPlugin)

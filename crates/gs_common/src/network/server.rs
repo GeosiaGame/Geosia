@@ -3,10 +3,9 @@
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 
-use bevy::ecs::component::{ComponentHooks, StorageType};
+use bevy::ecs::component::{ComponentHooks, Mutable, StorageType};
 use bevy::ecs::world::DeferredWorld;
 use bevy::log;
-use bevy::prelude::*;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::{RpcSystem, pry};
 use futures::FutureExt;
@@ -125,9 +124,11 @@ impl ConnectedPlayersTable {
 
 impl Component for ConnectedPlayer {
     const STORAGE_TYPE: StorageType = StorageType::Table;
+    type Mutability = Mutable;
 
     fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_insert(|mut world: DeferredWorld, entity, _component_id| {
+        hooks.on_insert(|mut world: DeferredWorld, context| {
+            let entity = context.entity;
             let player = world.get::<ConnectedPlayer>(entity).unwrap();
             let addr = player.address;
             let mut table = world.resource_mut::<ConnectedPlayersTable>();
@@ -143,7 +144,8 @@ impl Component for ConnectedPlayer {
                 );
             }
         });
-        hooks.on_remove(|mut world: DeferredWorld, entity, _component_id| {
+        hooks.on_remove(|mut world: DeferredWorld, context| {
+            let entity = context.entity;
             let player = world.get::<ConnectedPlayer>(entity).unwrap();
             let addr = player.address;
             let mut table = world.resource_mut::<ConnectedPlayersTable>();
@@ -669,7 +671,7 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
         let _ = self.0.borrow().server.schedule_bevy(move |world| {
             let mut voxel_query = world.query::<&VoxelUniverse<ServerData>>();
             let block_reg = { &world.get_resource::<BlockRegistryHolder>() };
-            let Ok(voxels) = &voxel_query.get_single(world) else {
+            let Ok(voxels) = &voxel_query.single(world) else {
                 return Ok(());
             };
             let Some(bregistry) = block_reg else {
@@ -694,7 +696,7 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
 
             let (chunk, local) = pos.split_chunk_component();
             let mut voxel_query = world.query::<&mut VoxelUniverse<ServerData>>();
-            let Ok(voxels) = &mut voxel_query.get_single_mut(world) else {
+            let Ok(voxels) = &mut voxel_query.single_mut(world) else {
                 return Ok(());
             };
             if let Some(chunk) = voxels.loaded_chunks_mut().get_chunk_mut(chunk) {

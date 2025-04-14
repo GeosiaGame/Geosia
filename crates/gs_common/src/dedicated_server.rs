@@ -1,6 +1,5 @@
 //! The dedicated server main() implementation
 
-use bevy::prelude::*;
 use clap::Parser;
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;

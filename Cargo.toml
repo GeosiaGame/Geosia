@@ -31,22 +31,22 @@ bytemuck = { version = "1.22.0", features = [
     "zeroable_maybe_uninit",
     "zeroable_atomics",
 ] }
-capnp = { version = "0.20.6" }
-capnp-futures = "0.20.1"
-capnp-rpc = "0.20.3"
-capnpc = "0.20.1"
+capnp = { version = "0.21.0" }
+capnp-futures = "0.21.0"
+capnp-rpc = "0.21.0"
+capnpc = "0.21.0"
 clap = { version = "4.5.32", features = ["derive"] }
 either = "1.13.0"
 futures = "0.3.31"
-glam = { version = "0.29.2", features = [
+glam = { version = "0.29.3", features = [
     "bytemuck",
     "serde",
 ] } # Keep in sync with bevy
 hashbrown = { version = "0.15.2", features = ["serde"] }
-image = "0.25.1" # Keep in sync with bevy
+image = "0.25.2" # Keep in sync with bevy
 itertools = "0.14.0"
 kstring = { version = "2.0.2", features = ["serde"] }
-lru = "0.12.5"
+lru = "0.14.0"
 noise = "0.9.0"
 quinn = { version = "0.11.7", features = ["futures-io", "runtime-tokio"] }
 rand = "0.9.0"
@@ -90,7 +90,7 @@ uuid = { version = "1.9.1", features = [
 zorder = "0.2.2"
 
 # Remote, bevy plugins
-bevy_egui = "0.33.0"
+bevy_egui = { version = "0.34.0-rc.2", default-features = false, features = ["manage_clipboard", "open_url", "default_fonts", "render", "serde"] }
 
 # Remote, testing
 criterion = { version = "0.5.1", features = ["html_reports"] }
@@ -98,7 +98,7 @@ quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
 [workspace.dependencies.bevy]
-version = "0.15.3"
+version = "0.16.0-rc.4"
 default-features = false
 # Extra features are used in gs_client on top of these common ones
 features = [
@@ -121,21 +121,21 @@ features = [
 ]
 
 [workspace.dependencies.bevy_math]
-version = "0.15.3"
+version = "0.16.0-rc.4"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
 ]
 
 [workspace.dependencies.bevy_color]
-version = "0.15.3"
+version = "0.16.0-rc.4"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
 ]
 
 [workspace.dependencies.bevy_reflect]
-version = "0.15.3"
+version = "0.16.0-rc.4"
 features = ["smallvec", "glam", "uuid"]
 
 [profile.dev]
