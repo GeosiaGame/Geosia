@@ -48,8 +48,8 @@ pub struct KeyBindings {
     pub move_ascend: KeyCode,
     pub move_descend: KeyCode,
     pub toggle_grab_cursor: KeyCode,
-    pub throw_block: MouseButton,
-    pub throw_item: MouseButton,
+    pub place_block: MouseButton,
+    pub break_block: MouseButton,
 }
 
 impl Default for KeyBindings {
@@ -62,8 +62,8 @@ impl Default for KeyBindings {
             move_ascend: KeyCode::Space,
             move_descend: KeyCode::ShiftLeft,
             toggle_grab_cursor: KeyCode::Escape,
-            throw_block: MouseButton::Left,
-            throw_item: MouseButton::Right,
+            place_block: MouseButton::Left,
+            break_block: MouseButton::Right,
         }
     }
 }
@@ -232,11 +232,11 @@ fn player_action(
                 match window.cursor_options.grab_mode {
                     CursorGrabMode::None => (),
                     _ => {
-                        if button == key_bindings.throw_block {
+                        if button == key_bindings.place_block {
                             let pos = transform.translation.floor();
                             let offset = transform.translation - pos;
                             let pos = AbsBlockPos::from_ivec3(pos.as_ivec3());
-                            in_game::ingame_send_throw_packet(
+                            in_game::ingame_send_block_change(
                                 &net_thread,
                                 &mut voxels,
                                 &block_reg,
@@ -247,7 +247,7 @@ fn player_action(
                                 },
                                 BlockAction::PlaceBlock(),
                             );
-                        } else if button == key_bindings.throw_item {
+                        } else if button == key_bindings.break_block {
                             let Vec3 { x, y, z } = transform.translation;
                             let pos = AbsBlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
                             let offset = Vec3 {
@@ -255,7 +255,7 @@ fn player_action(
                                 y: y - pos.y as f32,
                                 z: z - pos.z as f32,
                             };
-                            in_game::ingame_send_throw_packet(
+                            in_game::ingame_send_block_change(
                                 &net_thread,
                                 &mut voxels,
                                 &block_reg,

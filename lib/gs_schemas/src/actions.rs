@@ -53,7 +53,7 @@ pub enum BlockAction {
 }
 
 impl BlockAction {
-    /// writes this throw action to the given builder
+    /// writes this block action to the given builder
     pub fn to_builder(self, builder: &mut block_action::Builder<'_>) {
         match self {
             PlaceBlock() => {

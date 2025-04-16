@@ -31,20 +31,19 @@ pub type ClientChunkGroup = ChunkGroup<ClientData>;
 pub type ClientVoxelUniverse = VoxelUniverse<ClientData>;
 
 /// Keeps track of the render entities associated with a chunk
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 struct ChunkMeshState {
-    meshes: SmallVec<[Handle<Mesh>; 4]>,
     entities: SmallVec<[Entity; 4]>,
 }
 
 /// Client-only per-chunk data storage
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct ClientChunkData {
     mesh: Option<MutWatcher<ChunkMeshState>>,
 }
 
 /// Client-only per-chunk-group data storage
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct ClientChunkGroupData {
     //
 }
@@ -110,12 +109,25 @@ fn handle_chunk_packet(raw_packet: Bytes, voxels: &mut ClientVoxelUniverse) -> R
     let pos = AbsChunkPos::new(cpos_r.get_x(), cpos_r.get_y(), cpos_r.get_z());
     let data_r = root.reborrow().get_data()?;
     let revision: RevisionNumber = root.get_revision().try_into()?;
-    let chunk = ClientChunk::read_full(&data_r, default())?;
 
-    voxels
-        .loaded_chunks_mut()
-        .chunks
-        .insert(pos, MutWatcher::new_saved(chunk, revision));
+    let mut chunk_entry = voxels.loaded_chunks_mut().chunks.entry(pos);
+    let extra_data = if let std::collections::btree_map::Entry::Occupied(ref mut occupied) = chunk_entry {
+        std::mem::take(&mut occupied.get_mut().mutate_without_revision().extra_data)
+    } else {
+        default()
+    };
+    let chunk = ClientChunk::read_full(&data_r, extra_data)?;
+
+    match chunk_entry {
+        std::collections::btree_map::Entry::Occupied(occupied) => {
+            if let Some(e) = occupied.into_mut().mutate_from_server_revision(revision) {
+                *e = chunk;
+            }
+        }
+        std::collections::btree_map::Entry::Vacant(vacant) => {
+            vacant.insert(MutWatcher::new_saved(chunk, revision));
+        }
+    }
 
     Ok(())
 }
@@ -125,7 +137,7 @@ fn client_chunk_mesher_system(
     block_registry: Res<BlockRegistryHolder>,
     mut voxel_material: Local<Option<Handle<ChunkMeshMaterial>>>,
     mut materials: ResMut<Assets<ChunkMeshMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    mut mesh_assets: ResMut<Assets<Mesh>>,
     mut commands: Commands,
 ) {
     let Ok(mut voxels) = voxel_q.single_mut() else {
@@ -136,8 +148,13 @@ fn client_chunk_mesher_system(
     let voxel_material = voxel_material.get_or_insert_with(|| materials.add(default_chunk_material()));
 
     // Schedule new meshes for all outdated chunks
-    let mut new_entries = Vec::new();
     let loaded_chunks = voxels.loaded_chunks();
+    enum Mutation {
+        NewMesh(MutWatcher<ChunkMeshState>),
+        NewMeshRevision(MutWatcher<()>),
+    }
+    let mut chunk_mutations: Vec<(AbsChunkPos, Mutation)> = Vec::new();
+
     for (&pos, chunk) in loaded_chunks.chunks.iter() {
         let old_mesh = chunk.extra_data.mesh.as_ref();
         let needs_mesh = if let Some(old_mesh) = old_mesh {
@@ -158,44 +175,40 @@ fn client_chunk_mesher_system(
                 continue;
             }
         };
-        let mesh = meshes.add(chunk_mesh);
-        trace!(position = %pos, "Spawning new chunk mesh");
-
-        let entity = commands
-            .spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(voxel_material.clone()),
-                Transform::from_translation(AbsBlockPos::from(pos).as_vec3()),
-            ))
-            .id();
-
-        let mesh = chunk.new_with_same_revision(ChunkMeshState {
-            meshes: smallvec![mesh],
-            entities: smallvec![entity],
-        });
-
-        new_entries.push((pos, mesh));
+        let mesh = mesh_assets.add(chunk_mesh);
+        if let Some(mut old_mesh_entity_commands) = old_mesh.and_then(|om| commands.get_entity(om.entities[0]).ok()) {
+            old_mesh_entity_commands.insert(Mesh3d(mesh));
+            chunk_mutations.push((pos, Mutation::NewMeshRevision(chunk.new_with_same_revision(()))));
+        } else {
+            let entity = commands
+                .spawn((
+                    Mesh3d(mesh),
+                    MeshMaterial3d(voxel_material.clone()),
+                    Transform::from_translation(AbsBlockPos::from(pos).as_vec3()),
+                ))
+                .id();
+            chunk_mutations.push((
+                pos,
+                Mutation::NewMesh(chunk.new_with_same_revision(ChunkMeshState {
+                    entities: smallvec![entity],
+                })),
+            ));
+        }
     }
     let loaded_chunks = voxels.loaded_chunks_mut();
-    for (pos, mesh) in new_entries.into_iter() {
-        let old_mesh = loaded_chunks
-            .chunks
-            .get_mut(&pos)
-            .unwrap()
-            .mutate_without_revision()
-            .extra_data
-            .mesh
-            .replace(mesh);
-        if let Some(old_mesh) = old_mesh {
-            let old_mesh = old_mesh.into_inner();
-            for mesh in old_mesh.meshes.iter() {
-                meshes.remove(mesh);
-            }
-            for &entity in old_mesh.entities.iter() {
-                if let Ok(mut entity) = commands.get_entity(entity) {
-                    entity.despawn();
-                }
-            }
+    for (cpos, mutation) in chunk_mutations {
+        let Some(chunk) = loaded_chunks.get_chunk_mut(cpos) else {
+            unreachable!();
+        };
+        match mutation {
+            Mutation::NewMesh(mesh) => chunk.mutate_without_revision().extra_data.mesh = Some(mesh),
+            Mutation::NewMeshRevision(revision) => chunk
+                .mutate_without_revision()
+                .extra_data
+                .mesh
+                .as_mut()
+                .unwrap()
+                .set_revision_from(&revision),
         }
     }
 }

@@ -652,8 +652,8 @@ impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2Clie
         // have to adapt because Readers can't be sent across threads,
         // and schedule_bevy counts as one.
         let action = adapt_block_action(pry!(params.get_action())).unwrap();
-        info!(
-            "Client {} ({:?}) sent a throw packet `{:?}`, `{:?}`",
+        trace!(
+            "Client {} ({:?}) sent a block change packet `{:?}`, `{:?}`",
             self.0.borrow().username,
             self.0.borrow().peer,
             position,

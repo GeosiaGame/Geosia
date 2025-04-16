@@ -27,8 +27,8 @@ fn ingame_cleanup_on_exit(net_thread: ResMut<ClientNetworkThreadHolder>) {
     net_thread.0.sync_shutdown();
 }
 
-/// sends a throw packet over the given net thread and promise holder
-pub(crate) fn ingame_send_throw_packet(
+/// sends a block modification packet over the given net thread and promise holder
+pub(crate) fn ingame_send_block_change(
     net_thread: &Res<ClientNetworkThreadHolder>,
     voxel_query: &mut Query<&mut ClientVoxelUniverse>,
     block_reg: &Res<BlockRegistryHolder>,

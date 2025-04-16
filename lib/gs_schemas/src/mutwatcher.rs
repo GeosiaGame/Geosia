@@ -60,6 +60,12 @@ impl<T> MutWatcher<T> {
         }
     }
 
+    /// Modifies this [`MutWatcher`] in-place to set the same revision state as another one.
+    pub fn set_revision_from<U>(&mut self, other: &MutWatcher<U>) {
+        self.current_revision = other.current_revision;
+        self.predicted_revision = other.predicted_revision;
+    }
+
     /// Extracts the inner stored value.
     pub fn into_inner(self) -> T {
         self.inner
@@ -148,7 +154,6 @@ impl<T> MutWatcher<T> {
                 self.predicted_revision = Some(self.current_revision.checked_add(1).unwrap());
             }
         }
-        Self::increment(&mut self.current_revision);
         &mut self.inner
     }
 
