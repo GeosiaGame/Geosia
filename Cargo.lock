@@ -1963,17 +1963,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "capnp-rpc"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85e9c19ef52ff1b9c9822fb21bfa68a72bc58711676295ff06eb88e64c7877f7"
-dependencies = [
- "capnp",
- "capnp-futures",
- "futures",
-]
-
-[[package]]
 name = "capnpc"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3279,7 +3268,6 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "capnp",
- "capnp-rpc",
  "gs_common",
  "gs_schemas",
  "hashbrown",
@@ -3302,7 +3290,7 @@ dependencies = [
  "bevy",
  "bevy_math",
  "capnp",
- "capnp-rpc",
+ "capnp-futures",
  "clap",
  "futures",
  "gs_schemas",
@@ -3317,6 +3305,7 @@ dependencies = [
  "rustls",
  "rustyline",
  "serde",
+ "slotmap",
  "smallvec",
  "smart-default",
  "socket2",
@@ -3341,6 +3330,7 @@ dependencies = [
  "bitflags 2.9.0",
  "bitvec",
  "bytemuck",
+ "bytes",
  "capnp",
  "capnpc",
  "criterion",

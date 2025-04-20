@@ -20,6 +20,7 @@ harness = false
 [dependencies]
 anyhow.workspace = true
 bytemuck.workspace = true
+bytes.workspace = true
 bitflags.workspace = true
 bitvec.workspace = true
 bevy_math.workspace = true

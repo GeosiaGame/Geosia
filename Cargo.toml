@@ -31,9 +31,9 @@ bytemuck = { version = "1.22.0", features = [
     "zeroable_maybe_uninit",
     "zeroable_atomics",
 ] }
+bytes = "1.10.1"
 capnp = { version = "0.21.0" }
 capnp-futures = "0.21.0"
-capnp-rpc = "0.21.0"
 capnpc = "0.21.0"
 clap = { version = "4.5.32", features = ["derive"] }
 either = "1.13.0"
@@ -56,6 +56,7 @@ rcgen = "0.13.2"
 rustls = { version = "0.23.25" }
 rustyline = "15.0.0"
 serde = { version = "1.0.219", features = ["derive"] }
+slotmap = "1.0.7"
 smallvec = { version = "1.14.0", features = [
     "serde",
     "const_generics",
@@ -102,6 +103,7 @@ version = "0.16.0-rc.4"
 default-features = false
 # Extra features are used in gs_client on top of these common ones
 features = [
+    "std",
     # Default Bevy functionality:
     "bevy_asset",            # Assets management
     "animation",             # Animation support
@@ -125,6 +127,7 @@ version = "0.16.0-rc.4"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
+    "std"
 ]
 
 [workspace.dependencies.bevy_color]
@@ -132,11 +135,12 @@ version = "0.16.0-rc.4"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
+    "std"
 ]
 
 [workspace.dependencies.bevy_reflect]
 version = "0.16.0-rc.4"
-features = ["smallvec", "glam", "uuid"]
+features = ["smallvec", "glam", "uuid", "std"]
 
 [profile.dev]
 opt-level = 1

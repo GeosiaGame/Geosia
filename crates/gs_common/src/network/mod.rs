@@ -4,6 +4,7 @@ use std::fmt::{Display, Formatter};
 use std::net::SocketAddr;
 
 pub mod server;
+pub mod server_packet_handler;
 pub mod thread;
 pub mod transport;
 

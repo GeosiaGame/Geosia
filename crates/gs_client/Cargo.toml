@@ -16,7 +16,6 @@ gs_schemas.workspace = true
 gs_common.workspace = true
 # Remote
 anyhow.workspace = true
-capnp-rpc.workspace = true
 capnp.workspace = true
 hashbrown.workspace = true
 image.workspace = true

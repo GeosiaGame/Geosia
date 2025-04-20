@@ -11,6 +11,11 @@ struct Option @0x8ba1c86d2c77fb36 (T) {
     }
 }
 
+enum SimpleResult @0xf2cf75f0aa0b023f {
+    err @0;
+    ok @1;
+}
+
 struct Result @0x8f3f5259477b8021 (Ok, Err) {
     union {
         ok @0 :Ok;

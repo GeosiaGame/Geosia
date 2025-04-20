@@ -2,109 +2,92 @@
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
+use std::time::Instant;
 
 use bevy::ecs::component::{ComponentHooks, Mutable, StorageType};
 use bevy::ecs::world::DeferredWorld;
-use bevy::log;
-use capnp_rpc::rpc_twoparty_capnp::Side;
-use capnp_rpc::{RpcSystem, pry};
-use futures::FutureExt;
-use futures::future::BoxFuture;
-use gs_schemas::actions::BlockAction;
-use gs_schemas::capnp_adapters::{adapt_block_action, adapt_i_vec3, adapt_vec3};
-use gs_schemas::coordinates::WorldPos;
-use gs_schemas::dependencies::capnp::Error;
-use gs_schemas::dependencies::capnp::capability::Promise;
+use gs_schemas::GameSide;
 use gs_schemas::dependencies::kstring::KString;
-use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
-use gs_schemas::schemas::network_capnp::authenticated_server_connection::{
-    BootstrapGameDataParams, BootstrapGameDataResults, SendBlockActionParams, SendBlockActionResults,
-    SendChatMessageParams, SendChatMessageResults,
+use gs_schemas::schemas::game_types_capnp::result;
+use gs_schemas::schemas::network_capnp::{
+    PacketId, authentication_acknowledgement, authentication_error, authentication_request, game_server_metadata,
 };
-use gs_schemas::schemas::{NetworkStreamHeader, SchemaUuidExt, network_capnp as rpc};
-use gs_schemas::voxel::chunk_storage::ChunkStorage;
-use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
-use quinn::{Connection, EndpointConfig};
+use gs_schemas::schemas::{network_capnp as rpc, new_packet_builder, new_simple_packet_builder};
+use quinn::{Endpoint, EndpointConfig, VarInt};
+use slotmap::{SlotMap, new_key_type};
 use socket2::{Domain, Socket};
-use tokio::select;
 use tokio::task::{JoinHandle, JoinSet, spawn_local};
 use tracing::Instrument;
-use uuid::Uuid;
 
+use super::server_packet_handler::ServerPacketHandlerPlugin;
+use super::thread::NetworkThreadState;
+use super::transport::{
+    NetworkConnection, PacketStream, PacketWrapper, RPC_SERVER_READER_OPTIONS,
+    RPC_SERVER_UNAUTHENTICATED_READER_OPTIONS,
+};
 use crate::network::PeerAddress;
-use crate::network::thread::NetworkThreadState;
-use crate::network::transport::{
-    InProcessDuplex, InProcessStream, QuicStream, TransportStream, create_local_rpc_server, create_quic_rpc_server,
-    quinn_server_config,
-};
+use crate::network::transport::{InProcessDuplex, quinn_server_config};
 use crate::prelude::*;
-use crate::promises::ShutdownHandle;
-use crate::raycast::{RaycastContext, raycast};
-use crate::voxel::blocks::STONE_BLOCK_NAME;
-use crate::voxel::plugin::{BlockRegistryHolder, VoxelUniverse};
 use crate::{
-    GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE,
-    GameServer, ServerData,
+    GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE, GameServer,
 };
+
+new_key_type! {
+    pub struct ServerConnectionKey;
+    pub struct PacketStreamKey;
+}
+
+struct ServerConnection {
+    authenticated_info: AuthenticatedInfo,
+    packet_streams: SlotMap<PacketStreamKey, Arc<PacketStream>>,
+    main_c2s_stream: PacketStreamKey,
+    main_s2c_stream: PacketStreamKey,
+    connection: NetworkConnection,
+}
 
 /// The network thread game server state, accessible from network functions.
 pub struct NetworkThreadServerState {
-    ready_to_accept_streams: AsyncWatchSender<bool>,
+    startup_time: Instant,
     free_local_id: i32,
-    connected_clients: HashMap<PeerAddress, ConnectedNetClient>,
-    bootstrapped_clients: HashMap<PeerAddress, Rc<RefCell<AuthenticatedServer2ClientEndpoint>>>,
-    listeners: HashMap<SocketAddr, JoinHandle<()>>,
+    listeners: HashMap<SocketAddr, (Endpoint, JoinHandle<()>)>,
+    connections: SlotMap<ServerConnectionKey, ServerConnection>,
 }
 
-enum NetClientConnectionData {
-    Local {
-        stream_sender: AsyncUnboundedSender<InProcessStream>,
-    },
-    Remote {
-        connection: Connection,
-    },
+pub enum NetworkThreadServerCommand {
+    UpdateListeners(Arc<GameServer>, AsyncOneshotSender<Result<()>>),
+    CreateLocalConnection(Arc<GameServer>, AsyncOneshotSender<NetworkConnection>),
+    InsertServerConnection(ServerConnection, AsyncOneshotSender<ServerConnectionKey>),
+    RemoveServerConnection(Arc<GameServer>, ServerConnectionKey),
+    OpenNewStream(
+        ServerConnectionKey,
+        AsyncOneshotSender<Result<(Arc<PacketStream>, PacketStreamKey)>>,
+    ),
 }
 
-/// Network thread data for a live connected client.
-pub struct ConnectedNetClient {
-    shutdown_handle: ShutdownHandle,
-    data: NetClientConnectionData,
-    /// The network stream for chunk data.
-    pub chunk_stream: Option<TransportStream>,
+#[derive(Clone)]
+pub struct AuthenticatedInfo {
+    pub username: KString,
+    pub address: PeerAddress,
 }
 
-impl ConnectedNetClient {
-    /// Opens a fresh stream for sending data asynchronously to the main RPC channel.
-    /// Returns a future that actually performs the work to avoid holding the state RefCell borrowed across await points.
-    pub fn open_stream(&self, header: NetworkStreamHeader) -> BoxFuture<'static, Result<TransportStream>> {
-        match &self.data {
-            NetClientConnectionData::Local { stream_sender, .. } => {
-                let stream_sender = stream_sender.clone();
-                (async move {
-                    let (local, remote) = InProcessStream::new_pair(header);
-                    stream_sender.send(remote)?;
-                    Ok(local.into())
-                })
-                .boxed()
-            }
-            NetClientConnectionData::Remote { connection, .. } => QuicStream::open(connection.clone(), header)
-                .map(|r| r.map(TransportStream::from))
-                .boxed(),
-        }
-    }
-
-    /// Gets the shutdown handle for this client's connection handling task set.
-    pub fn shutdown_handle(&self) -> &ShutdownHandle {
-        &self.shutdown_handle
-    }
+pub struct QueuedPacket {
+    pub id: PacketId,
+    pub data: PacketWrapper,
+    pub received_at: Instant,
+    pub connection_key: ServerConnectionKey,
+    pub stream_key: PacketStreamKey,
+    pub stream: Arc<PacketStream>,
 }
 
 /// A reference to a connected and bootstrapped player in the ECS.
 pub struct ConnectedPlayer {
-    /// The visible player nickname.
-    pub nickname: KString,
-    /// The network address the player is connected from.
-    pub address: PeerAddress,
+    /// Information acquired about the player during authentication.
+    pub authenticated_info: AuthenticatedInfo,
+    /// A key into the network thread's connection table.
+    pub connection_key: ServerConnectionKey,
+    pub received_packet_queue: AsyncMutex<AsyncUnboundedReceiver<QueuedPacket>>,
+    pub main_s2c_stream: Arc<PacketStream>,
+    pub main_c2s_stream: Arc<PacketStream>,
 }
 
 /// A table entity keeping lookup information for all connected players.
@@ -130,14 +113,18 @@ impl Component for ConnectedPlayer {
         hooks.on_insert(|mut world: DeferredWorld, context| {
             let entity = context.entity;
             let player = world.get::<ConnectedPlayer>(entity).unwrap();
-            let addr = player.address;
+            let addr = player.authenticated_info.address;
             let mut table = world.resource_mut::<ConnectedPlayersTable>();
             let old = table.players_by_address.insert(addr, entity);
             if let Some(old) = old {
-                let new_nick = &world.get::<ConnectedPlayer>(entity).unwrap().nickname;
+                let new_nick = &world
+                    .get::<ConnectedPlayer>(entity)
+                    .unwrap()
+                    .authenticated_info
+                    .username;
                 let old_nick = world
                     .get::<ConnectedPlayer>(old)
-                    .map(|p| &p.nickname as &str)
+                    .map(|p| &p.authenticated_info.username as &str)
                     .unwrap_or("<missing nickname>");
                 panic!(
                     "Attempting to insert a player `{new_nick}` with a duplicate peer address: {addr} of `{old_nick}`"
@@ -147,7 +134,7 @@ impl Component for ConnectedPlayer {
         hooks.on_remove(|mut world: DeferredWorld, context| {
             let entity = context.entity;
             let player = world.get::<ConnectedPlayer>(entity).unwrap();
-            let addr = player.address;
+            let addr = player.authenticated_info.address;
             let mut table = world.resource_mut::<ConnectedPlayersTable>();
             table.players_by_address.remove(&addr);
         });
@@ -159,558 +146,412 @@ pub struct NetworkServerPlugin;
 
 impl Plugin for NetworkServerPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(ServerPacketHandlerPlugin);
         app.world_mut().insert_resource(ConnectedPlayersTable::default());
     }
 }
 
 impl NetworkThreadState for NetworkThreadServerState {
-    async fn shutdown(_this: Rc<RefCell<Self>>) {
-        //
-    }
-}
+    type StateCommand = NetworkThreadServerCommand;
 
-/// The type to connect two local network runtimes together via an in-memory virtual "connection".
-pub type LocalConnectionPipe = (PeerAddress, InProcessDuplex);
-
-impl Default for NetworkThreadServerState {
-    fn default() -> Self {
-        let (tx, _rx) = async_watch_channel(false);
-        Self {
-            ready_to_accept_streams: tx,
-            free_local_id: Default::default(),
-            connected_clients: Default::default(),
-            bootstrapped_clients: Default::default(),
-            listeners: Default::default(),
+    async fn on_command(&mut self, command: Self::StateCommand) {
+        match command {
+            NetworkThreadServerCommand::UpdateListeners(engine, return_channel) => {
+                let new_listeners = engine.config().borrow().server.listen_addresses.clone();
+                let _ = return_channel.send(self.update_listeners(engine, &new_listeners).await);
+            }
+            NetworkThreadServerCommand::CreateLocalConnection(engine, return_channel) => {
+                let id = self.free_local_id;
+                self.free_local_id += 1;
+                let peer = PeerAddress::Local(id);
+                let (duplex_a, duplex_b) = InProcessDuplex::new_pair();
+                let server_connection = NetworkConnection::wrap_local(GameSide::Server, peer, duplex_a);
+                let client_connection = NetworkConnection::wrap_local(GameSide::Client, peer, duplex_b);
+                Self::accept_connection(engine, server_connection).await;
+                return_channel.send(client_connection);
+            }
+            NetworkThreadServerCommand::InsertServerConnection(server_connection, sender) => {
+                let key = self.connections.insert(server_connection);
+                let _ = sender.send(key);
+            }
+            NetworkThreadServerCommand::RemoveServerConnection(engine, key) => {
+                if let Some(_conn) = self.connections.remove(key) {
+                    let _ = engine.schedule_bevy(move |world| {
+                        let mut query = world.query::<(Entity, &ConnectedPlayer)>();
+                        let id = query
+                            .iter(world)
+                            .find(|(_, p)| p.connection_key == key)
+                            .map(|(id, _)| id);
+                        if let Some(id) = id {
+                            world.despawn(id);
+                        }
+                        Ok(())
+                    });
+                }
+            }
+            NetworkThreadServerCommand::OpenNewStream(server_connection_key, sender) => {
+                let Some(conn) = self.connections.get_mut(server_connection_key) else {
+                    let _ = sender.send(Err(anyhow!("connection already dead")));
+                    return;
+                };
+                let stream = conn.connection.open_stream().await;
+                let stream = match stream {
+                    Ok(v) => v,
+                    Err(e) => {
+                        sender.send(Err(e));
+                        return;
+                    }
+                };
+                let stream = Arc::new(stream);
+                let stream_key = conn.packet_streams.insert(stream.clone());
+                let _ = sender.send(Ok((stream, stream_key)));
+            }
         }
+    }
+
+    async fn shutdown(&mut self) {
+        // no-op
     }
 }
 
 impl NetworkThreadServerState {
-    /// Constructs the server state without starting any listeners.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Finds a connected client by address.
-    pub fn find_connected_client(&self, address: PeerAddress) -> Option<&ConnectedNetClient> {
-        self.connected_clients.get(&address)
-    }
-
-    /// Finds a connected client by address.
-    pub fn find_connected_client_mut(&mut self, address: PeerAddress) -> Option<&mut ConnectedNetClient> {
-        self.connected_clients.get_mut(&address)
-    }
-
-    /// Finds a bootstrapped client by address.
-    pub fn find_bootstrapped_client(
-        &self,
-        address: PeerAddress,
-    ) -> Option<&Rc<RefCell<AuthenticatedServer2ClientEndpoint>>> {
-        self.bootstrapped_clients.get(&address)
-    }
-
-    /// Unblocks stream processing, call after all the handlers are registered.
-    pub async fn allow_streams(this: &Rc<RefCell<Self>>) {
-        this.borrow_mut().ready_to_accept_streams.send_replace(true);
-    }
-
     /// Begins listening on the configured endpoints, and starts looking for configuration changes.
-    /// Must be called within the tokio LocalSet.
-    pub async fn bootstrap(this: &Rc<RefCell<Self>>, engine: Arc<GameServer>) -> Result<()> {
-        let mut config_listener = engine.config().clone();
-        let config = config_listener.borrow_and_update().server.clone();
-
-        Self::update_listeners(this, &engine, &config.listen_addresses).await;
-        Ok(())
+    pub async fn new(startup_time: Instant) -> Result<Self> {
+        Ok(Self {
+            startup_time,
+            free_local_id: default(),
+            listeners: default(),
+            connections: SlotMap::with_capacity_and_key(32),
+        })
     }
 
-    /// Creates a new local server->client connection and returns the client address and stream to pass into the client object.
-    pub async fn accept_local_connection(
-        this_ptr: &Rc<RefCell<Self>>,
-        engine: Arc<GameServer>,
-    ) -> Result<LocalConnectionPipe> {
-        let mut this = this_ptr.borrow_mut();
-        let id = this.free_local_id;
-        this.free_local_id += 1;
-        let peer = PeerAddress::Local(id);
-
-        let (spipe, cpipe) = InProcessDuplex::new_pair();
-        let rpc_server = create_local_rpc_server(this_ptr.clone(), Arc::clone(&engine), spipe.rpc_pipe, peer);
-        let rpc_listener = Self::local_listener_task(peer, Arc::clone(&engine), rpc_server)
-            .instrument(tracing::info_span!("server-local-rpc", address = %peer));
-        let stream_listener =
-            Self::local_stream_task(Rc::clone(this_ptr), Arc::clone(&engine), peer, spipe.incoming_streams)
-                .instrument(tracing::info_span!("server-local-stream", address = %peer));
-
-        let shutdown_handle = ShutdownHandle::new();
-        let mut join_set = JoinSet::new();
-        join_set.spawn_local(rpc_listener);
-        join_set.spawn_local(stream_listener);
-        let inner_shutdown = shutdown_handle.clone();
+    async fn accept_connection(engine: Arc<GameServer>, connection: NetworkConnection) {
+        let address = connection.address();
         spawn_local(
-            async move { Self::player_handler_task(inner_shutdown, join_set).await }
-                .instrument(info_span!("server-player-handler", address = %peer)),
+            async move {
+                if let Err(e) = Self::unauthenticated_connection(engine, connection).await {
+                    warn!("Unauthenticated connection {} closed with error {}", address, e);
+                }
+            }
+            .instrument(info_span!("unauth-connection", address = %address)),
         );
-
-        this.connected_clients.insert(
-            peer,
-            ConnectedNetClient {
-                shutdown_handle,
-                data: NetClientConnectionData::Local {
-                    stream_sender: spipe.outgoing_streams,
-                },
-                chunk_stream: None,
-            },
-        );
-
-        info!("Constructed a new local connection: {peer}");
-
-        Ok((peer, cpipe))
     }
 
-    async fn player_handler_task(shutdown_handle: ShutdownHandle, mut subsystem_tasks: JoinSet<Result<()>>) {
-        let _guard = shutdown_handle.guard();
-        'task_loop: loop {
-            select! { biased;
-                _shutdown = shutdown_handle.handler_future() => {
-                    subsystem_tasks.abort_all();
+    async fn unauthenticated_connection(engine: Arc<GameServer>, connection: NetworkConnection) -> Result<()> {
+        let c2s_stream = connection.accept_stream().await?;
+        loop {
+            let packet = c2s_stream.recv_packet().await?;
+            let packet_id = packet.parse_id(RPC_SERVER_UNAUTHENTICATED_READER_OPTIONS)?;
+            match packet_id {
+                rpc::PacketId::Echo => {
+                    let reader = packet.parse_simple(RPC_SERVER_UNAUTHENTICATED_READER_OPTIONS)?;
+                    let payload = reader.get()?.get_simple_payload();
+                    let mut response = new_simple_packet_builder();
+                    let mut root = response.init_root();
+                    root.set_id(PacketId::Echo);
+                    root.set_timestamp_ms(engine.network_thread.packet_timestamp());
+                    root.set_simple_payload(payload);
+                    c2s_stream.send_packet(response.into())?;
                 }
-                result = subsystem_tasks.join_next() => {
-                    let Some(result) = result else {break 'task_loop;};
-                    match result {
-                        Err(join_error) => {
-                            if join_error.is_cancelled() {
-                                continue;
-                            } else if join_error.is_panic() {
-                                std::panic::resume_unwind(join_error.into_panic());
-                            } else {
-                                unreachable!();
-                            }
-                        }
-                        Ok(Err(e)) => {
-                            error!("Error encountered from a player's network subsystem: {e}");
-                            subsystem_tasks.abort_all();
-                            continue;
-                        }
-                        Ok(Ok(())) => {
-                            continue;
-                        }
+                rpc::PacketId::GetServerMetadata => {
+                    let reader = packet.parse_simple(RPC_SERVER_UNAUTHENTICATED_READER_OPTIONS)?;
+                    let terminate_on_reply = reader.get()?.get_simple_payload() == 1;
+
+                    let mut response = new_packet_builder::<game_server_metadata::Owned>();
+                    let mut root = response.init_root();
+                    root.set_id(rpc::PacketId::GetServerMetadata);
+                    root.set_timestamp_ms(0);
+                    let mut meta = root.init_payload();
+                    let config = engine.config().borrow();
+                    let mut ver = meta.reborrow().init_server_version();
+                    ver.set_major(GAME_VERSION_MAJOR);
+                    ver.set_minor(GAME_VERSION_MINOR);
+                    ver.set_patch(GAME_VERSION_PATCH);
+                    ver.set_build(GAME_VERSION_BUILD);
+                    ver.set_prerelease(GAME_VERSION_PRERELEASE);
+
+                    meta.set_title(&config.server.server_title);
+                    meta.set_subtitle(&config.server.server_subtitle);
+                    meta.set_player_count(0);
+                    meta.set_player_limit(config.server.max_players as i32);
+                    let _ = c2s_stream.send_packet(response.into());
+
+                    if terminate_on_reply {
+                        c2s_stream.close();
+                        connection.close();
+                        return Ok(());
                     }
+                }
+                rpc::PacketId::Authenticate => {
+                    let reader = packet
+                        .parse_typed::<authentication_request::Owned>(RPC_SERVER_UNAUTHENTICATED_READER_OPTIONS)?;
+                    let payload = reader.get()?.get_payload()?;
+                    let mut response = new_packet_builder::<
+                        result::Owned<authentication_acknowledgement::Owned, authentication_error::Owned>,
+                    >();
+                    let mut root = response.init_root();
+                    root.set_id(rpc::PacketId::Authenticate);
+                    root.set_timestamp_ms(engine.network_thread.packet_timestamp());
+                    let result = root.init_payload();
+
+                    let username = payload.get_username()?.to_str()?;
+
+                    if username.is_empty() || !username.is_ascii() {
+                        let mut err = result.init_err();
+                        err.set_kind(authentication_error::Kind::InvalidUsername);
+                        err.set_message("Username must be non-empty and ASCII only");
+                        let _ = c2s_stream.send_packet(response.into());
+                        c2s_stream.close();
+                        connection.close();
+                        return Ok(());
+                    }
+
+                    // TODO: verify identity
+
+                    let address = connection.address();
+                    let auth_info = AuthenticatedInfo {
+                        username: KString::from_ref(username),
+                        address,
+                    };
+
+                    let _ = result.init_ok();
+                    let _ = c2s_stream.send_packet(response.into());
+                    let s2c_stream = connection.open_stream().await?;
+
+                    spawn_local(
+                        Self::authenticated_connection(engine, connection, auth_info, c2s_stream, s2c_stream)
+                            .instrument(info_span!("connection", address = %address, username = %username)),
+                    );
+                    return Ok(());
+                }
+                _ => {
+                    return Err(anyhow!("Invalid packet ID {:?} received", packet_id));
                 }
             }
         }
     }
 
-    async fn update_listeners(this: &Rc<RefCell<Self>>, engine: &Arc<GameServer>, new_listeners: &[SocketAddr]) {
-        let new_set: HashSet<SocketAddr> = HashSet::from_iter(new_listeners.iter().copied());
-        let old_set: HashSet<SocketAddr> = HashSet::from_iter(this.borrow().listeners.keys().copied());
+    async fn authenticated_connection(
+        engine: Arc<GameServer>,
+        connection: NetworkConnection,
+        auth_info: AuthenticatedInfo,
+        main_c2s_stream: PacketStream,
+        main_s2c_stream: PacketStream,
+    ) {
+        let mut stream_map = SlotMap::with_capacity_and_key(16);
+        let main_c2s_stream = Arc::new(main_c2s_stream);
+        let main_s2c_stream = Arc::new(main_s2c_stream);
+        let main_c2s_key = stream_map.insert(main_c2s_stream.clone());
+        let main_s2c_key = stream_map.insert(main_s2c_stream.clone());
 
+        let (connection_key_tx, connection_key_rx) = async_oneshot_channel::<ServerConnectionKey>();
+        let server_connection = ServerConnection {
+            authenticated_info: auth_info.clone(),
+            packet_streams: stream_map,
+            main_c2s_stream: main_c2s_key,
+            main_s2c_stream: main_s2c_key,
+            connection,
+        };
+        engine
+            .network_thread
+            .send_command(NetworkThreadServerCommand::InsertServerConnection(
+                server_connection,
+                connection_key_tx,
+            ));
+        let Ok(connection_key) = connection_key_rx.await else {
+            return;
+        };
+
+        let (packet_tx, packet_rx) = async_unbounded_channel();
+
+        let s2c_s = main_s2c_stream.clone();
+        let c2s_s = main_c2s_stream.clone();
+        let _ = engine
+            .schedule_bevy(move |world| {
+                world.spawn(ConnectedPlayer {
+                    authenticated_info: auth_info,
+                    connection_key,
+                    received_packet_queue: AsyncMutex::new(packet_rx),
+                    main_s2c_stream: s2c_s,
+                    main_c2s_stream: c2s_s,
+                });
+                Ok(())
+            })
+            .async_wait()
+            .await;
+
+        let s2c_rx = spawn_local(Self::packet_stream_receiver(
+            engine.network_thread.startup_time(),
+            connection_key,
+            main_s2c_key,
+            main_s2c_stream.clone(),
+            packet_tx.clone(),
+        ));
+        let c2s_rx = spawn_local(Self::packet_stream_receiver(
+            engine.network_thread.startup_time(),
+            connection_key,
+            main_c2s_key,
+            main_c2s_stream.clone(),
+            packet_tx.clone(),
+        ));
+
+        // If either side's main stream is closed, begin the connection shutdown process
+        futures::future::select(s2c_rx, c2s_rx).await;
+
+        engine
+            .network_thread
+            .send_command(NetworkThreadServerCommand::RemoveServerConnection(
+                engine.clone(),
+                connection_key,
+            ));
+    }
+
+    async fn packet_stream_receiver(
+        startup_time: Instant,
+        connection_key: ServerConnectionKey,
+        stream_key: PacketStreamKey,
+        stream: Arc<PacketStream>,
+        sender: AsyncUnboundedSender<QueuedPacket>,
+    ) {
+        while let Ok(packet) = stream.recv_packet().await {
+            let id = match packet.parse_id(RPC_SERVER_READER_OPTIONS) {
+                Ok(id) => id,
+                Err(e) => {
+                    warn!("Illegal packet received, closing stream: {}", e);
+                    return;
+                }
+            };
+            // handle Echo and Authenticate in the network thread, bypassing the engine
+            if stream.initiating_side() == GameSide::Client {
+                match id {
+                    PacketId::Echo => {
+                        let reader = packet.parse_simple(RPC_SERVER_UNAUTHENTICATED_READER_OPTIONS);
+                        let payload = reader.and_then(|r| r.get().map(|m| m.get_simple_payload()));
+                        let payload = match payload {
+                            Ok(v) => v,
+                            Err(e) => {
+                                warn!("Could not read Echo payload, shutting down stream: {}", e);
+                                return;
+                            }
+                        };
+                        let mut response = new_simple_packet_builder();
+                        let mut root = response.init_root();
+                        root.set_id(PacketId::Echo);
+                        root.set_timestamp_ms(startup_time.elapsed().as_millis() as u64);
+                        root.set_simple_payload(payload);
+                        if let Err(e) = stream.send_packet(response.into()) {
+                            warn!("Could not send Echo reply, shutting down stream: {}", e);
+                            return;
+                        }
+                        continue;
+                    }
+                    PacketId::Authenticate => {
+                        let mut response = new_packet_builder::<
+                            result::Owned<authentication_acknowledgement::Owned, authentication_error::Owned>,
+                        >();
+                        let mut root = response.init_root();
+                        root.set_id(PacketId::Echo);
+                        root.set_timestamp_ms(startup_time.elapsed().as_millis() as u64);
+                        let result = root.init_payload();
+                        let mut err = result.init_err();
+                        err.set_kind(authentication_error::Kind::AlreadyAuthenticated);
+                        err.set_message("You have already authenticated with this server");
+                        if let Err(e) = stream.send_packet(response.into()) {
+                            warn!("Could not send Echo reply, shutting down stream: {}", e);
+                            return;
+                        }
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+            if sender
+                .send(QueuedPacket {
+                    id,
+                    data: packet,
+                    received_at: Instant::now(),
+                    connection_key,
+                    stream_key,
+                    stream: stream.clone(),
+                })
+                .is_err()
+            {
+                return;
+            }
+        }
+    }
+
+    async fn update_listeners(&mut self, engine: Arc<GameServer>, new_listeners: &[SocketAddr]) -> Result<()> {
+        let new_set: HashSet<SocketAddr> = HashSet::from_iter(new_listeners.iter().copied());
+        let old_set: HashSet<SocketAddr> = HashSet::from_iter(self.listeners.keys().copied());
+
+        let mut all_shutdowns = JoinSet::new();
         for &shutdown_addr in old_set.difference(&new_set) {
-            let Some(listener) = this.borrow_mut().listeners.remove(&shutdown_addr) else {
+            let Some((endpoint, listener)) = self.listeners.remove(&shutdown_addr) else {
                 continue;
             };
-            listener.abort();
-            let _ = listener.await;
+            endpoint.close(VarInt::default(), &[]);
+            all_shutdowns.spawn_local(async move { endpoint.wait_idle().await });
+            all_shutdowns.spawn_local(async move {
+                let _ = listener.await;
+            });
         }
+        all_shutdowns.join_all().await;
         for &setup_addr in new_set.difference(&old_set) {
-            let listener = Self::remote_listener_task(Rc::clone(this), Arc::clone(engine), setup_addr);
+            let server_config = quinn_server_config();
+            let socket = Socket::new(Domain::IPV6, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))?;
+            socket.set_only_v6(false)?;
+            socket.bind(&setup_addr.into())?;
+            let endpoint = quinn::Endpoint::new(
+                EndpointConfig::default(),
+                Some(server_config),
+                socket.into(),
+                quinn::default_runtime().unwrap(),
+            )?;
+            info!(
+                "Listening for QUIC connections on {} (based on config {})",
+                endpoint.local_addr()?,
+                setup_addr
+            );
+
+            let endpoint2 = endpoint.clone();
+            let listener = Self::remote_listener_task(endpoint, Arc::clone(&engine), setup_addr);
             let task = spawn_local(async move {
                 if let Err(e) = listener.await {
                     error!("Listening for connections on {setup_addr} failed: {e}");
                 }
             });
-            this.borrow_mut().listeners.insert(setup_addr, task);
+            self.listeners.insert(setup_addr, (endpoint2, task));
         }
+        Ok(())
     }
 
-    async fn remote_listener_task(
-        net_state: Rc<RefCell<Self>>,
-        engine: Arc<GameServer>,
-        server_addr: SocketAddr,
-    ) -> Result<()> {
-        let mut ready_watcher = net_state.borrow().ready_to_accept_streams.subscribe();
-        while !*ready_watcher.borrow_and_update() {
-            ready_watcher.changed().await?;
-        }
-
-        let server_config = quinn_server_config();
-        let socket = Socket::new(Domain::IPV6, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))?;
-        socket.set_only_v6(false)?;
-        socket.bind(&server_addr.into())?;
-        let endpoint = quinn::Endpoint::new(
-            EndpointConfig::default(),
-            Some(server_config),
-            socket.into(),
-            quinn::default_runtime().unwrap(),
-        )?;
-        info!("Listening for QUIC connections on {}", endpoint.local_addr()?);
-
+    async fn remote_listener_task(endpoint: Endpoint, engine: Arc<GameServer>, server_addr: SocketAddr) -> Result<()> {
         while let Some(conn) = endpoint.accept().await {
             if !conn.remote_address_validated() {
                 conn.retry()?;
                 continue;
             }
             let conn_addr = conn.remote_address();
-            let local_state = Rc::clone(&net_state);
             let local_engine = Arc::clone(&engine);
             let peer_addr = PeerAddress::Network {
                 local: server_addr,
                 remote: conn_addr,
             };
-            spawn_local(
-                async move {
-                    let conn_addr = conn.remote_address();
-                    let conn = match conn.await {
-                        Ok(conn) => conn,
-                        Err(e) => {
-                            warn!(address = %conn_addr, "Client could not connect: {e}");
-                            return;
-                        }
-                    };
-                    info!(address = %conn_addr, "Accepting remote connection");
-                    if let Err(e) = Self::remote_connection_task(local_state, local_engine, peer_addr, conn).await {
-                        warn!(address = %conn_addr, "Client connection handler failed: {e}");
+            spawn_local(async move {
+                let conn = match conn.await {
+                    Ok(conn) => conn,
+                    Err(e) => {
+                        warn!(address = %conn_addr, "Client could not connect: {e}");
+                        return;
                     }
-                }
-                .instrument(info_span!("server-quic-peer", address = %conn_addr)),
-            );
+                };
+                info!(address = %conn_addr, "Accepting remote connection");
+                let netconn = NetworkConnection::wrap_remote(GameSide::Server, peer_addr, conn);
+                Self::accept_connection(local_engine, netconn).await;
+            });
         }
 
         Ok(())
-    }
-
-    async fn remote_connection_task(
-        net_state: Rc<RefCell<Self>>,
-        engine: Arc<GameServer>,
-        peer_address: PeerAddress,
-        connection: Connection,
-    ) -> Result<()> {
-        trace!("Awaiting the bootstrap bidi RPC channel");
-        let (rpc_tx, rpc_rx) = connection.accept_bi().await?;
-        let rpc = create_quic_rpc_server(Rc::clone(&net_state), Arc::clone(&engine), rpc_tx, rpc_rx, peer_address);
-        let _disconnector = rpc.get_disconnector();
-
-        let mut join_set: JoinSet<Result<()>> = JoinSet::new();
-        join_set.spawn_local(
-            async move { rpc.await.with_context(|| format!("Remote RPC with {peer_address:?}")) }
-                .instrument(info_span!("server-quic-rpc", address = %peer_address)),
-        );
-
-        let stream_this = Rc::clone(&net_state);
-        let stream_engine = Arc::clone(&engine);
-        let stream_conn = connection.clone();
-        join_set.spawn_local(
-            async move { Self::remote_stream_task(stream_this, stream_engine, peer_address, stream_conn).await }
-                .instrument(info_span!("server-quic-stream", address = %peer_address)),
-        );
-
-        let shutdown_handle = ShutdownHandle::new();
-        let inner_shutdown = shutdown_handle.clone();
-        spawn_local(
-            async move { Self::player_handler_task(inner_shutdown, join_set).await }
-                .instrument(info_span!("server-player-handler", address = %peer_address)),
-        );
-
-        net_state.borrow_mut().connected_clients.insert(
-            peer_address,
-            ConnectedNetClient {
-                shutdown_handle,
-                data: NetClientConnectionData::Remote { connection },
-                chunk_stream: None,
-            },
-        );
-
-        info!("Constructed a new remote connection: {peer_address}");
-
-        Ok(())
-    }
-
-    async fn remote_stream_task(
-        _this: Rc<RefCell<Self>>,
-        _engine: Arc<GameServer>,
-        _addr: PeerAddress,
-        connection: Connection,
-    ) -> Result<()> {
-        while let Ok((_tx, _rx)) = connection.accept_bi().await {
-            // TODO
-            error!("Got a stream open request from the client, currently there are no c->s streams");
-        }
-        Ok(())
-    }
-
-    async fn local_listener_task(
-        addr: PeerAddress,
-        _engine: Arc<GameServer>,
-        rpc_server: RpcSystem<Side>,
-    ) -> Result<()> {
-        let _s_disconnector = rpc_server.get_disconnector();
-        log::debug!("Starting the local listener for {addr:?}");
-        rpc_server.await?;
-        Ok(())
-    }
-
-    async fn local_stream_task(
-        this: Rc<RefCell<Self>>,
-        engine: Arc<GameServer>,
-        _addr: PeerAddress,
-        mut incoming_streams: AsyncUnboundedReceiver<InProcessStream>,
-    ) -> Result<()> {
-        let mut ready_watcher = this.borrow().ready_to_accept_streams.subscribe();
-        while !*ready_watcher.borrow_and_update() {
-            ready_watcher.changed().await?;
-        }
-        while let Some(stream) = incoming_streams.recv().await {
-            let handler = engine
-                .network_thread
-                .create_stream_handler(Rc::clone(&this), stream.into());
-            match handler {
-                Ok(handler) => {
-                    spawn_local(handler);
-                }
-                Err(stream) => {
-                    error!(
-                        "No stream handler found for incoming client stream of type {:?}",
-                        stream.header()
-                    );
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-/// An unauthenticated RPC client<->server connection handler on the server side.
-pub struct Server2ClientEndpoint {
-    net_state: Rc<RefCell<NetworkThreadServerState>>,
-    server: Arc<GameServer>,
-    peer: PeerAddress,
-    auth_attempted: bool,
-}
-
-/// An authenticated RPC client<->server connection handler on the server side.
-pub struct AuthenticatedServer2ClientEndpoint {
-    _net_state: Rc<RefCell<NetworkThreadServerState>>,
-    server: Arc<GameServer>,
-    peer: PeerAddress,
-    username: KString,
-    connection: rpc::authenticated_client_connection::Client,
-}
-
-#[derive(Clone, Deref)]
-#[repr(transparent)]
-struct RcAuthenticatedServer2ClientEndpoint(Rc<RefCell<AuthenticatedServer2ClientEndpoint>>);
-
-impl Server2ClientEndpoint {
-    /// Constructor.
-    pub fn new(net_state: Rc<RefCell<NetworkThreadServerState>>, server: Arc<GameServer>, peer: PeerAddress) -> Self {
-        Self {
-            net_state,
-            server,
-            peer,
-            auth_attempted: false,
-        }
-    }
-
-    /// The server this endpoint is associated with.
-    pub fn server(&self) -> &Arc<GameServer> {
-        &self.server
-    }
-
-    /// The peer address this endpoint is connected to.
-    pub fn peer(&self) -> PeerAddress {
-        self.peer
-    }
-}
-
-impl rpc::game_server::Server for Server2ClientEndpoint {
-    fn get_server_metadata(
-        &mut self,
-        _params: rpc::game_server::GetServerMetadataParams,
-        mut results: rpc::game_server::GetServerMetadataResults,
-    ) -> Promise<(), Error> {
-        let config = self.server.config().borrow();
-        let mut meta = results.get().init_metadata();
-        let mut ver = meta.reborrow().init_server_version();
-        ver.set_major(GAME_VERSION_MAJOR);
-        ver.set_minor(GAME_VERSION_MINOR);
-        ver.set_patch(GAME_VERSION_PATCH);
-        ver.set_build(GAME_VERSION_BUILD);
-        ver.set_prerelease(GAME_VERSION_PRERELEASE);
-
-        meta.set_title(&config.server.server_title);
-        meta.set_subtitle(&config.server.server_subtitle);
-        meta.set_player_count(0);
-        meta.set_player_limit(config.server.max_players as i32);
-        Promise::ok(())
-    }
-
-    fn ping(
-        &mut self,
-        params: rpc::game_server::PingParams,
-        mut results: rpc::game_server::PingResults,
-    ) -> Promise<(), Error> {
-        let input = pry!(params.get()).get_input();
-        results.get().set_output(input);
-        Promise::ok(())
-    }
-
-    fn authenticate(
-        &mut self,
-        params: rpc::game_server::AuthenticateParams,
-        mut results: rpc::game_server::AuthenticateResults,
-    ) -> Promise<(), Error> {
-        if self.auth_attempted {
-            return Promise::err(Error::failed("Authentication was already attempted once".to_owned()));
-        }
-        self.auth_attempted = true;
-
-        let params = pry!(params.get());
-        let username = KString::from_ref(pry!(pry!(params.get_username()).to_str()));
-        let connection = pry!(params.get_connection());
-
-        // TODO: validate username
-
-        let client = Rc::new(RefCell::new(AuthenticatedServer2ClientEndpoint {
-            _net_state: self.net_state.clone(),
-            server: self.server.clone(),
-            peer: self.peer,
-            username: username.clone(),
-            connection,
-        }));
-
-        let mut result = results.get().init_conn();
-        let np_client: rpc::authenticated_server_connection::Client =
-            capnp_rpc::new_client(RcAuthenticatedServer2ClientEndpoint(client.clone()));
-        pry!(result.set_ok(np_client.clone()));
-
-        self.net_state
-            .borrow_mut()
-            .bootstrapped_clients
-            .insert(self.peer, client);
-
-        // add to the bevy world
-        let nickname = username.clone();
-        let address = self.peer;
-        self.server
-            .schedule_bevy(move |world| {
-                info!("Spawning player `{nickname}`@{address} into the world");
-                world.spawn(ConnectedPlayer {
-                    nickname: nickname.clone(),
-                    address,
-                });
-                Ok(())
-            })
-            .async_log_when_fails("Adding player to the connection table");
-
-        Promise::ok(())
-    }
-}
-
-impl AuthenticatedServer2ClientEndpoint {
-    /// The RPC instance for sending messages to the connected client.
-    pub fn rpc(&self) -> &rpc::authenticated_client_connection::Client {
-        &self.connection
-    }
-}
-
-impl rpc::authenticated_server_connection::Server for RcAuthenticatedServer2ClientEndpoint {
-    fn bootstrap_game_data(
-        &mut self,
-        _: BootstrapGameDataParams,
-        mut results: BootstrapGameDataResults,
-    ) -> Promise<(), Error> {
-        let builder = results.get();
-        let mut data = builder.init_data();
-        // TODO: use saved world data here
-        Uuid::parse_str("05aaf964-aefa-49d0-9b6a-0aa376016ac2")
-            .unwrap()
-            .write_to_message(&mut data.reborrow().init_universe_id());
-        self.0
-            .borrow()
-            .server
-            .server_data
-            .shared_registries
-            .serialize_ids(&mut data);
-        Promise::ok(())
-    }
-
-    fn send_chat_message(&mut self, params: SendChatMessageParams, _: SendChatMessageResults) -> Promise<(), Error> {
-        let params = pry!(params.get());
-        let text = pry!(pry!(params.get_text()).to_str());
-        info!(
-            "Client {} ({:?}) sent a chat message `{}`",
-            self.0.borrow().username,
-            self.0.borrow().peer,
-            text
-        );
-        Promise::ok(())
-    }
-
-    fn send_block_action(&mut self, params: SendBlockActionParams, _: SendBlockActionResults) -> Promise<(), Error> {
-        let params = pry!(params.get());
-        let position = pry!(params.get_position());
-        // have to adapt because Readers can't be sent across threads,
-        // and schedule_bevy counts as one.
-        let action = adapt_block_action(pry!(params.get_action())).unwrap();
-        trace!(
-            "Client {} ({:?}) sent a block change packet `{:?}`, `{:?}`",
-            self.0.borrow().username,
-            self.0.borrow().peer,
-            position,
-            action
-        );
-        let ray_spec = RaycastSpec {
-            start: WorldPos::from_offset_blockpos(
-                adapt_i_vec3(position.get_position().unwrap()).into(),
-                adapt_vec3(position.get_offset().unwrap()).into(),
-            ),
-            direction: Dir3::new(adapt_vec3(position.get_look().unwrap())).unwrap().into(),
-            distance_limit: 64.0,
-            hit_mask: RaycastHitMask::all(),
-        };
-        let _ = self.0.borrow().server.schedule_bevy(move |world| {
-            let mut voxel_query = world.query::<&VoxelUniverse<ServerData>>();
-            let block_reg = { &world.get_resource::<BlockRegistryHolder>() };
-            let Ok(voxels) = &voxel_query.single(world) else {
-                return Ok(());
-            };
-            let Some(bregistry) = block_reg else {
-                return Ok(());
-            };
-            let ray_ctx = RaycastContext {
-                block_registry: Some(bregistry),
-                voxel_world: Some(voxels),
-            };
-
-            let rc = raycast(&ray_ctx, &ray_spec);
-            let RaycastResult::BlockHit(rc) = rc else {
-                return Ok(());
-            };
-            let pos = if let BlockAction::PlaceBlock() = action {
-                rc.position.direction_offset(rc.face, 1)
-            } else {
-                rc.position
-            };
-            let (i_stone, _) = bregistry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
-            let (i_empty, _) = bregistry.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
-
-            let (chunk, local) = pos.split_chunk_component();
-            let mut voxel_query = world.query::<&mut VoxelUniverse<ServerData>>();
-            let Ok(voxels) = &mut voxel_query.single_mut(world) else {
-                return Ok(());
-            };
-            if let Some(chunk) = voxels.loaded_chunks_mut().get_chunk_mut(chunk) {
-                match action {
-                    BlockAction::PlaceBlock() => {
-                        chunk.mutate_stored().blocks.put(local, BlockEntry::new(i_stone, 0));
-                    }
-                    BlockAction::BreakBlock() => {
-                        chunk.mutate_stored().blocks.put(local, BlockEntry::new(i_empty, 0));
-                    }
-                }
-            }
-            Ok(())
-        });
-        Promise::ok(())
     }
 }
