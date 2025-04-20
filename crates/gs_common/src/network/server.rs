@@ -45,7 +45,7 @@ struct ServerConnection {
     packet_streams: SlotMap<PacketStreamKey, Arc<PacketStream>>,
     main_c2s_stream: PacketStreamKey,
     main_s2c_stream: PacketStreamKey,
-    connection: NetworkConnection,
+    connection: Arc<NetworkConnection>,
 }
 
 /// The network thread game server state, accessible from network functions.
@@ -71,6 +71,14 @@ pub enum NetworkThreadServerCommand {
         ServerConnectionKey,
         AsyncOneshotSender<Result<(Arc<PacketStream>, PacketStreamKey)>>,
     ),
+    /// Inserts a new stream into the table and returns the key for it.
+    InsertAcceptedStream(
+        ServerConnectionKey,
+        Arc<PacketStream>,
+        AsyncOneshotSender<PacketStreamKey>,
+    ),
+    /// Deregisters a (closed) stream from the stream table.
+    RemoveStream(ServerConnectionKey, PacketStreamKey),
 }
 
 #[derive(Clone)]
@@ -228,6 +236,19 @@ impl NetworkThreadState for NetworkThreadServerState {
                 let stream_key = conn.packet_streams.insert(stream.clone());
                 let _ = sender.send(Ok((stream, stream_key)));
             }
+            NetworkThreadServerCommand::InsertAcceptedStream(server_connection_key, packet_stream, sender) => {
+                let Some(conn) = self.connections.get_mut(server_connection_key) else {
+                    return;
+                };
+                let key = conn.packet_streams.insert(packet_stream);
+                let _ = sender.send(key);
+            }
+            NetworkThreadServerCommand::RemoveStream(server_connection_key, packet_stream_key) => {
+                let Some(conn) = self.connections.get_mut(server_connection_key) else {
+                    return;
+                };
+                conn.packet_streams.remove(packet_stream_key);
+            }
         }
     }
 
@@ -366,12 +387,13 @@ impl NetworkThreadServerState {
         let main_s2c_key = stream_map.insert(main_s2c_stream.clone());
 
         let (connection_key_tx, connection_key_rx) = async_oneshot_channel::<ServerConnectionKey>();
+        let connection = Arc::new(connection);
         let server_connection = ServerConnection {
             authenticated_info: auth_info.clone(),
             packet_streams: stream_map,
             main_c2s_stream: main_c2s_key,
             main_s2c_stream: main_s2c_key,
-            connection,
+            connection: Arc::clone(&connection),
         };
         engine
             .network_thread
@@ -415,6 +437,13 @@ impl NetworkThreadServerState {
             main_c2s_stream.clone(),
             packet_tx.clone(),
         ));
+        spawn_local(Self::packet_stream_acceptor(
+            engine.network_thread.startup_time(),
+            Arc::clone(&engine),
+            connection_key,
+            connection,
+            packet_tx,
+        ));
 
         // If either side's main stream is closed, begin the connection shutdown process
         futures::future::select(s2c_rx, c2s_rx).await;
@@ -425,6 +454,36 @@ impl NetworkThreadServerState {
                 engine.clone(),
                 connection_key,
             ));
+    }
+
+    async fn packet_stream_acceptor(
+        startup_time: Instant,
+        engine: Arc<GameServer>,
+        connection_key: ServerConnectionKey,
+        net_conn: Arc<NetworkConnection>,
+        sender: AsyncUnboundedSender<QueuedPacket>,
+    ) {
+        let net_thread = &engine.network_thread;
+        while let Ok(stream) = net_conn.accept_stream().await {
+            let stream = Arc::new(stream);
+            let (key_tx, key_rx) = async_oneshot_channel();
+            net_thread.send_command(NetworkThreadServerCommand::InsertAcceptedStream(
+                connection_key,
+                Arc::clone(&stream),
+                key_tx,
+            ));
+            let Ok(key) = key_rx.await else {
+                break;
+            };
+            let receiver = Self::packet_stream_receiver(startup_time, connection_key, key, stream, sender.clone());
+            let engine = Arc::clone(&engine);
+            spawn_local(async move {
+                receiver.await;
+                engine
+                    .network_thread
+                    .send_command(NetworkThreadServerCommand::RemoveStream(connection_key, key));
+            });
+        }
     }
 
     async fn packet_stream_receiver(

@@ -1,20 +1,19 @@
 //! Client-side voxel world rendering
 
-use bevy::ecs::schedule::ScheduleLabel;
-use capnp::message::TypedReader;
+use std::collections::VecDeque;
+
 use gs_common::InGameSystemSet;
-use gs_common::network::transport::RPC_LOCAL_READER_OPTIONS;
-use gs_common::voxel::plugin::{
-    BlockRegistryHolder, CHUNK_PACKET_QUEUE_LENGTH, NetworkVoxelClient, VoxelUniverse, VoxelUniverseBuilder,
-};
+use gs_common::network::server::QueuedPacket;
+use gs_common::network::transport::RPC_CLIENT_READER_OPTIONS;
+use gs_common::prelude::rpc::chunk_data_stream_packet;
+use gs_common::voxel::plugin::{BlockRegistryHolder, CHUNK_PACKET_QUEUE_LENGTH, VoxelUniverse, VoxelUniverseBuilder};
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos};
 use gs_schemas::mutwatcher::{MutWatcher, RevisionNumber};
-use gs_schemas::schemas::network_capnp as rpc;
+use gs_schemas::schemas::CapnpExt;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
 use meshgen::mesh_from_chunk;
 use smallvec::{SmallVec, smallvec};
-use tokio_util::bytes::Bytes;
 
 use crate::ClientData;
 use crate::prelude::*;
@@ -48,65 +47,63 @@ pub struct ClientChunkGroupData {
     //
 }
 
+/// Network chunk streaming client, exists alongside [`VoxelUniverse`] on clients.
+#[derive(Component)]
+pub struct NetworkVoxelClient {
+    /// Public for gs_client usage, to allow receiving&processing chunk packets.
+    pub chunk_packet_queue: VecDeque<QueuedPacket>,
+}
+
 /// Extensions to the [`VoxelUniverseBuilder`]
 pub trait ClientVoxelUniverseBuilder: Sized {
     /// Attaches the client-specific parts of the chunk streaming system.
     fn with_client_chunk_system(self) -> Self;
 }
 
+/// Registers the systems for the client voxel universe.
+pub struct ClientVoxelUniversePlugin;
+
+impl Plugin for ClientVoxelUniversePlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<Assets<ChunkMeshMaterial>>();
+        app.add_systems(
+            FixedPreUpdate,
+            (client_chunk_packet_receiver_system).in_set(InGameSystemSet),
+        );
+        app.add_systems(FixedUpdate, (client_chunk_mesher_system).in_set(InGameSystemSet));
+    }
+}
+
 impl ClientVoxelUniverseBuilder for VoxelUniverseBuilder<'_, ClientData> {
     fn with_client_chunk_system(mut self) -> Self {
-        self.bundle.world_scope(|world| {
-            world.init_resource::<Assets<ChunkMeshMaterial>>();
-            let fixed_pre_update = FixedPreUpdate.intern();
-            let fixed_update = FixedUpdate.intern();
-            let mut schedules = world.resource_mut::<Schedules>();
-            schedules
-                .get_mut(fixed_pre_update)
-                .unwrap()
-                .add_systems((client_chunk_packet_receiver_system).in_set(InGameSystemSet));
-            schedules
-                .get_mut(fixed_update)
-                .unwrap()
-                .add_systems((client_chunk_mesher_system).in_set(InGameSystemSet));
+        self.bundle.insert(NetworkVoxelClient {
+            chunk_packet_queue: VecDeque::with_capacity(1024),
         });
         self
     }
 }
 
 fn client_chunk_packet_receiver_system(
-    mut nvc_q: Query<&mut NetworkVoxelClient<ClientData>>,
-    mut voxel_q: Query<&mut ClientVoxelUniverse>,
+    mut nvc_q: Single<&mut NetworkVoxelClient>,
+    mut voxel_q: Single<&mut ClientVoxelUniverse>,
 ) {
-    let mut voxels = voxel_q
-        .single_mut()
-        .context("Missing universe while handling chunk packet, did the game already shut down?")
-        .unwrap();
-    let mut nvc = nvc_q.single_mut().unwrap();
-    let mut batch: SmallVec<[Bytes; CHUNK_PACKET_QUEUE_LENGTH]> = SmallVec::new();
-    for _ in 0..CHUNK_PACKET_QUEUE_LENGTH {
-        if let Ok(packet) = nvc.chunk_packet_receiver.try_recv() {
-            batch.push(packet);
-        } else {
-            break;
-        }
-    }
+    let voxels = &mut *voxel_q;
+    let nvc = &mut *nvc_q;
 
-    let voxels = &mut *voxels;
-    for raw_packet in batch {
-        if let Err(e) = handle_chunk_packet(raw_packet, voxels) {
+    let to_drain = CHUNK_PACKET_QUEUE_LENGTH.min(nvc.chunk_packet_queue.len());
+    for packet in nvc.chunk_packet_queue.drain(0..to_drain) {
+        if let Err(e) = handle_chunk_packet(packet, voxels) {
             error!("Error while processing received chunk packet: {e}");
         }
     }
 }
 
-fn handle_chunk_packet(raw_packet: Bytes, voxels: &mut ClientVoxelUniverse) -> Result<()> {
-    let mut slice = &raw_packet as &[u8];
-    let msg = capnp::serialize::read_message_from_flat_slice_no_alloc(&mut slice, RPC_LOCAL_READER_OPTIONS)?;
-    let typed_reader = TypedReader::<_, rpc::chunk_data_stream_packet::Owned>::new(msg);
-    let root = typed_reader.get()?;
-    let cpos_r = root.reborrow().get_position()?;
-    let pos = AbsChunkPos::new(cpos_r.get_x(), cpos_r.get_y(), cpos_r.get_z());
+fn handle_chunk_packet(packet: QueuedPacket, voxels: &mut ClientVoxelUniverse) -> Result<()> {
+    let typed_reader = packet
+        .data
+        .parse_typed::<chunk_data_stream_packet::Owned>(RPC_CLIENT_READER_OPTIONS)?;
+    let root = typed_reader.get()?.get_payload()?;
+    let pos = AbsChunkPos::from(IVec3::read_from_message(&root.reborrow().get_position()?)?);
     let data_r = root.reborrow().get_data()?;
     let revision: RevisionNumber = root.get_revision().try_into()?;
 

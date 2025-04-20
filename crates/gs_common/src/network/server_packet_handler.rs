@@ -91,7 +91,7 @@ fn bootstrap_players_system(
 pub fn server_packet_handler_system(
     engine: Res<GameServerResource>,
     mut commands: Commands,
-    packet_queues_query: Populated<(
+    packet_queues_query: Query<(
         Entity,
         &ConnectedPlayer,
         Has<BootstrappingGameDataTag>,
@@ -99,7 +99,7 @@ pub fn server_packet_handler_system(
     )>,
     all_players: Query<(Entity, &ConnectedPlayer)>,
     block_registry: Option<Res<BlockRegistryHolder>>,
-    mut voxel_universe: Single<Option<&mut VoxelUniverse<ServerData>>>,
+    mut voxel_universe: Query<&mut VoxelUniverse<ServerData>>,
 ) {
     let engine = &*engine.0;
     let response_timestamp = engine.network_thread.packet_timestamp();
@@ -112,9 +112,9 @@ pub fn server_packet_handler_system(
           -> Result<()> {
         const READER_OPTIONS: capnp::message::ReaderOptions = RPC_SERVER_READER_OPTIONS;
 
-        let is_request = incoming.stream.initiating_side() == GameSide::Server;
+        let is_request = incoming.stream.initiating_side() == GameSide::Client;
         if is_request {
-            // c2s
+            // c2s stream
             match incoming.id {
                 PacketId::Echo | PacketId::Authenticate => unreachable!(),
                 PacketId::GetServerMetadata => {
@@ -187,10 +187,7 @@ pub fn server_packet_handler_system(
                         hit_mask: RaycastHitMask::all(),
                     };
                     let bregistry = &**block_registry.as_ref().context("missing block registry")?;
-                    let voxels = &mut *voxel_universe
-                        .as_mut()
-                        .map(Mut::reborrow)
-                        .context("missing voxel universe")?;
+                    let voxels = &mut *voxel_universe.single_mut()?;
                     let ray_ctx = RaycastContext {
                         block_registry: Some(bregistry),
                         voxel_world: Some(voxels),
@@ -244,6 +241,20 @@ pub fn server_packet_handler_system(
                             .entity(player_entity)
                             .insert(BootstrappedGameDataTag)
                             .remove::<BootstrappingGameDataTag>();
+
+                        // Announce the join to all players
+                        let mut packet = new_packet_builder::<capnp::text::Owned>();
+                        let mut root = packet.init_root();
+                        root.set_id(PacketId::ChatMessage);
+                        root.set_timestamp_ms(response_timestamp);
+                        root.set_payload(format!("{} has joined!", player.authenticated_info.username))?;
+                        let mut packet = PacketWrapper::from(packet);
+                        for (_, player) in all_players.iter().skip(1) {
+                            let _ = player.main_s2c_stream.send_packet(packet.clone_mut());
+                        }
+                        if let Some((_, player)) = all_players.iter().next() {
+                            let _ = player.main_s2c_stream.send_packet(packet);
+                        }
                     }
                 }
                 PacketId::ChatMessage => {

@@ -20,6 +20,7 @@ capnp.workspace = true
 hashbrown.workspace = true
 image.workspace = true
 quinn.workspace = true
+slotmap.workspace = true
 smallvec.workspace = true
 socket2.workspace = true
 thiserror.workspace = true

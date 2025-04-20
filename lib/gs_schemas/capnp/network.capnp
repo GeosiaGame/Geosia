@@ -95,6 +95,7 @@ struct AuthenticationError @0x9ed4d9765d345c1e {
 struct BlockActionRequest @0xa74244e28dcb5f2f {
     position @0 :GameTypes.PositionData;
     action @1 :GameTypes.BlockAction;
+    tick @2 :UInt64;
 }
 
 struct ChunkDataStreamPacket {

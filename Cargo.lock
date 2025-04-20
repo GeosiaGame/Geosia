@@ -3273,6 +3273,7 @@ dependencies = [
  "hashbrown",
  "image",
  "quinn",
+ "slotmap",
  "smallvec",
  "socket2",
  "thiserror 2.0.12",

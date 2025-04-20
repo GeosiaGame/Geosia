@@ -15,7 +15,6 @@ use gs_schemas::voxel::chunk_group::ChunkGroup;
 use gs_schemas::voxel::voxeltypes::BlockRegistry;
 use gs_schemas::{GameSide, GsExtraData};
 use smallvec::SmallVec;
-use tokio_util::bytes::Bytes;
 
 use crate::network::server::{ConnectedPlayer, NetworkThreadServerCommand, PacketStreamKey};
 use crate::network::server_packet_handler::BootstrappedGameDataTag;
@@ -95,14 +94,6 @@ pub struct PersistentVoxelStorage<ExtraData: GsExtraData> {
     live_requests: BTreeSet<AbsChunkPos>,
 }
 
-/// Network chunk streaming client, exists alongside VoxelUniverse on clients.
-#[derive(Component)]
-pub struct NetworkVoxelClient<ExtraData: GsExtraData> {
-    _extra_data: PhantomData<ExtraData>,
-    /// Public for gs_client usage, to allow receiving&processing chunk packets.
-    pub chunk_packet_receiver: AsyncBoundedReceiver<Bytes>,
-}
-
 /// The bevy [`Resource`] for shared voxel registry access from systems.
 #[derive(Resource, Clone, Deref)]
 pub struct BlockRegistryHolder(pub Arc<BlockRegistry>);
@@ -165,10 +156,6 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
 
     /// Adds persistent storage support to the universe.
     pub fn with_persistent_storage(mut self, persistence_layer: Box<dyn ChunkPersistenceLayer<ED>>) -> Result<Self> {
-        if self.bundle.contains::<NetworkVoxelClient<ED>>() {
-            bail!("Universe already has a network client, cannot add persistent storage");
-        }
-
         // TODO: make the player load the chunks
         self.bundle.world_scope(|w| {
             w.spawn((VoxelPosition(AbsBlockPos::ZERO), ChunkLoader { radius: 4 }));

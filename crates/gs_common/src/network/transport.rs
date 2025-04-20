@@ -66,12 +66,6 @@ impl ServerCertVerifier for NoopServerTlsVerification {
     }
 }
 
-/// Capnproto reader options for local connections
-pub static RPC_LOCAL_READER_OPTIONS: ReaderOptions = ReaderOptions {
-    traversal_limit_in_words: Some(1024 * 1024 * 1024),
-    nesting_limit: 48,
-};
-
 /// Capnproto reader options for unauthenticated remote connections accepted on the server
 pub static RPC_SERVER_UNAUTHENTICATED_READER_OPTIONS: ReaderOptions = ReaderOptions {
     traversal_limit_in_words: Some(1024),
@@ -498,6 +492,22 @@ impl NetworkConnection {
             game_side,
             address,
             side: NetworkConnectionSide::Remote { connection },
+        }
+    }
+
+    /// True if this is a local, in-process connection.
+    pub fn is_local(&self) -> bool {
+        match &self.side {
+            NetworkConnectionSide::Local { .. } => true,
+            NetworkConnectionSide::Remote { .. } => false,
+        }
+    }
+
+    /// True if this is a remote connection over a socket.
+    pub fn is_remote(&self) -> bool {
+        match &self.side {
+            NetworkConnectionSide::Local { .. } => false,
+            NetworkConnectionSide::Remote { .. } => true,
         }
     }
 

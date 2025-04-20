@@ -17,7 +17,7 @@ use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, WorldPos};
 use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
 use gs_schemas::voxel::voxeltypes::EMPTY_BLOCK;
 
-use crate::ClientNetworkThreadHolder;
+use crate::network::AuthenticatedNetworkClient;
 use crate::prelude::*;
 use crate::states::{ClientAppState, InGameSystemSet, in_game};
 use crate::voxel::ClientVoxelUniverse;
@@ -217,7 +217,7 @@ fn player_look(
 
 /// Handles input for actions
 fn player_action(
-    net_thread: Res<ClientNetworkThreadHolder>,
+    authenticated_client: Res<AuthenticatedNetworkClient>,
     mut voxels: Query<&mut ClientVoxelUniverse>,
     block_reg: Res<BlockRegistryHolder>,
     _: Res<ButtonInput<KeyCode>>,
@@ -237,7 +237,7 @@ fn player_action(
                             let offset = transform.translation - pos;
                             let pos = AbsBlockPos::from_ivec3(pos.as_ivec3());
                             in_game::ingame_send_block_change(
-                                &net_thread,
+                                &authenticated_client,
                                 &mut voxels,
                                 &block_reg,
                                 PositionData {
@@ -256,7 +256,7 @@ fn player_action(
                                 z: z - pos.z as f32,
                             };
                             in_game::ingame_send_block_change(
-                                &net_thread,
+                                &authenticated_client,
                                 &mut voxels,
                                 &block_reg,
                                 PositionData {

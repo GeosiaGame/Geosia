@@ -3,20 +3,15 @@
 use std::net::SocketAddr;
 
 use bevy::utils::synccell::SyncCell;
+use gs_common::GameServer;
 use gs_common::config::{GameConfig, ServerConfig};
 use gs_common::network::thread::NetworkThread;
-use gs_common::voxel::plugin::VoxelUniverseBuilder;
-use gs_common::{GameBevyCommand, GameServer, builtin_game_registries};
 use gs_schemas::GameSide;
-use gs_schemas::dependencies::uuid::Uuid;
-use gs_schemas::registries::GameRegistries;
-use gs_schemas::schemas::SchemaUuidExt;
 
-use crate::network::NetworkThreadClientState;
+use crate::network::{NetworkThreadClientCommand, NetworkThreadClientState};
 use crate::prelude::*;
 use crate::states::{ClientAppState, LoadingGameSystemSet};
-use crate::voxel::ClientVoxelUniverseBuilder;
-use crate::{ClientData, ClientNetworkThreadHolder, GameClientControlCommandReceiver};
+use crate::{ClientNetworkThreadHolder, GameClientControlCommandReceiver};
 
 /// The "plugin" implementing the load transition for the game.
 pub struct LoadingGamePlugin;
@@ -52,6 +47,10 @@ struct LoadingPromiseHolder {
     promises: Vec<Box<dyn GenericAsyncResult + Send + Sync>>,
 }
 
+/// Used to notify the loading state that the world bootstrap data has been acquired.
+#[derive(Resource)]
+pub struct LoadingBootstrapPromiseResolver(pub AsyncOneshotSender<Result<()>>);
+
 fn kickoff_game_transition(world: &mut World) {
     let next_params = std::mem::take(&mut *world.resource_mut::<LoadingTransitionParams>());
     match next_params {
@@ -76,28 +75,31 @@ fn kickoff_game_transition(world: &mut World) {
             let game_config = GameConfig::new_handle(game_config);
             let integ_server = GameServer::new(game_config).expect("Could not start integrated server");
             integ_server.set_paused(false);
-            let server_pipe = integ_server.create_local_connection();
+            let server_pipe = integ_server
+                .create_local_connection()
+                .blocking_recv()
+                .expect("Could not get integrated server connection");
             let (control_tx, control_rx) = std_unbounded_channel();
 
-            let net_thread = NetworkThread::new(GameSide::Client, move || NetworkThreadClientState::new(control_tx));
+            let net_thread = NetworkThread::new(GameSide::Client, NetworkThreadClientState::new)
+                .expect("Could not start client network thread");
             let net_thread = Arc::new(net_thread);
 
-            let net_thread2 = Arc::clone(&net_thread);
-            net_thread
-                .schedule_task(async move |state| {
-                    let local_conn = server_pipe
-                        .async_wait()
-                        .await
-                        .context("integ_server.create_local_connection")?;
-                    NetworkThreadClientState::connect_locally(state, net_thread2, local_conn)
-                        .await
-                        .context("NetworkThreadClientState::connect_locally")?;
-                    Ok(())
-                })
+            world.insert_resource(ClientNetworkThreadHolder(Arc::clone(&net_thread)));
+            world.insert_resource(GameClientControlCommandReceiver(SyncCell::new(control_rx)));
+
+            let (connect_result, connect_result_tx) = AsyncResult::new_pair();
+            net_thread.send_command(NetworkThreadClientCommand::ConnectLocally(
+                net_thread.clone(),
+                control_tx.clone(),
+                server_pipe,
+                connect_result_tx,
+            ));
+            connect_result
                 .blocking_wait()
                 .expect("Could not connect the client to the integrated server");
 
-            kickoff_connected_game_transition(world, net_thread, control_rx);
+            kickoff_connected_game_transition(world);
         }
         LoadingTransitionParams::MultiPlayer { server_address_raw } => {
             info!("Trying to join the multiplayer game at {server_address_raw}");
@@ -106,99 +108,34 @@ fn kickoff_game_transition(world: &mut World) {
 
             let (control_tx, control_rx) = std_unbounded_channel();
 
-            let net_thread = NetworkThread::new(GameSide::Client, move || NetworkThreadClientState::new(control_tx));
+            let net_thread = NetworkThread::new(GameSide::Client, NetworkThreadClientState::new)
+                .expect("Could not start client network thread");
             let net_thread = Arc::new(net_thread);
-            let net_thread2 = Arc::clone(&net_thread);
 
-            net_thread
-                .schedule_task(async move |state| {
-                    NetworkThreadClientState::connect_remotely(state, net_thread2, server_address)
-                        .await
-                        .context("NetworkThreadClientState::connect_remotely")?;
-                    Ok(())
-                })
+            world.insert_resource(ClientNetworkThreadHolder(Arc::clone(&net_thread)));
+            world.insert_resource(GameClientControlCommandReceiver(SyncCell::new(control_rx)));
+
+            let (connect_result, connect_result_tx) = AsyncResult::new_pair();
+            net_thread.send_command(NetworkThreadClientCommand::ConnectRemotely(
+                net_thread.clone(),
+                control_tx.clone(),
+                server_address,
+                connect_result_tx,
+            ));
+            connect_result
                 .blocking_wait()
                 .expect("Could not connect the client to the remote server");
 
-            kickoff_connected_game_transition(world, net_thread, control_rx);
+            kickoff_connected_game_transition(world);
         }
     }
 }
 
-fn kickoff_connected_game_transition(
-    world: &mut World,
-    authenticated_net_thread: Arc<NetworkThread<NetworkThreadClientState>>,
-    game_command_receiver: StdUnboundedReceiver<Box<GameBevyCommand>>,
-) {
-    let default_registries = builtin_game_registries();
-    struct NetBootstrap {
-        registries: GameRegistries,
-    }
-    let bootstrap_data = authenticated_net_thread
-        .schedule_task(async move |state| {
-            assert!(
-                state.borrow().server_auth_rpc().is_some(),
-                "Network state was not authenticated before running kickoff_connected_game_transition"
-            );
-            let bootstrap_request = state
-                .borrow()
-                .server_auth_rpc()
-                .context("Missing auth endpoint")?
-                .bootstrap_game_data_request();
-            let bootstrap_response = bootstrap_request
-                .send()
-                .promise
-                .await
-                .context("Failed bootstrap request to the remote server")?;
-            let bootstrap_response = bootstrap_response.get()?.get_data()?;
-            let uuid = Uuid::read_from_message(&bootstrap_response.get_universe_id()?);
-            let registries = default_registries.clone_with_serialized_ids(&bootstrap_response)?;
-            let nblocks = registries.block_types.len();
-            info!("Joining server world {uuid} with {nblocks} block types.");
-
-            Ok(NetBootstrap { registries })
-        })
-        .blocking_wait()
-        .expect("Could not connect the client to the remote server");
-
-    let client_data = ClientData {
-        shared_registries: bootstrap_data.registries,
-    };
-
+fn kickoff_connected_game_transition(world: &mut World) {
+    let (world_bootstrapped, world_bootstrapped_tx) = AsyncResult::new_pair();
+    world.insert_resource(LoadingBootstrapPromiseResolver(world_bootstrapped_tx));
     let mut promises = world.resource_mut::<LoadingPromiseHolder>();
-    promises
-        .promises
-        .push(Box::new(authenticated_net_thread.schedule_task(async move |state| {
-            let auth_rpc = state.borrow().server_auth_rpc().cloned();
-            if let Some(auth_rpc) = auth_rpc {
-                let mut rq = auth_rpc.send_chat_message_request();
-                rq.get().set_text("Hello internet networking!");
-                let _ = rq.send().promise.await;
-            }
-            Ok(())
-        })));
-
-    let block_registry = Arc::clone(&client_data.shared_registries.block_types);
-    let biome_registry = Arc::clone(&client_data.shared_registries.biome_types);
-
-    world.insert_resource(client_data);
-    world.insert_resource(ClientNetworkThreadHolder(Arc::clone(&authenticated_net_thread)));
-    world.insert_resource(GameClientControlCommandReceiver(SyncCell::new(game_command_receiver)));
-
-    VoxelUniverseBuilder::<ClientData>::new(world, block_registry, biome_registry)
-        .unwrap()
-        .with_network_client(&authenticated_net_thread)
-        .unwrap()
-        .with_client_chunk_system()
-        .build();
-
-    let mut promises = world.resource_mut::<LoadingPromiseHolder>();
-    promises
-        .promises
-        .push(Box::new(authenticated_net_thread.schedule_task(async move |state| {
-            NetworkThreadClientState::allow_streams(state).await;
-            Ok(())
-        })));
+    promises.promises.push(Box::new(world_bootstrapped));
 }
 
 fn loading_game_transition_handler(
