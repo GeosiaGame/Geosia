@@ -33,10 +33,13 @@ use crate::{
 };
 
 new_key_type! {
+    /// Slotmap key for identifying unique connections made by clients to the server
     pub struct ServerConnectionKey;
+    /// Slotmap key for identifying unique streams for a given client (may not be unique across different players)
     pub struct PacketStreamKey;
 }
 
+#[allow(dead_code)]
 struct ServerConnection {
     authenticated_info: AuthenticatedInfo,
     packet_streams: SlotMap<PacketStreamKey, Arc<PacketStream>>,
@@ -47,17 +50,23 @@ struct ServerConnection {
 
 /// The network thread game server state, accessible from network functions.
 pub struct NetworkThreadServerState {
-    startup_time: Instant,
     free_local_id: i32,
     listeners: HashMap<SocketAddr, (Endpoint, JoinHandle<()>)>,
     connections: SlotMap<ServerConnectionKey, ServerConnection>,
 }
 
+#[allow(private_interfaces)]
+/// Command type for performing changes on the server network runtime thread.
 pub enum NetworkThreadServerCommand {
+    /// Reloads the current listener list from the server config.
     UpdateListeners(Arc<GameServer>, AsyncOneshotSender<Result<()>>),
+    /// Creates an in-process network connection.
     CreateLocalConnection(Arc<GameServer>, AsyncOneshotSender<NetworkConnection>),
-    InsertServerConnection(ServerConnection, AsyncOneshotSender<ServerConnectionKey>),
+    /// Inserts a connection object into the connection table, returning the key.
+    InsertServerConnection(Box<ServerConnection>, AsyncOneshotSender<ServerConnectionKey>),
+    /// Removes a connection object from the connection table and schedules a removal of the corresponding bevy objects.
     RemoveServerConnection(Arc<GameServer>, ServerConnectionKey),
+    /// Opens a new stream on a given connection, use an [`AsyncResult`] to read the result.
     OpenNewStream(
         ServerConnectionKey,
         AsyncOneshotSender<Result<(Arc<PacketStream>, PacketStreamKey)>>,
@@ -65,17 +74,27 @@ pub enum NetworkThreadServerCommand {
 }
 
 #[derive(Clone)]
+/// Information about a player obtained during the authentication process.
 pub struct AuthenticatedInfo {
+    /// The username that was logged in.
     pub username: KString,
+    /// The original network address the player connected from.
     pub address: PeerAddress,
 }
 
+/// A packet entry in the queue for processing on the Bevy side.
 pub struct QueuedPacket {
+    /// Pre-parsed ID of the packet.
     pub id: PacketId,
+    /// Raw packet data.
     pub data: PacketWrapper,
+    /// Timestamp of when the packet was first seen on the network thread.
     pub received_at: Instant,
+    /// Identifier of the connection this packet came over.
     pub connection_key: ServerConnectionKey,
+    /// Identifier of the stream this packet came over.
     pub stream_key: PacketStreamKey,
+    /// The stream this packet came from, if it needs a response this is the stream to send it to.
     pub stream: Arc<PacketStream>,
 }
 
@@ -85,8 +104,11 @@ pub struct ConnectedPlayer {
     pub authenticated_info: AuthenticatedInfo,
     /// A key into the network thread's connection table.
     pub connection_key: ServerConnectionKey,
+    /// Packet queue for Bevy system access.
     pub received_packet_queue: AsyncMutex<AsyncUnboundedReceiver<QueuedPacket>>,
+    /// Main ordered stream for server requests to the client and their replies.
     pub main_s2c_stream: Arc<PacketStream>,
+    /// Main ordered stream for client requests to the server and their replies.
     pub main_c2s_stream: Arc<PacketStream>,
 }
 
@@ -168,10 +190,10 @@ impl NetworkThreadState for NetworkThreadServerState {
                 let server_connection = NetworkConnection::wrap_local(GameSide::Server, peer, duplex_a);
                 let client_connection = NetworkConnection::wrap_local(GameSide::Client, peer, duplex_b);
                 Self::accept_connection(engine, server_connection).await;
-                return_channel.send(client_connection);
+                let _ = return_channel.send(client_connection);
             }
             NetworkThreadServerCommand::InsertServerConnection(server_connection, sender) => {
-                let key = self.connections.insert(server_connection);
+                let key = self.connections.insert(*server_connection);
                 let _ = sender.send(key);
             }
             NetworkThreadServerCommand::RemoveServerConnection(engine, key) => {
@@ -198,7 +220,7 @@ impl NetworkThreadState for NetworkThreadServerState {
                 let stream = match stream {
                     Ok(v) => v,
                     Err(e) => {
-                        sender.send(Err(e));
+                        let _ = sender.send(Err(e));
                         return;
                     }
                 };
@@ -216,9 +238,8 @@ impl NetworkThreadState for NetworkThreadServerState {
 
 impl NetworkThreadServerState {
     /// Begins listening on the configured endpoints, and starts looking for configuration changes.
-    pub async fn new(startup_time: Instant) -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         Ok(Self {
-            startup_time,
             free_local_id: default(),
             listeners: default(),
             connections: SlotMap::with_capacity_and_key(32),
@@ -355,7 +376,7 @@ impl NetworkThreadServerState {
         engine
             .network_thread
             .send_command(NetworkThreadServerCommand::InsertServerConnection(
-                server_connection,
+                Box::new(server_connection),
                 connection_key_tx,
             ));
         let Ok(connection_key) = connection_key_rx.await else {

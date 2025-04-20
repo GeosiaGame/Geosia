@@ -18,6 +18,7 @@ pub struct NetworkThread<State: NetworkThreadState> {
 }
 
 /// Trait that needs to be implemented for the state object of the network thread.
+#[allow(async_fn_in_trait)]
 pub trait NetworkThreadState: 'static {
     /// Command type passed to [`on_command`].
     type StateCommand: Sized + Send + 'static;
@@ -43,10 +44,7 @@ pub enum NetworkThreadCommandError {
 
 impl<State: NetworkThreadState> NetworkThread<State> {
     /// Creates a new network thread and tokio runtime for the given game side.
-    pub fn new(
-        side: GameSide,
-        state_factory: impl (AsyncFnOnce(Instant) -> Result<State>) + Send + 'static,
-    ) -> Result<Self> {
+    pub fn new(side: GameSide, state_factory: impl (AsyncFnOnce() -> Result<State>) + Send + 'static) -> Result<Self> {
         let (net_tx, net_rx) = async_unbounded_channel();
         let network_rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -57,13 +55,13 @@ impl<State: NetworkThreadState> NetworkThread<State> {
         let startup_time = Instant::now();
 
         let (result_tx, result_rx) = async_oneshot_channel();
-        let result_aware_state_factory = async move || match state_factory(startup_time).await {
+        let result_aware_state_factory = async move || match state_factory().await {
             Ok(factory) => {
-                result_tx.send(Ok(()));
+                let _ = result_tx.send(Ok(()));
                 Ok(factory)
             }
             Err(e) => {
-                result_tx.send(Err(e));
+                let _ = result_tx.send(Err(e));
                 Err(())
             }
         };
@@ -103,14 +101,17 @@ impl<State: NetworkThreadState> NetworkThread<State> {
         let _ = rx.blocking_recv();
     }
 
+    /// Schedules a sided command to run on the network thread.
     pub fn send_command(&self, command: State::StateCommand) {
         let _ = self.channel.send(NetworkThreadCommand::StateCommand(command));
     }
 
+    /// Returns the reference timestamp used for packet timestamp calculations.
     pub fn startup_time(&self) -> Instant {
         self.startup_time
     }
 
+    /// Computes the timestamp for a packet that's ready to be sent.
     pub fn packet_timestamp(&self) -> u64 {
         self.startup_time.elapsed().as_millis() as u64
     }

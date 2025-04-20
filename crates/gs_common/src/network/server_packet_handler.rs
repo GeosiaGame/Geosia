@@ -2,12 +2,11 @@
 
 use gs_schemas::{
     ErrorList, GameSide,
-    actions::BlockAction,
     coordinates::WorldPos,
     raycast::{RaycastHitMask, RaycastResult, RaycastSpec},
     schemas::{
         CapnpExt,
-        game_types_capnp::{self, SimpleResult, block_action, game_bootstrap_data},
+        game_types_capnp::{SimpleResult, block_action, game_bootstrap_data},
         network_capnp::{PacketId, block_action_request, game_server_metadata},
         new_packet_builder, new_simple_packet_builder,
     },
@@ -77,11 +76,11 @@ fn bootstrap_players_system(
 
     let mut bootstrapped_players: SmallVec<[_; 4]> = SmallVec::new();
     for (entity, player) in to_bootstrap.iter().skip(1) {
-        player.main_s2c_stream.send_packet(packet.clone_mut());
+        let _ = player.main_s2c_stream.send_packet(packet.clone_mut());
         bootstrapped_players.push((entity, BootstrappingGameDataTag));
     }
     if let Some((entity, player)) = to_bootstrap.iter().next() {
-        player.main_s2c_stream.send_packet(packet);
+        let _ = player.main_s2c_stream.send_packet(packet);
         bootstrapped_players.push((entity, BootstrappingGameDataTag));
     }
 

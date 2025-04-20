@@ -157,7 +157,7 @@ impl GameServer {
             .network_thread
             .send_command(NetworkThreadServerCommand::UpdateListeners(server.clone(), listen_tx));
         if let Err(e) = listen_result.blocking_wait() {
-            server.shutdown().blocking_wait();
+            let _ = server.shutdown().blocking_wait();
             return Err(e);
         }
         Ok(server)

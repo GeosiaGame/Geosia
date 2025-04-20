@@ -1,5 +1,6 @@
 //! Network transport implementations - local message passing for singleplayer&unit tests and QUIC for multiplayer
 
+use capnp::Word;
 use capnp::message::{HeapAllocator, ReaderOptions, ReaderSegments, TypedReader};
 use capnp::serialize::BufferSegments;
 use capnp::traits::Owned;
@@ -89,9 +90,6 @@ pub static RPC_CLIENT_READER_OPTIONS: ReaderOptions = ReaderOptions {
     nesting_limit: 48,
 };
 
-/// Size in bytes of the in-process client-server "socket" buffer.
-const INPROCESS_SOCKET_BUFFER_SIZE: usize = 1024 * 1024;
-
 /// The supported ALPN protocol identifiers for this game.
 pub static ALPN_GEOSIA: &[&[u8]] = &[b"game-geosia/1"];
 /// The supported TLS versions used by this game.
@@ -121,48 +119,60 @@ pub fn quinn_server_config() -> quinn::ServerConfig {
     quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(crypto).unwrap()))
 }
 
+/// Implementation of [`ReaderSegments`] for [`PacketWrapper`] for returning readers borrowing from the packet data.
 pub enum PacketSegments<'pkt> {
+    /// Matches [`PacketWrapper`]'s `Bytes` variant
     Bytes(BufferSegments<&'pkt [u8]>),
-    Builder(&'pkt capnp::message::Builder<HeapAllocator>),
+    /// Matches [`PacketWrapper`]'s `Capnp` variant
+    Capnp(&'pkt capnp::message::Builder<HeapAllocator>),
 }
 
 impl<'pkt> ReaderSegments for PacketSegments<'pkt> {
     fn get_segment(&self, idx: u32) -> Option<&[u8]> {
         match self {
             PacketSegments::Bytes(v) => v.get_segment(idx),
-            PacketSegments::Builder(v) => v.get_segment(idx),
+            PacketSegments::Capnp(v) => v.get_segment(idx),
         }
     }
 
     fn len(&self) -> usize {
         match self {
             PacketSegments::Bytes(v) => v.len(),
-            PacketSegments::Builder(v) => v.len(),
+            PacketSegments::Capnp(v) => v.len(),
         }
     }
 
     fn is_empty(&self) -> bool {
         match self {
             PacketSegments::Bytes(v) => v.is_empty(),
-            PacketSegments::Builder(v) => v.is_empty(),
+            PacketSegments::Capnp(v) => v.is_empty(),
         }
     }
 }
 
+/// A wrapper for packet data for convenient usage of capnp messages and efficient in-process and cross-socket networking.
 pub enum PacketWrapper {
+    /// Pre-serialized packet.
     Serialized(Bytes),
+    /// Unserialized message builder, passed unchanged through the singleplayer in-process layer for efficiency.
     Capnp(CapnpBuilder),
 }
 
 impl PacketWrapper {
     // Mutable to trigger lazy compression in the future
+    /// Computes the byte length of the packet for network transmission, triggering any serialization or processing if necessary.
+    #[allow(clippy::len_without_is_empty)] // it doesn't make sense for a packet to be empty
     pub fn len(&mut self) -> usize {
         match self {
             Self::Serialized(bytes) => bytes.len(),
-            Self::Capnp(builder) => capnp::serialize::compute_serialized_size_in_words(builder),
+            Self::Capnp(builder) => {
+                capnp::serialize::compute_serialized_size_in_words(builder) * std::mem::size_of::<Word>()
+            }
         }
     }
 
+    /// Clones the packet for broadcast transmission, converts from capnp to serialized form if needed (including `self` for efficient further clones).
+    /// Might incur serialization cost once, after which further clones of either copy are cheap refcounted pointer copies.
     pub fn clone_mut(&mut self) -> Self {
         match self {
             Self::Serialized(bytes) => Self::Serialized(bytes.clone()),
@@ -175,9 +185,10 @@ impl PacketWrapper {
         }
     }
 
+    /// Parses the packet ID out of the data.
     pub fn parse_id(&self, reader_options: ReaderOptions) -> capnp::Result<PacketId> {
         match self {
-            Self::Serialized(bytes) => read_packet_id(&bytes, reader_options),
+            Self::Serialized(bytes) => read_packet_id(bytes, reader_options),
             Self::Capnp(builder) => {
                 let reader = builder.get_root_as_reader::<network_packet::Reader<capnp::any_pointer::Owned>>()?;
                 Ok(reader.get_id()?)
@@ -185,15 +196,17 @@ impl PacketWrapper {
         }
     }
 
+    /// Converts the packet data reference into a capnp segment type for reader construction.
     pub fn as_segments(&self, reader_options: ReaderOptions) -> capnp::Result<PacketSegments> {
         Ok(match self {
             PacketWrapper::Serialized(bytes) => {
-                PacketSegments::Bytes(BufferSegments::new(&bytes as &[u8], reader_options)?)
+                PacketSegments::Bytes(BufferSegments::new(bytes as &[u8], reader_options)?)
             }
-            PacketWrapper::Capnp(builder) => PacketSegments::Builder(builder),
+            PacketWrapper::Capnp(builder) => PacketSegments::Capnp(builder),
         })
     }
 
+    /// Accessor for data of packets that use the simple Int32 payload type.
     pub fn parse_simple(
         &self,
         reader_options: ReaderOptions,
@@ -201,6 +214,7 @@ impl PacketWrapper {
         self.parse_typed(reader_options)
     }
 
+    /// Accessor for data of packets that use capnp struct payload types.
     pub fn parse_typed<OwnedPayloadType: capnp::traits::Owned>(
         &self,
         reader_options: ReaderOptions,
@@ -209,6 +223,7 @@ impl PacketWrapper {
         Ok(reader.into_typed())
     }
 
+    /// Sends the full contents of the packet over a QUIC stream efficiently.
     pub async fn write_all_quic_bytes(self, tx: &mut SendStream) -> Result<()> {
         match self {
             Self::Serialized(bytes) => {
@@ -246,6 +261,7 @@ impl<O: Owned> From<capnp::message::TypedBuilder<O, HeapAllocator>> for PacketWr
     }
 }
 
+/// An independent asynchronous packet stream.
 pub struct PacketStream {
     initiating_side: GameSide,
     close_request: AsyncWatchSender<bool>,
@@ -255,12 +271,15 @@ pub struct PacketStream {
 }
 
 #[derive(Clone, Debug, Error)]
+/// Error type for [`PacketStream`]'s send and receive methods.
 pub enum PacketSendRecvError {
+    /// The stream was already closed at the other end with no way to receive the message or send a reply.
     #[error("Other side of the stream was already closed")]
     StreamClosed,
 }
 
 impl PacketStream {
+    /// Initiates a new stream over an in-process "socket".
     pub async fn open_internal(connection: &InProcessDuplex, initiating_side: GameSide) -> Result<Self> {
         let (close_channel_tx, close_channel_rx) = async_watch_channel(false);
         let (a_tx, a_rx) = async_unbounded_channel();
@@ -283,6 +302,7 @@ impl PacketStream {
         Ok(stream_a)
     }
 
+    /// Listens for a new stream coming from an in-process "socket".
     pub async fn accept_internal(connection: &InProcessDuplex) -> Result<Self> {
         connection
             .incoming_streams
@@ -293,16 +313,19 @@ impl PacketStream {
             .ok_or_else(|| anyhow!("internal socket closed"))
     }
 
+    /// Initiates a new stream over a QUIC network connection.
     pub async fn open_quic(connection: Connection, initiating_side: GameSide) -> Result<Self> {
         let (raw_tx, raw_rx) = connection.open_bi().await?;
         Self::handle_quic(raw_tx, raw_rx, initiating_side).await
     }
 
+    /// Listens for a new stream coming from a QUIC network connection.
     pub async fn accept_quic(connection: Connection, initiating_side: GameSide) -> Result<Self> {
         let (raw_tx, raw_rx) = connection.accept_bi().await?;
         Self::handle_quic(raw_tx, raw_rx, initiating_side).await
     }
 
+    /// Reads a single packet from the stream.
     pub async fn recv_packet(&self) -> Result<PacketWrapper, PacketSendRecvError> {
         if *self.closed.borrow() {
             return Err(PacketSendRecvError::StreamClosed);
@@ -311,20 +334,21 @@ impl PacketStream {
         let mut rx = self.rx.lock().await;
         tokio::select! {
             _ = closed.wait_for(|&v| v) => {
-                return Err(PacketSendRecvError::StreamClosed);
+                Err(PacketSendRecvError::StreamClosed)
             }
             packet = rx.recv() => {
                 match packet {
                     Some(packet) => Ok(packet),
                     None => {
                         self.close_request.send_replace(true);
-                        return Err(PacketSendRecvError::StreamClosed);
+                        Err(PacketSendRecvError::StreamClosed)
                     }
                 }
             }
         }
     }
 
+    /// Peeks if a single packet can be read from a stream, returns it if possible or erroring, or None if none are available, without blocking.
     pub fn try_recv_packet(&mut self) -> Result<Option<PacketWrapper>, PacketSendRecvError> {
         if *self.closed.borrow() {
             return Err(PacketSendRecvError::StreamClosed);
@@ -339,6 +363,7 @@ impl PacketStream {
         }
     }
 
+    /// Sends a packet to the other end of the stream.
     pub fn send_packet(&self, packet: PacketWrapper) -> Result<(), PacketSendRecvError> {
         if *self.closed.borrow() {
             return Err(PacketSendRecvError::StreamClosed);
@@ -350,14 +375,17 @@ impl PacketStream {
         Ok(())
     }
 
+    /// Returns the side that initiated this stream.
     pub fn initiating_side(&self) -> GameSide {
         self.initiating_side
     }
 
+    /// Requests this stream to be gracefully closed, also happens automatically when dropped.
     pub fn close(&self) {
         self.close_request.send_replace(true);
     }
 
+    #[allow(clippy::redundant_closure_call)] // needed for return type annotations
     async fn handle_quic(mut raw_tx: SendStream, mut raw_rx: RecvStream, initiating_side: GameSide) -> Result<Self> {
         let (close_channel_tx, mut close_channel_rx) = async_watch_channel(false);
         let close_channel_rx2 = close_channel_rx.clone();
@@ -392,7 +420,7 @@ impl PacketStream {
             let _ = close_from_outgoing.send(true);
         });
         // cancellation handler
-        let _ = spawn_local(async move {
+        spawn_local(async move {
             let _ = close_channel_rx.wait_for(|&v| v).await;
             incoming_handler.abort();
             outgoing_handler.abort();
@@ -410,6 +438,7 @@ impl PacketStream {
 }
 
 impl Drop for PacketStream {
+    /// Automatically requests the stream to be closed if it wasn't already.
     fn drop(&mut self) {
         self.close_request.send_replace(true);
     }
@@ -454,6 +483,7 @@ pub struct NetworkConnection {
 }
 
 impl NetworkConnection {
+    /// Constructs a [`NetworkConnection`] object by wrapping an in-process connection.
     pub fn wrap_local(game_side: GameSide, address: PeerAddress, duplex: InProcessDuplex) -> Self {
         Self {
             game_side,
@@ -462,6 +492,7 @@ impl NetworkConnection {
         }
     }
 
+    /// Constructs a [`NetworkConnection`] object by wrapping a socket connection.
     pub fn wrap_remote(game_side: GameSide, address: PeerAddress, connection: Connection) -> Self {
         Self {
             game_side,
@@ -470,19 +501,22 @@ impl NetworkConnection {
         }
     }
 
+    /// Returns the address of the connected-to peer.
     pub fn address(&self) -> PeerAddress {
         self.address
     }
 
+    /// Closes the connection.
     pub fn close(&self) {
         match &self.side {
-            NetworkConnectionSide::Local { duplex } => {}
+            NetworkConnectionSide::Local { duplex: _ } => {}
             NetworkConnectionSide::Remote { connection } => {
                 connection.close(VarInt::default(), &[]);
             }
         }
     }
 
+    /// Initiates a new asynchronous stream on the connection.
     pub async fn open_stream(&self) -> Result<PacketStream> {
         match &self.side {
             NetworkConnectionSide::Local { duplex } => PacketStream::open_internal(duplex, self.game_side).await,
@@ -492,11 +526,12 @@ impl NetworkConnection {
         }
     }
 
+    /// Listens for a new asynchronous stream on the connection initiated by the other side.
     pub async fn accept_stream(&self) -> Result<PacketStream> {
         match &self.side {
             NetworkConnectionSide::Local { duplex } => PacketStream::accept_internal(duplex).await,
             NetworkConnectionSide::Remote { connection } => {
-                PacketStream::accept_quic(connection.clone(), self.game_side).await
+                PacketStream::accept_quic(connection.clone(), self.game_side.opposite()).await
             }
         }
     }

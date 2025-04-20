@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use capnp::message::TypedBuilder;
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, AbsChunkRange, RelChunkPos};
 use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::mutwatcher::{MutWatcher, RevisionNumber};
@@ -16,13 +15,10 @@ use gs_schemas::voxel::chunk_group::ChunkGroup;
 use gs_schemas::voxel::voxeltypes::BlockRegistry;
 use gs_schemas::{GameSide, GsExtraData};
 use smallvec::SmallVec;
-use tokio::task::JoinSet;
 use tokio_util::bytes::Bytes;
 
-use crate::network::PeerAddress;
 use crate::network::server::{ConnectedPlayer, NetworkThreadServerCommand, PacketStreamKey};
 use crate::network::server_packet_handler::BootstrappedGameDataTag;
-use crate::network::thread::{NetworkThread, NetworkThreadState};
 use crate::network::transport::{PacketStream, PacketWrapper};
 use crate::prelude::*;
 use crate::voxel::persistence::ChunkPersistenceLayer;
@@ -289,6 +285,7 @@ struct ConnectedPlayerAwaitingChunkStream {
 #[derive(Component)]
 struct ConnectedPlayerChunkStream {
     s2c_chunk_stream: Arc<PacketStream>,
+    #[allow(dead_code)]
     s2c_chunk_stream_key: PacketStreamKey,
 }
 
@@ -366,8 +363,7 @@ fn server_system_process_chunk_sending(
         // remove disconnected players
         chunk_player_list.retain(|&player, _rev| connected_players_q.contains(player));
         // find players with outdated revisions
-        for (pid, player, stream) in connected_players_q.iter() {
-            let peer = player.authenticated_info.address;
+        for (pid, _player, stream) in connected_players_q.iter() {
             let entry = chunk_player_list.entry(pid).or_insert_with(|| {
                 send_list.push(&stream.s2c_chunk_stream);
                 chunk_rev
@@ -409,9 +405,9 @@ fn send_chunk_to_players(
 
     // TODO: error handling, throttling
     for stream in peers.iter().skip(1) {
-        stream.send_packet(packet.clone_mut());
+        let _ = stream.send_packet(packet.clone_mut());
     }
     if let Some(first) = peers.first() {
-        first.send_packet(packet);
+        let _ = first.send_packet(packet);
     }
 }

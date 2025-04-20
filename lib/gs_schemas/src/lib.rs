@@ -45,6 +45,16 @@ pub enum GameSide {
     Client,
 }
 
+impl GameSide {
+    /// Returns the opposite side
+    pub fn opposite(self) -> GameSide {
+        match self {
+            Self::Client => Self::Server,
+            Self::Server => Self::Client,
+        }
+    }
+}
+
 /// Re-exported dependencies used in API types
 pub mod dependencies {
     pub use anyhow;
