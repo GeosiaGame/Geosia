@@ -16,6 +16,10 @@ concurrency:
   cancel-in-progress: true
   group: pr/${{ github.ref }}
 
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
 jobs:
   tests:
     name: ${{ matrix.rust }} (${{ matrix.os }})
@@ -40,22 +44,20 @@ jobs:
           sudo apt-get update --yes
           sudo apt-get install --yes --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev libvulkan-dev
       - uses: actions/checkout@v4
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.8
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-r${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
       - name: Install Rust ${{ matrix.rust }}
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-r${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
 
