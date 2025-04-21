@@ -182,7 +182,7 @@ pub trait CapnpExt: Sized {
     type ReaderError;
 
     /// Serializes a UUID into a capnp message.
-    fn write_to_message<'a>(&self, builder: &mut Self::Builder<'a>);
+    fn write_to_message(&self, builder: &mut Self::Builder<'_>);
     /// Deserializes a UUID from a capnp message.
     fn read_from_message<'a>(reader: &Self::Reader<'a>) -> Result<Self, Self::ReaderError>;
 }
@@ -192,13 +192,13 @@ impl CapnpExt for Uuid {
     type Reader<'a> = game_types_capnp::uuid::Reader<'a>;
     type ReaderError = Infallible;
 
-    fn write_to_message<'a>(&self, builder: &mut Self::Builder<'a>) {
+    fn write_to_message(&self, builder: &mut Self::Builder<'_>) {
         let (high, low) = self.as_u64_pair();
         builder.set_low(low);
         builder.set_high(high);
     }
 
-    fn read_from_message<'a>(reader: &Self::Reader<'a>) -> Result<Self, Self::ReaderError> {
+    fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
         let (high, low) = (reader.get_high(), reader.get_low());
         Ok(Self::from_u64_pair(high, low))
     }
@@ -209,12 +209,12 @@ impl CapnpExt for IVec2 {
     type Reader<'a> = game_types_capnp::i_vec2::Reader<'a>;
     type ReaderError = Infallible;
 
-    fn write_to_message<'a>(&self, builder: &mut Self::Builder<'a>) {
+    fn write_to_message(&self, builder: &mut Self::Builder<'_>) {
         builder.set_x(self.x);
         builder.set_y(self.y);
     }
 
-    fn read_from_message<'a>(reader: &Self::Reader<'a>) -> Result<Self, Self::ReaderError> {
+    fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
         Ok(Self::new(reader.get_x(), reader.get_y()))
     }
 }
@@ -224,13 +224,13 @@ impl CapnpExt for IVec3 {
     type Reader<'a> = game_types_capnp::i_vec3::Reader<'a>;
     type ReaderError = Infallible;
 
-    fn write_to_message<'a>(&self, builder: &mut Self::Builder<'a>) {
+    fn write_to_message(&self, builder: &mut Self::Builder<'_>) {
         builder.set_x(self.x);
         builder.set_y(self.y);
         builder.set_z(self.z);
     }
 
-    fn read_from_message<'a>(reader: &Self::Reader<'a>) -> Result<Self, Self::ReaderError> {
+    fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
         Ok(Self::new(reader.get_x(), reader.get_y(), reader.get_z()))
     }
 }
@@ -240,12 +240,12 @@ impl CapnpExt for I64Vec2 {
     type Reader<'a> = game_types_capnp::i64_vec2::Reader<'a>;
     type ReaderError = Infallible;
 
-    fn write_to_message<'a>(&self, builder: &mut Self::Builder<'a>) {
+    fn write_to_message(&self, builder: &mut Self::Builder<'_>) {
         builder.set_x(self.x);
         builder.set_y(self.y);
     }
 
-    fn read_from_message<'a>(reader: &Self::Reader<'a>) -> Result<Self, Self::ReaderError> {
+    fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
         Ok(Self::new(reader.get_x(), reader.get_y()))
     }
 }
@@ -255,13 +255,13 @@ impl CapnpExt for I64Vec3 {
     type Reader<'a> = game_types_capnp::i64_vec3::Reader<'a>;
     type ReaderError = Infallible;
 
-    fn write_to_message<'a>(&self, builder: &mut Self::Builder<'a>) {
+    fn write_to_message(&self, builder: &mut Self::Builder<'_>) {
         builder.set_x(self.x);
         builder.set_y(self.y);
         builder.set_z(self.z);
     }
 
-    fn read_from_message<'a>(reader: &Self::Reader<'a>) -> Result<Self, Self::ReaderError> {
+    fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
         Ok(Self::new(reader.get_x(), reader.get_y(), reader.get_z()))
     }
 }
@@ -271,12 +271,12 @@ impl CapnpExt for Vec2 {
     type Reader<'a> = game_types_capnp::vec2::Reader<'a>;
     type ReaderError = Infallible;
 
-    fn write_to_message<'a>(&self, builder: &mut Self::Builder<'a>) {
+    fn write_to_message(&self, builder: &mut Self::Builder<'_>) {
         builder.set_x(self.x);
         builder.set_y(self.y);
     }
 
-    fn read_from_message<'a>(reader: &Self::Reader<'a>) -> Result<Self, Self::ReaderError> {
+    fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
         Ok(Self::new(reader.get_x(), reader.get_y()))
     }
 }
@@ -286,13 +286,13 @@ impl CapnpExt for Vec3 {
     type Reader<'a> = game_types_capnp::vec3::Reader<'a>;
     type ReaderError = Infallible;
 
-    fn write_to_message<'a>(&self, builder: &mut Self::Builder<'a>) {
+    fn write_to_message(&self, builder: &mut Self::Builder<'_>) {
         builder.set_x(self.x);
         builder.set_y(self.y);
         builder.set_z(self.z);
     }
 
-    fn read_from_message<'a>(reader: &Self::Reader<'a>) -> Result<Self, Self::ReaderError> {
+    fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
         Ok(Self::new(reader.get_x(), reader.get_y(), reader.get_z()))
     }
 }
@@ -302,14 +302,14 @@ impl CapnpExt for Quat {
     type Reader<'a> = game_types_capnp::quat::Reader<'a>;
     type ReaderError = Infallible;
 
-    fn write_to_message<'a>(&self, builder: &mut Self::Builder<'a>) {
+    fn write_to_message(&self, builder: &mut Self::Builder<'_>) {
         builder.set_x(self.x);
         builder.set_y(self.y);
         builder.set_z(self.z);
         builder.set_w(self.w);
     }
 
-    fn read_from_message<'a>(reader: &Self::Reader<'a>) -> Result<Self, Self::ReaderError> {
+    fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
         Ok(Self::from_xyzw(reader.get_x(), reader.get_y(), reader.get_z(), reader.get_w()).normalize())
     }
 }
@@ -319,12 +319,12 @@ impl CapnpExt for RegistryName {
     type Reader<'a> = game_types_capnp::registry_name::Reader<'a>;
     type ReaderError = capnp::Error;
 
-    fn write_to_message<'a>(&self, builder: &mut Self::Builder<'a>) {
+    fn write_to_message(&self, builder: &mut Self::Builder<'_>) {
         builder.set_ns(self.ns.as_str());
         builder.set_key(self.key.as_str());
     }
 
-    fn read_from_message<'a>(reader: &Self::Reader<'a>) -> Result<Self, Self::ReaderError> {
+    fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
         let ns = reader.get_ns()?.to_str()?;
         let key = reader.get_key()?.to_str()?;
         Ok(RegistryName::new(ns, key))
