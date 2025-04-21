@@ -98,6 +98,14 @@ impl RegistryName {
 }
 
 impl<'a> RegistryNameRef<'a> {
+    /// Constructs a name reference out of the given namespace and key.
+    pub fn new(ns: impl Into<KStringRef<'a>>, key: impl Into<KStringRef<'a>>) -> Self {
+        Self {
+            ns: ns.into(),
+            key: key.into(),
+        }
+    }
+
     /// Constructs a `gs:`-namespaced name reference
     pub fn gs(key: impl Into<KStringRef<'a>>) -> Self {
         Self {

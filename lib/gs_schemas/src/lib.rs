@@ -9,10 +9,10 @@
 
 extern crate core;
 
+use anyhow::Context;
 use smallvec::{Array, SmallVec};
 
 pub mod actions;
-pub mod capnp_adapters;
 pub mod coordinates;
 pub mod direction;
 pub mod math;
@@ -45,6 +45,16 @@ pub enum GameSide {
     Client,
 }
 
+impl GameSide {
+    /// Returns the opposite side
+    pub fn opposite(self) -> GameSide {
+        match self {
+            Self::Client => Self::Server,
+            Self::Server => Self::Client,
+        }
+    }
+}
+
 /// Re-exported dependencies used in API types
 pub mod dependencies {
     pub use anyhow;
@@ -53,6 +63,7 @@ pub mod dependencies {
     pub use bitflags;
     pub use bitvec;
     pub use bytemuck;
+    pub use bytes;
     pub use capnp;
     pub use either;
     pub use hashbrown;
@@ -115,5 +126,37 @@ where
             SmallCowVec::Owned(v) => v.into_vec(),
             SmallCowVec::Borrowed(b) => Vec::from(b),
         }
+    }
+}
+
+/// A simple list of errors used for accumulating errors from a loop if it's desired to handle them all at the end instead of breaking the loop.
+#[derive(Debug)]
+pub struct ErrorList(anyhow::Result<()>);
+
+impl Default for ErrorList {
+    fn default() -> Self {
+        Self(Ok(()))
+    }
+}
+
+impl ErrorList {
+    /// Constructs a new empty [`ErrorList`] in an `Ok` state.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Processes the given [`Result`], attaching to the error list if it's an error
+    pub fn attach_if_err<T, E: Into<anyhow::Error>>(&mut self, result: Result<T, E>) {
+        if let Err(e) = result.map_err(Into::into) {
+            match self.0 {
+                Ok(_) => self.0 = Err(e),
+                Err(_) => self.0 = std::mem::replace(&mut self.0, Ok(())).context(e),
+            }
+        }
+    }
+
+    /// Converts the entire list into a single [`Result`]
+    pub fn into_result(self) -> anyhow::Result<()> {
+        self.0
     }
 }

@@ -39,7 +39,9 @@ use gs_common::{GAME_BRAND_NAME, GameBevyCommand};
 use gs_schemas::dependencies::smallvec::SmallVec;
 use gs_schemas::registries::GameRegistries;
 use gs_schemas::{GameSide, GsExtraData};
+use network::client_packet_handlers::ClientPacketHandlerPlugin;
 use states::{ClientAppState, InGameSystemSet, LoadingGameSystemSet, MainMenuSystemSet};
+use voxel::ClientVoxelUniversePlugin;
 
 use crate::network::NetworkThreadClientState;
 use crate::prelude::*;
@@ -120,6 +122,8 @@ pub fn client_main() {
     app.add_plugins(EguiPlugin {
         enable_multipass_for_primary_context: true,
     });
+    app.add_plugins(ClientVoxelUniversePlugin)
+        .add_plugins(ClientPacketHandlerPlugin);
 
     app.init_state::<ClientAppState>();
     fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {

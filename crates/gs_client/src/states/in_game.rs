@@ -1,15 +1,19 @@
 //! The state for when the player is in game, with all basic gameplay resources fully loaded.
 
+use gs_common::network::transport::PacketWrapper;
+use gs_common::prelude::rpc::{PacketId, block_action_request};
 use gs_common::raycast::{RaycastContext, raycast};
 use gs_common::voxel::blocks::STONE_BLOCK_NAME;
 use gs_common::voxel::plugin::BlockRegistryHolder;
 use gs_schemas::actions::{BlockAction, PositionData};
 use gs_schemas::coordinates::WorldPos;
 use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
+use gs_schemas::schemas::new_packet_builder;
 use gs_schemas::voxel::chunk_storage::ChunkStorage;
 use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
 
 use crate::ClientNetworkThreadHolder;
+use crate::network::AuthenticatedNetworkClient;
 use crate::prelude::*;
 use crate::states::ClientAppState;
 use crate::voxel::ClientVoxelUniverse;
@@ -29,23 +33,22 @@ fn ingame_cleanup_on_exit(net_thread: ResMut<ClientNetworkThreadHolder>) {
 
 /// sends a block modification packet over the given net thread and promise holder
 pub(crate) fn ingame_send_block_change(
-    net_thread: &Res<ClientNetworkThreadHolder>,
+    authenticated_client: &Res<AuthenticatedNetworkClient>,
     voxel_query: &mut Query<&mut ClientVoxelUniverse>,
     block_reg: &Res<BlockRegistryHolder>,
     position: PositionData,
     action: BlockAction,
 ) {
-    let _ = net_thread.0.schedule_task(async move |state| {
-        let auth_rpc = state.borrow().server_auth_rpc().cloned();
-        if let Some(auth_rpc) = auth_rpc {
-            let mut rq = auth_rpc.send_block_action_request();
-            position.to_builder(&mut rq.get().init_position());
-            action.to_builder(&mut rq.get().init_action());
-            rq.get().set_tick(0); // TODO send the actual client tick
-            let _ = rq.send().promise.await;
-        }
-        Ok(())
-    });
+    let mut request = new_packet_builder::<block_action_request::Owned>();
+    let mut root = request.init_root();
+    root.set_id(PacketId::BlockAction);
+    root.set_timestamp_ms(authenticated_client.packet_timestamp());
+    let mut root = root.init_payload();
+    position.to_builder(&mut root.reborrow().init_position());
+    action.to_builder(&mut root.reborrow().init_action());
+    root.set_tick(0); // TODO send the actual client tick
+    let request = PacketWrapper::from(request);
+    let _ = authenticated_client.main_c2s_stream.send_packet(request);
 
     let limit = 64.0;
     let Ok(voxels) = &mut voxel_query.single_mut() else {

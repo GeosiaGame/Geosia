@@ -6,24 +6,78 @@ $Rust.parentModule("schemas");
 
 using GameTypes = import "game_types.capnp";
 
-# The main RPC entrypoint for the game server, (Anonymous client)->Server RPC.
-interface GameServer @0xf0320743e0d6201d {
-    struct Metadata @0xe9422344c157116e {
-        serverVersion @0 :GameTypes.Version;
-        title @1 :Text;
-        subtitle @2 :Text;
-        # Number of online players
-        playerCount @3 :Int32;
-        # Limit of online players (can be bypassed by administrators and moderators depending on settings)
-        playerLimit @4 :Int32;
-    }
+# Packet types, with payload types documented in comments
+# C->S - client can request, S->C - server can request, c->S - client can only reply, s->C - server can only reply
+# Each side opens its own bidi stream when first needed, and only sends requests on that stream, while replies with responses are sent to the stream opened by the other side.
+# Additional bidi streams can be opened for sending additional packets asynchronously, when ordering is not important.
+enum PacketId @0xb9187b435a666525 {
+    # --- Unauthenticated packets ---
 
-    # Gets the server metadata.
-    getServerMetadata @0 () -> (metadata: Metadata);
-    # Returns the given number.
-    ping @1 (input: Int32) -> (output: Int32);
-    # Attempts to authenticate the connection in order to join as a player.
-    authenticate @2 (username: Text, connection: AuthenticatedClientConnection) -> (conn: GameTypes.Result(AuthenticatedServerConnection, AuthenticationError));
+    # C->S :Int32
+    # S->C :Int32 (same number)
+    echo @0;
+
+    # C->S :Bool (0/1 Int32) (whether to immediately shut down the connection after the response, available in 0-RTT for fast server status queries)
+    # s->C :GameServerMetadata (timestamp is set to zero to allow for blind response copying)
+    getServerMetadata @1;
+
+    # C->S :AuthenticationRequest
+    # s->C :Result(AuthenticationAcknowledgement, AuthenticationError)
+    authenticate @2;
+
+    # --- Authenticated packets ---
+
+    # S->C :GameTypes.GameBootstrapData
+    # C->S :Void (just an ACK)
+    bootstrapGameData @3;
+
+    # C->S :Text (server will reply back with the same message but formatted with the nickname, or a rejection message to display in chat)
+    # S->C :Text
+    chatMessage @4;
+
+    # C->S :BlockActionRequest
+    # S->C :Int32 SimpleResult
+    blockAction @5;
+
+    # S->C :ChunkDataStreamPacket (usually asynchronous)
+    chunkData @6;
+}
+
+# Each packet is prefixed with a LEB128-encoded length field
+struct NetworkPacket @0xc4766635d464f2d0 (PayloadType) {
+    id @0 :PacketId;
+    # Measured since an arbitrary time point in milliseconds
+    timestampMs @1 :UInt64;
+    payload @2 :PayloadType;
+    simplePayload @3 :Int32;
+}
+
+# QUIC CONNECTION_CLOSE reason contents
+struct ConnectionTermination @0xc64a369add9cb286 {
+    enum Kind @0xf72513a07b41b403 {
+        shuttingDown @0;
+        kick @1;
+        ban @2;
+    }
+    kind @0 :Kind;
+    message @1 :Text;
+}
+
+struct GameServerMetadata @0xe9422344c157116e {
+    serverVersion @0 :GameTypes.Version;
+    title @1 :Text;
+    subtitle @2 :Text;
+    # Number of online players
+    playerCount @3 :Int32;
+    # Limit of online players (can be bypassed by administrators and moderators depending on settings)
+    playerLimit @4 :Int32;
+}
+
+struct AuthenticationRequest @0xc139dbbb639799f2 {
+    username @0 :Text;
+}
+
+struct AuthenticationAcknowledgement @0xb0d8fc5025c40234 {
 }
 
 struct AuthenticationError @0x9ed4d9765d345c1e {
@@ -32,52 +86,16 @@ struct AuthenticationError @0x9ed4d9765d345c1e {
         invalidUsername @1;
         serverFull @2;
         banned @3;
+        alreadyAuthenticated @4;
     }
     kind @0 :Kind;
     message @1 :Text;
 }
 
-# A stream startup message, determining the type of the stream.
-# Sent as a LEB128-encoded data length + the encoded data array on a fresh QUIC stream.
-# A single packet on an asynchronous stream is sent as a LEB128-encoded data length + the encoded data array.
-# The data arrays are compressed on network sockets, and the capnp unpacked encoding is used.
-struct StreamHeader {
-    enum StandardTypes {
-        chunkData @0;
-    }
-    # The stream type, used to determine the handler used for the packets afterwards.
-    union {
-        standardType @0 :StandardTypes;
-        customType @1 :GameTypes.RegistryName;
-    }
-}
-
-# Server->Client RPC interface
-interface AuthenticatedClientConnection @0xddd4c8ca33d42019 {
-    # Graceful connection shutdown.
-    terminateConnection @0 (reason: ConnectionTermination) -> ();
-    # Notifies the client about a chat message sent on the specified game tick.
-    addChatMessage @1 (tick: UInt64, text: Text) -> ();
-
-    struct ConnectionTermination @0xc64a369add9cb286 {
-        enum Kind @0xf72513a07b41b403 {
-            shuttingDown @0;
-            kick @1;
-            ban @2;
-        }
-        kind @0 :Kind;
-        message @1 :Text;
-    }
-}
-
-# Client->Server RPC interface
-interface AuthenticatedServerConnection @0xcc65c2f3643e6ae0 {
-    # Gets the data needed to bootstrap a server connection.
-    bootstrapGameData @0 () -> (data: GameTypes.GameBootstrapData);
-    # Sends a chat message to the server.
-    sendChatMessage @1 (text: Text) -> ();
-    # Sends a block action to the server.
-    sendBlockAction @2 (tick: UInt64, position: GameTypes.PositionData, action: GameTypes.BlockAction) -> ();
+struct BlockActionRequest @0xa74244e28dcb5f2f {
+    position @0 :GameTypes.PositionData;
+    action @1 :GameTypes.BlockAction;
+    tick @2 :UInt64;
 }
 
 struct ChunkDataStreamPacket {

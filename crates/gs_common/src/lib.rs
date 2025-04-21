@@ -29,12 +29,14 @@ use bevy::utils::synccell::SyncCell;
 use gs_schemas::registries::GameRegistries;
 use gs_schemas::registry::Registry;
 use gs_schemas::{GameSide, GsExtraData};
+use network::server::NetworkThreadServerCommand;
+use network::transport::NetworkConnection;
 use smallvec::SmallVec;
 use voxel::persistence::generator::GeneratorPersistenceLayer;
 use voxel::plugin::VoxelUniverseBuilder;
 
 use crate::config::{GameConfig, GameConfigHandle};
-use crate::network::server::{LocalConnectionPipe, NetworkServerPlugin, NetworkThreadServerState};
+use crate::network::server::{NetworkServerPlugin, NetworkThreadServerState};
 use crate::network::thread::NetworkThread;
 use crate::prelude::*;
 use crate::voxel::generator::multi_noise::MultiNoiseGenerator;
@@ -127,7 +129,7 @@ impl GameServer {
         let (tx, rx) = std_bounded_channel(1);
         let (ctrl_tx, ctrl_rx) = std_unbounded_channel();
 
-        let network_thread = NetworkThread::new(GameSide::Server, NetworkThreadServerState::new);
+        let network_thread = NetworkThread::new(GameSide::Server, NetworkThreadServerState::new)?;
 
         let engine_thread = std::thread::Builder::new()
             .name("GS Server Engine Thread".to_owned())
@@ -150,6 +152,14 @@ impl GameServer {
         let server = Arc::new(server);
         tx.send(Arc::clone(&server))
             .expect("Could not pass initialization data to the server engine thread");
+        let (listen_result, listen_tx) = AsyncResult::new_pair();
+        server
+            .network_thread
+            .send_command(NetworkThreadServerCommand::UpdateListeners(server.clone(), listen_tx));
+        if let Err(e) = listen_result.blocking_wait() {
+            let _ = server.shutdown().blocking_wait();
+            return Err(e);
+        }
         Ok(server)
     }
 
@@ -226,11 +236,11 @@ impl GameServer {
     }
 
     /// Asynchronously creates a new local connection to this server's network runtime.
-    pub fn create_local_connection(self: &Arc<Self>) -> AsyncResult<LocalConnectionPipe> {
-        let inner_engine = Arc::clone(self);
-        self.network_thread.schedule_task(async move |state| {
-            NetworkThreadServerState::accept_local_connection(state, inner_engine).await
-        })
+    pub fn create_local_connection(self: &Arc<Self>) -> AsyncOneshotReceiver<NetworkConnection> {
+        let (lc_tx, lc_rx) = async_oneshot_channel();
+        self.network_thread
+            .send_command(NetworkThreadServerCommand::CreateLocalConnection(self.clone(), lc_tx));
+        lc_rx
     }
 
     fn engine_thread_main(
@@ -296,27 +306,10 @@ impl GameServer {
             .unwrap()
             .build();
 
-        app.add_systems(Startup, Self::network_startup_system);
         app.add_systems(FixedPostUpdate, Self::control_command_handler_system);
         info!("Engine thread starting");
         app.run();
         info!("Engine thread terminating");
-    }
-
-    fn network_startup_system(engine: Res<GameServerResource>) {
-        let engine = &engine.into_inner().0;
-        let net_engine = Arc::clone(engine);
-        info!("Bootstrapping network");
-        engine
-            .network_thread
-            .schedule_task(async move |state| {
-                NetworkThreadServerState::bootstrap(state, net_engine).await?;
-                NetworkThreadServerState::allow_streams(state).await;
-                Ok(())
-            })
-            .blocking_wait()
-            .unwrap();
-        info!("Bootstrapping network done");
     }
 
     fn control_command_handler_system(world: &mut World) {
