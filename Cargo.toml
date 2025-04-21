@@ -110,6 +110,7 @@ features = [
     "android_shared_stdcxx", # For Android builds, use shared C++ library
     "multi_threaded",
     "bevy_state",
+    "bevy_log",
 
     # Extra Bevy functionality:
     "serialize", # Support for `serde` Serialize/Deserialize
