@@ -121,7 +121,7 @@ pub enum PacketSegments<'pkt> {
     Capnp(&'pkt capnp::message::Builder<HeapAllocator>),
 }
 
-impl<'pkt> ReaderSegments for PacketSegments<'pkt> {
+impl ReaderSegments for PacketSegments<'_> {
     fn get_segment(&self, idx: u32) -> Option<&[u8]> {
         match self {
             PacketSegments::Bytes(v) => v.get_segment(idx),

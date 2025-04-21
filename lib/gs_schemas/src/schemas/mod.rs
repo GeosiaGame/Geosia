@@ -184,7 +184,7 @@ pub trait CapnpExt: Sized {
     /// Serializes a UUID into a capnp message.
     fn write_to_message(&self, builder: &mut Self::Builder<'_>);
     /// Deserializes a UUID from a capnp message.
-    fn read_from_message<'a>(reader: &Self::Reader<'a>) -> Result<Self, Self::ReaderError>;
+    fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError>;
 }
 
 impl CapnpExt for Uuid {
