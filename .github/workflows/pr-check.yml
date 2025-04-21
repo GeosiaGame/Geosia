@@ -35,8 +35,6 @@ jobs:
     env:
       RUST_BACKTRACE: full
       RUSTV: ${{ matrix.rust }}
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - name: Install dependencies
         if: matrix.os == 'ubuntu-24.04'
@@ -58,8 +56,6 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
-      - name: Start sccache server
-        run: sccache --start-server
 
       - name: Run tests
         run: cargo "+${{ matrix.rust }}" test --workspace
@@ -72,9 +68,4 @@ jobs:
       - name: Check formatting
         if: startsWith(matrix.rust, 'nightly')
         run: cargo "+${{ matrix.rust }}" fmt --check --all
-
-      - name: Print sccache stats
-        run: ${SCCACHE_PATH} --show-stats
-      - name: Stop sccache server
-        run: ${SCCACHE_PATH} --stop-server || true
 
