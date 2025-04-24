@@ -292,6 +292,7 @@ fn gizmo_toggles(
     if camera_query.is_empty() {
         return;
     }
+    let Some(ctx) = ui.try_ctx_mut() else { return };
 
     let toggles = &mut *toggles;
     egui::Window::new("Debug gizmos")
@@ -299,7 +300,7 @@ fn gizmo_toggles(
         .resizable(false)
         .anchor(Align2::RIGHT_BOTTOM, egui::vec2(0.0, 0.0))
         .auto_sized()
-        .show(ui.ctx_mut(), move |ui| {
+        .show(ctx, move |ui| {
             ui.checkbox(&mut toggles.local_coordinates, "Local Coords");
             ui.checkbox(&mut toggles.current_chunk, "Current Chunk");
             ui.checkbox(&mut toggles.raycast, "Raycast");

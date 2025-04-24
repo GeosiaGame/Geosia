@@ -11,6 +11,7 @@ mod debugcam;
 pub mod network;
 pub mod prelude;
 pub mod states;
+pub mod ui;
 pub mod voxel;
 
 use bevy::a11y::AccessibilityPlugin;
@@ -122,8 +123,6 @@ pub fn client_main() {
     app.add_plugins(EguiPlugin {
         enable_multipass_for_primary_context: true,
     });
-    app.add_plugins(ClientVoxelUniversePlugin)
-        .add_plugins(ClientPacketHandlerPlugin);
 
     app.init_state::<ClientAppState>();
     fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {
@@ -148,9 +147,12 @@ pub fn client_main() {
         .add_plugins(VoxelUniverseClientPlugin)
         .add_plugins(states::main_menu::MainMenuPlugin)
         .add_plugins(states::loading_game::LoadingGamePlugin)
-        .add_plugins(states::in_game::InGamePlugin);
+        .add_plugins(states::in_game::InGamePlugin)
+        .add_plugins(ClientVoxelUniversePlugin)
+        .add_plugins(ClientPacketHandlerPlugin)
+        .add_plugins(ui::chat::chat_plugin)
+        .add_plugins(debug_window::DebugWindow);
 
-    app.add_plugins(debug_window::DebugWindow);
     app.add_systems(PostUpdate, control_command_handler_system);
 
     app.run();
