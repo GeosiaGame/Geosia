@@ -143,7 +143,8 @@ pub fn client_main() {
     configure_sets(&mut app, FixedUpdate);
     configure_sets(&mut app, FixedPostUpdate);
 
-    app.add_plugins(debugcam::PlayerPlugin)
+    app.add_plugins(ui::common_game_ui_plugin)
+        .add_plugins(debugcam::PlayerPlugin)
         .add_plugins(VoxelUniverseClientPlugin)
         .add_plugins(states::main_menu::MainMenuPlugin)
         .add_plugins(states::loading_game::LoadingGamePlugin)
