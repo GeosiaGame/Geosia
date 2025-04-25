@@ -63,7 +63,7 @@ fn chat_message_observer(trigger: Trigger<ChatMessage>, mut state: ResMut<ChatSt
 }
 
 fn open_chat(keys: Res<ButtonInput<KeyCode>>, mut state: ResMut<ChatState>, keybinds: Res<KeyBindings>) {
-    if keys.just_pressed(keybinds.open_chat) {
+    if keys.just_released(keybinds.open_chat) {
         state.request_edit_focus = true;
     }
 }
@@ -129,6 +129,9 @@ fn chat_ui(
                         commands.trigger(SetGrabMode(true));
                     }
                 }
+                if edit_resp.lost_focus() {
+                    state.entry_string.clear();
+                }
 
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
@@ -139,7 +142,7 @@ fn chat_ui(
                                 ui.add(egui::Label::new(
                                     egui::RichText::new(msg.as_str())
                                         .color(egui::Rgba::WHITE)
-                                        .background_color(egui::Rgba::from_black_alpha(0.2)),
+                                        .background_color(egui::Rgba::from_black_alpha(0.4)),
                                 ));
                                 ui.add_space(2.0);
                             }
