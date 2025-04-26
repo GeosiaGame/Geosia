@@ -17,9 +17,10 @@ missing_docs = "warn"
 [workspace.lints.rustdoc]
 
 [workspace.lints.clippy]
-disallowed_types = "deny"
-await_holding_refcell_ref = "deny"
 await_holding_lock = "deny"
+await_holding_refcell_ref = "deny"
+clone_on_ref_ptr = "deny"
+disallowed_types = "deny"
 type_complexity = "allow" # Some bevy types get really wordy but still readable
 
 [workspace.dependencies]

@@ -147,7 +147,10 @@ impl GameServer {
         let (listen_result, listen_tx) = AsyncResult::new_pair();
         server
             .network_thread
-            .send_command(NetworkThreadServerCommand::UpdateListeners(server.clone(), listen_tx));
+            .send_command(NetworkThreadServerCommand::UpdateListeners(
+                Arc::clone(&server),
+                listen_tx,
+            ));
         if let Err(e) = listen_result.blocking_wait() {
             let _ = server.shutdown().blocking_wait();
             return Err(e);
@@ -231,7 +234,10 @@ impl GameServer {
     pub fn create_local_connection(self: &Arc<Self>) -> AsyncOneshotReceiver<NetworkConnection> {
         let (lc_tx, lc_rx) = async_oneshot_channel();
         self.network_thread
-            .send_command(NetworkThreadServerCommand::CreateLocalConnection(self.clone(), lc_tx));
+            .send_command(NetworkThreadServerCommand::CreateLocalConnection(
+                Arc::clone(self),
+                lc_tx,
+            ));
         lc_rx
     }
 

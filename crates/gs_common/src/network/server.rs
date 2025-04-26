@@ -233,7 +233,7 @@ impl NetworkThreadState for NetworkThreadServerState {
                     }
                 };
                 let stream = Arc::new(stream);
-                let stream_key = conn.packet_streams.insert(stream.clone());
+                let stream_key = conn.packet_streams.insert(Arc::clone(&stream));
                 let _ = sender.send(Ok((stream, stream_key)));
             }
             NetworkThreadServerCommand::InsertAcceptedStream(server_connection_key, packet_stream, sender) => {
@@ -383,8 +383,8 @@ impl NetworkThreadServerState {
         let mut stream_map = SlotMap::with_capacity_and_key(16);
         let main_c2s_stream = Arc::new(main_c2s_stream);
         let main_s2c_stream = Arc::new(main_s2c_stream);
-        let main_c2s_key = stream_map.insert(main_c2s_stream.clone());
-        let main_s2c_key = stream_map.insert(main_s2c_stream.clone());
+        let main_c2s_key = stream_map.insert(Arc::clone(&main_c2s_stream));
+        let main_s2c_key = stream_map.insert(Arc::clone(&main_s2c_stream));
 
         let (connection_key_tx, connection_key_rx) = async_oneshot_channel::<ServerConnectionKey>();
         let connection = Arc::new(connection);
@@ -407,8 +407,8 @@ impl NetworkThreadServerState {
 
         let (packet_tx, packet_rx) = async_unbounded_channel();
 
-        let s2c_s = main_s2c_stream.clone();
-        let c2s_s = main_c2s_stream.clone();
+        let s2c_s = Arc::clone(&main_s2c_stream);
+        let c2s_s = Arc::clone(&main_c2s_stream);
         let _ = engine
             .schedule_bevy(move |world| {
                 world.spawn(ConnectedPlayer {
@@ -427,14 +427,14 @@ impl NetworkThreadServerState {
             engine.network_thread.startup_time(),
             connection_key,
             main_s2c_key,
-            main_s2c_stream.clone(),
+            Arc::clone(&main_s2c_stream),
             packet_tx.clone(),
         ));
         let c2s_rx = spawn_local(Self::packet_stream_receiver(
             engine.network_thread.startup_time(),
             connection_key,
             main_c2s_key,
-            main_c2s_stream.clone(),
+            Arc::clone(&main_c2s_stream),
             packet_tx.clone(),
         ));
         spawn_local(Self::packet_stream_acceptor(
@@ -451,7 +451,7 @@ impl NetworkThreadServerState {
         engine
             .network_thread
             .send_command(NetworkThreadServerCommand::RemoveServerConnection(
-                engine.clone(),
+                Arc::clone(&engine),
                 connection_key,
             ));
     }
@@ -552,7 +552,7 @@ impl NetworkThreadServerState {
                     received_at: Instant::now(),
                     connection_key,
                     stream_key,
-                    stream: stream.clone(),
+                    stream: Arc::clone(&stream),
                 })
                 .is_err()
             {

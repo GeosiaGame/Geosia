@@ -424,7 +424,7 @@ impl NetworkThreadClientState {
                     received_at: Instant::now(),
                     connection_key: default(),
                     stream_key,
-                    stream: stream.clone(),
+                    stream: Arc::clone(&stream),
                 })
                 .is_err()
             {

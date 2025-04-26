@@ -306,7 +306,7 @@ fn server_system_open_chunk_stream(
                     ready_inserts.push((
                         entity,
                         ConnectedPlayerChunkStream {
-                            s2c_chunk_stream: stream.clone(),
+                            s2c_chunk_stream: Arc::clone(stream),
                             s2c_chunk_stream_key: *key,
                         },
                     ));
