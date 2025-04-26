@@ -12,7 +12,7 @@ use gs_common::{
 };
 use gs_schemas::{
     GameSide,
-    dependencies::uuid::Uuid,
+    dependencies::{kstring::KString, uuid::Uuid},
     schemas::{
         CapnpExt,
         game_types_capnp::{SimpleResult, game_bootstrap_data},
@@ -49,17 +49,25 @@ impl Plugin for ClientPacketHandlerPlugin {
     }
 }
 
+/// An observable event triggered when a chat message is received from the server.
+#[derive(Clone, Event)]
+pub struct ChatMessage {
+    /// The contents of the message
+    pub message: KString,
+    /// If the message is the echo response to a player-sent message
+    pub is_echo: bool,
+}
+
 /// The main system handling client packets.
 #[allow(private_interfaces)]
 pub fn client_packet_handler_system(
     mut client: ResMut<AuthenticatedNetworkClient>,
-    net_thread: Res<ClientNetworkThreadHolder>,
     current_state: Res<State<ClientAppState>>,
     mut commands: Commands,
     mut network_voxel_client: Option<Single<&mut NetworkVoxelClient>>,
 ) {
     let client = &mut *client;
-    let response_timestamp = net_thread.0.packet_timestamp();
+    let response_timestamp = client.packet_timestamp();
 
     let mut handle_packet = |incoming: QueuedPacket| -> Result<()> {
         const READER_OPTIONS: capnp::message::ReaderOptions = RPC_CLIENT_READER_OPTIONS;
@@ -118,6 +126,10 @@ pub fn client_packet_handler_system(
                     let root = incoming.data.parse_typed::<capnp::text::Owned>(READER_OPTIONS)?;
                     let message = String::from_utf8_lossy(root.get()?.get_payload()?.as_bytes());
                     info!("Chat message received: {message}");
+                    commands.trigger(ChatMessage {
+                        message: KString::from_ref(&message),
+                        is_echo: false,
+                    });
                 }
                 PacketId::BlockAction => {
                     // no-op
@@ -144,6 +156,10 @@ pub fn client_packet_handler_system(
                     let root = incoming.data.parse_typed::<capnp::text::Owned>(READER_OPTIONS)?;
                     let message = String::from_utf8_lossy(root.get()?.get_payload()?.as_bytes());
                     info!("Chat message echo received: {message}");
+                    commands.trigger(ChatMessage {
+                        message: KString::from_ref(&message),
+                        is_echo: true,
+                    });
                 }
                 PacketId::BlockAction => {
                     let root = incoming.data.parse_simple(READER_OPTIONS)?;

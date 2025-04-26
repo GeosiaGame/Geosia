@@ -9,6 +9,7 @@ use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::math::{Vec3A, vec3};
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use bevy_egui::egui::Align2;
+use bevy_egui::input::egui_wants_any_input;
 use bevy_egui::{EguiContextPass, EguiContexts};
 use gs_common::raycast::{RaycastContext, raycast};
 use gs_common::voxel::plugin::BlockRegistryHolder;
@@ -20,6 +21,7 @@ use gs_schemas::voxel::voxeltypes::EMPTY_BLOCK;
 use crate::network::AuthenticatedNetworkClient;
 use crate::prelude::*;
 use crate::states::{ClientAppState, InGameSystemSet, in_game};
+use crate::ui::{IsCursorGrabbed, SetGrabMode};
 use crate::voxel::ClientVoxelUniverse;
 
 /// Mouse sensitivity and movement speed
@@ -47,6 +49,7 @@ pub struct KeyBindings {
     pub move_right: KeyCode,
     pub move_ascend: KeyCode,
     pub move_descend: KeyCode,
+    pub open_chat: KeyCode,
     pub toggle_grab_cursor: KeyCode,
     pub place_block: MouseButton,
     pub break_block: MouseButton,
@@ -61,6 +64,7 @@ impl Default for KeyBindings {
             move_right: KeyCode::KeyD,
             move_ascend: KeyCode::Space,
             move_descend: KeyCode::ShiftLeft,
+            open_chat: KeyCode::KeyT,
             toggle_grab_cursor: KeyCode::Escape,
             place_block: MouseButton::Left,
             break_block: MouseButton::Right,
@@ -79,28 +83,10 @@ pub struct BiomeText;
 #[derive(Component)]
 pub struct PositionText;
 
-/// Grabs/ungrabs mouse cursor
-fn toggle_grab_cursor(window: &mut Window) {
-    match window.cursor_options.grab_mode {
-        CursorGrabMode::None => {
-            window.cursor_options.grab_mode = CursorGrabMode::Confined;
-            window.cursor_options.visible = false;
-        }
-        _ => {
-            window.cursor_options.grab_mode = CursorGrabMode::None;
-            window.cursor_options.visible = true;
-        }
-    }
-}
-
 /// Grabs the cursor when game first starts
-fn initial_grab_cursor(mut primary_window: Query<&mut Window, With<PrimaryWindow>>) {
-    if let Ok(mut window) = primary_window.single_mut() {
-        if window.focused {
-            toggle_grab_cursor(&mut window);
-        }
-    } else {
-        warn!("Primary window not found for `initial_grab_cursor`!");
+fn initial_grab_cursor(state: Res<IsCursorGrabbed>, mut commands: Commands) {
+    if !**state {
+        commands.trigger(SetGrabMode(true));
     }
 }
 
@@ -287,19 +273,22 @@ fn gizmo_toggles(
     camera_query: Query<&Transform, With<FlyCam>>,
     mut ui: EguiContexts,
     mut toggles: ResMut<DebugGizmoToggles>,
+    cursor_grabbed: Res<IsCursorGrabbed>,
 ) {
     use bevy_egui::egui;
     if camera_query.is_empty() {
         return;
     }
+    let Some(ctx) = ui.try_ctx_mut() else { return };
 
     let toggles = &mut *toggles;
     egui::Window::new("Debug gizmos")
         .collapsible(true)
         .resizable(false)
+        .interactable(!**cursor_grabbed)
         .anchor(Align2::RIGHT_BOTTOM, egui::vec2(0.0, 0.0))
         .auto_sized()
-        .show(ui.ctx_mut(), move |ui| {
+        .show(ctx, move |ui| {
             ui.checkbox(&mut toggles.local_coordinates, "Local Coords");
             ui.checkbox(&mut toggles.current_chunk, "Current Chunk");
             ui.checkbox(&mut toggles.raycast, "Raycast");
@@ -409,14 +398,11 @@ fn lookat_gizmo(
 fn cursor_grab(
     keys: Res<ButtonInput<KeyCode>>,
     key_bindings: Res<KeyBindings>,
-    mut primary_window: Query<&mut Window, With<PrimaryWindow>>,
+    state: Res<IsCursorGrabbed>,
+    mut commands: Commands,
 ) {
-    if let Ok(mut window) = primary_window.single_mut() {
-        if keys.just_pressed(key_bindings.toggle_grab_cursor) {
-            toggle_grab_cursor(&mut window);
-        }
-    } else {
-        warn!("Primary window not found for `cursor_grab`!");
+    if keys.just_pressed(key_bindings.toggle_grab_cursor) {
+        commands.trigger(SetGrabMode(!**state));
     }
 }
 
@@ -471,9 +457,18 @@ impl Plugin for PlayerPlugin {
             .add_systems(OnEnter(ClientAppState::InGame), setup_player)
             .add_systems(OnEnter(ClientAppState::InGame), initial_grab_cursor)
             .add_systems(OnEnter(ClientAppState::InGame), spawn_debug_text)
-            .add_systems(Update, player_move.in_set(InGameSystemSet))
-            .add_systems(Update, player_look.in_set(InGameSystemSet))
-            .add_systems(Update, player_action.in_set(InGameSystemSet))
+            .add_systems(
+                Update,
+                player_move.run_if(not(egui_wants_any_input)).in_set(InGameSystemSet),
+            )
+            .add_systems(
+                Update,
+                player_look.run_if(not(egui_wants_any_input)).in_set(InGameSystemSet),
+            )
+            .add_systems(
+                Update,
+                player_action.run_if(not(egui_wants_any_input)).in_set(InGameSystemSet),
+            )
             .add_systems(EguiContextPass, gizmo_toggles.in_set(InGameSystemSet))
             .add_systems(
                 Update,
