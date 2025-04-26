@@ -21,7 +21,7 @@ pub struct StandardShapeMetadata {
 impl StandardShapeMetadata {
     /// A default metadata object for a meta value of 0.
     pub fn new() -> Self {
-        Default::default()
+        Self::default()
     }
 
     /// Construct standard shape metadata from the given shape and orientation IDs.

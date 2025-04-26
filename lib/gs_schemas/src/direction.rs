@@ -211,7 +211,7 @@ impl Default for OctahedralOrientation {
 impl OctahedralOrientation {
     /// A default orientation of local right&up aligning with global right&up.
     pub fn new() -> Self {
-        Default::default()
+        Self::default()
     }
 
     /// Tries to construct an orientation from the given local directions.

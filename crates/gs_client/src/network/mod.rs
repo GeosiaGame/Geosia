@@ -148,7 +148,7 @@ impl NetworkThreadClientState {
     /// Constructor.
     pub async fn new() -> Result<Self> {
         Ok(Self {
-            variant: Default::default(),
+            variant: NetworkThreadClientStateVariant::default(),
         })
     }
 

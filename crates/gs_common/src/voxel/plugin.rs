@@ -63,9 +63,7 @@ impl<ExtraData: GsExtraData> Plugin for VoxelUniversePlugin<ExtraData> {
 impl<ExtraData: GsExtraData> VoxelUniversePlugin<ExtraData> {
     /// Constructor.
     pub fn new() -> Self {
-        Self {
-            _extra_data: Default::default(),
-        }
+        Self { _extra_data: default() }
     }
 }
 
@@ -179,7 +177,7 @@ impl<ExtraData: GsExtraData> VoxelUniverse<ExtraData> {
     pub fn new(group_data: ExtraData::GroupData) -> Self {
         Self {
             loaded_chunks: ChunkGroup::with_data(group_data),
-            _extra_data: Default::default(),
+            _extra_data: default(),
         }
     }
 
