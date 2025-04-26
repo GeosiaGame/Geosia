@@ -393,7 +393,7 @@ impl PacketStream {
                     let mut buf = AlignedBytesMut::new(len);
                     raw_rx.read_exact(&mut buf).await?;
                     assert_eq!(len, buf.len());
-                    tx_incoming.send(PacketWrapper::from(buf))?
+                    tx_incoming.send(PacketWrapper::from(buf))?;
                 }
             }()
             .await;

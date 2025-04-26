@@ -5,5 +5,5 @@ use gs_common::geosia_pre_main;
 
 fn main() {
     geosia_pre_main();
-    client_main()
+    client_main();
 }

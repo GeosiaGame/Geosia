@@ -59,7 +59,7 @@ fn chunk_get(c: &mut Criterion) {
                     let val = chunk.get(black_box(cpos));
                     cidx.set((cidx.get() + 1) % CHUNK_DIM3 as usize);
                     val
-                })
+                });
             },
         );
     }
@@ -78,7 +78,7 @@ fn chunk_get_copy(c: &mut Criterion) {
                     let val = chunk.get_copy(black_box(cpos));
                     cidx.set((cidx.get() + 1) % CHUNK_DIM3 as usize);
                     val
-                })
+                });
             },
         );
     }

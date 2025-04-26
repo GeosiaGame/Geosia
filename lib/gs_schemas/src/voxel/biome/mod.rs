@@ -91,7 +91,7 @@ impl PartialEq for BiomeDefinition {
 
 impl Hash for BiomeDefinition {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.name.hash(state)
+        self.name.hash(state);
     }
 }
 

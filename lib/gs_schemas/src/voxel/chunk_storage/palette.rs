@@ -307,7 +307,7 @@ impl<DataType: ChunkDataType + Copy> PaletteStorage<DataType> {
                 len => panic!("Invalid data array size of {} items", len),
             }
         }
-        upgrade(&mut self.data_storage)
+        upgrade(&mut self.data_storage);
     }
 }
 impl<DataType: ChunkDataType + Copy + Default> Default for PaletteStorage<DataType> {

@@ -723,7 +723,7 @@ impl Add<DVec2Wrapper> for DVec2Wrapper {
 impl AddAssign<DVec2Wrapper> for DVec2Wrapper {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
-        self.0.add_assign(rhs.0)
+        self.0.add_assign(rhs.0);
     }
 }
 impl Sub<DVec2Wrapper> for DVec2Wrapper {
@@ -736,7 +736,7 @@ impl Sub<DVec2Wrapper> for DVec2Wrapper {
 impl SubAssign<DVec2Wrapper> for DVec2Wrapper {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
-        self.0.sub_assign(rhs.0)
+        self.0.sub_assign(rhs.0);
     }
 }
 impl Deref for DVec2Wrapper {
