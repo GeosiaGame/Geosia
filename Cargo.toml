@@ -176,6 +176,7 @@ uuid = { version = "1.9.1", features = [
     "v6",
 ] }
 zorder = "0.2.2"
+zstd = "0.13.3"
 
 # Remote, bevy plugins
 bevy_egui = { version = "0.34.0", default-features = false, features = [

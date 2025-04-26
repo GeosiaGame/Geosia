@@ -44,6 +44,7 @@ rand_xoshiro.workspace = true
 rusqlite.workspace = true
 noise.workspace = true
 zorder.workspace = true
+zstd.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

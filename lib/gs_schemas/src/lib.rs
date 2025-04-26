@@ -72,6 +72,7 @@ pub mod dependencies {
     pub use thiserror;
     pub use uuid;
     pub use zorder;
+    pub use zstd;
 }
 
 /// A simple wrapper type that's either a slice borrow, or an owned [`SmallVec`].
