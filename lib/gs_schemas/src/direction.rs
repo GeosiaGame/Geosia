@@ -69,7 +69,7 @@ impl Direction {
                 .map(|x| x.abs())
                 .position_max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                 .unwrap_or(1);
-            Self::try_from_index(maxaxis * 2 + if vc[maxaxis] < 0.0 { 0 } else { 1 }).unwrap()
+            Self::try_from_index(maxaxis * 2 + usize::from(vc[maxaxis] >= 0.0)).unwrap()
         }
     }
 

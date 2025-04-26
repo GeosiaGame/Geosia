@@ -19,6 +19,7 @@ missing_docs = "warn"
 [workspace.lints.clippy]
 await_holding_lock = "deny"
 await_holding_refcell_ref = "deny"
+bool-to-int-with-if = "deny"
 clone_on_ref_ptr = "deny"
 cloned_instead_of_copied = "deny"
 disallowed_types = "deny"
