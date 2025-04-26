@@ -203,7 +203,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
 }
 
 impl MultiNoiseGenerator {
-    /// create a new [`StdGenerator`].
+    /// create a new [`MultiNoiseGenerator`].
     pub fn new(seed: u64, biome_registry: Arc<BiomeRegistry>, block_registry: Arc<BlockRegistry>) -> Self {
         let seed_int = seed as u32;
 

@@ -50,7 +50,7 @@ pub struct ClientChunkGroupData {
 /// Network chunk streaming client, exists alongside [`VoxelUniverse`] on clients.
 #[derive(Component)]
 pub struct NetworkVoxelClient {
-    /// Public for [`gs_client`] usage, to allow receiving&processing chunk packets.
+    /// Public for `gs_client` usage, to allow receiving&processing chunk packets.
     pub chunk_packet_queue: VecDeque<QueuedPacket>,
 }
 

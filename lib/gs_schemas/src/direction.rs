@@ -112,7 +112,7 @@ impl Direction {
         }
     }
 
-    /// Converts a direction index (from [`Self::to_index`]) into a Direction, or None if not valid.
+    /// Converts a direction index (from [`Self::as_index`]) into a Direction, or None if not valid.
     pub fn try_from_index(idx: usize) -> Option<Self> {
         use Direction::*;
         match idx {
@@ -255,7 +255,7 @@ impl OctahedralOrientation {
         (right_idx * 4 + up_idx + 24 - 5) % 24
     }
 
-    /// Converts an index (0..24, as returned from [`to_index`]) to an orientation
+    /// Converts an index (0..24, as returned from [`Self::to_index`]) to an orientation
     pub fn try_from_index(i: usize) -> Option<Self> {
         if i >= 24 {
             None

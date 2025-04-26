@@ -236,7 +236,7 @@ const fn bit_repeat(pattern: u128, len: u32) -> u128 {
 }
 
 /// Converts a 3d vector of ints to a XYZ Z-order curve packed 128-bit integer by interleaving the bits.
-/// `X[0th bit]`` maps to the least significant bit of the output, followed by `Y[0]`` and then `Z[0]``.
+/// `X[0th bit]` maps to the least significant bit of the output, followed by `Y[0]` and then `Z[0]`.
 /// Provides spatial locality for sorted coordinates.
 /// See [Z-order curves](https://en.wikipedia.org/wiki/Z-order_curve).
 #[inline]
