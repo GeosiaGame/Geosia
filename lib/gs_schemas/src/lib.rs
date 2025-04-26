@@ -66,6 +66,7 @@ pub mod dependencies {
     pub use noise;
     pub use rand;
     pub use rand_xoshiro;
+    pub use rusqlite;
     pub use serde;
     pub use smallvec;
     pub use thiserror;

@@ -41,6 +41,7 @@ thiserror.workspace = true
 uuid.workspace = true
 rand.workspace = true
 rand_xoshiro.workspace = true
+rusqlite.workspace = true
 noise.workspace = true
 zorder.workspace = true
 
