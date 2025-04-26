@@ -1,11 +1,3 @@
-#![warn(missing_docs)]
-#![deny(
-    clippy::disallowed_types,
-    clippy::await_holding_refcell_ref,
-    clippy::await_holding_lock
-)]
-#![allow(clippy::type_complexity)]
-
 //! The clientside of Geosia
 mod debugcam;
 pub mod network;
@@ -181,7 +173,6 @@ mod debug_window {
     use std::f32::consts::PI;
 
     use bevy::color::palettes::tailwind;
-    use bevy::math::vec3;
 
     use crate::prelude::*;
 

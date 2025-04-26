@@ -1,4 +1,4 @@
-//! Range wrappers for mostly world generation, because the default std::ops::Range isn't an enum for some reason.
+//! Range wrappers for mostly world generation, because the default [`std::ops::Range`] isn't an enum for some reason.
 
 // My own type of ranges, now that I cannot use the built-in type...
 /// Wrapper of Range that we can work with within Rust's type system

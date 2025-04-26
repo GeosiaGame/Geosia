@@ -1,6 +1,5 @@
 //! Centralizes the authenticated client packet handling to a bevy system.
 
-use bevy::app::{FixedPreUpdate, Plugin};
 use gs_common::{
     InGameSystemSet, builtin_game_registries,
     network::{

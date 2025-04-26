@@ -1,6 +1,5 @@
 //! Simple promise types that allow easily interacting with an asynchronous operation.
 
-use std::future::Future;
 use std::pin::Pin;
 
 use anyhow::Error;
@@ -151,7 +150,7 @@ impl<OkT: Send + 'static> GenericAsyncResult for AsyncResult<OkT> {
     }
 
     fn async_generic_log_when_fails(self: Box<Self>, context: &'static str) {
-        self.async_log_when_fails(context)
+        self.async_log_when_fails(context);
     }
 }
 

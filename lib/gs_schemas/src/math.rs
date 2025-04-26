@@ -1,6 +1,6 @@
 //! Math helper functions.
 
-use bevy_math::{Vec3A, prelude::*};
+use bevy_math::prelude::*;
 
 /// An epsilon value so small that it should be indistinguishable from zero for most operations performed on close-to-natural numbers.
 /// Based on the floating-point precision around a value of `1`.
@@ -12,6 +12,7 @@ pub const VERY_CLOSE_TO_ZERO_F64: f64 = 1e-16f64;
 /// A true signum implementation that returns zero for very-close-to-zero floating point numbers.
 pub trait ZeroRespectingSignum {
     /// Returns -1 for negative components, 0 for zero or very-close-to-zero components and 1 for positive components.
+    #[must_use]
     fn zero_respecting_signum(self) -> Self;
 }
 

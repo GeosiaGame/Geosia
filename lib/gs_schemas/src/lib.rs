@@ -1,10 +1,3 @@
-#![warn(missing_docs)]
-#![deny(
-    clippy::disallowed_types,
-    clippy::await_holding_refcell_ref,
-    clippy::await_holding_lock
-)]
-
 //! A library crate of the in-memory, on-disk and network representations of the game's core data.
 
 extern crate core;
@@ -47,6 +40,7 @@ pub enum GameSide {
 
 impl GameSide {
     /// Returns the opposite side
+    #[must_use]
     pub fn opposite(self) -> GameSide {
         match self {
             Self::Client => Self::Server,
@@ -79,11 +73,11 @@ pub mod dependencies {
     pub use zorder;
 }
 
-/// A simple wrapper type that's either a slice borrow, or an owned SmallVec.
+/// A simple wrapper type that's either a slice borrow, or an owned [`SmallVec`].
 pub enum SmallCowVec<'b, A: Array> {
     /// The slice variant.
     Borrowed(&'b [A::Item]),
-    /// The SmallVec variant.
+    /// The [`SmallVec`] variant.
     Owned(SmallVec<A>),
 }
 

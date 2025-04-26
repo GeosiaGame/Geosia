@@ -1,6 +1,6 @@
 //! Generic code for a stable forwards/backwards compatible serialization framework for game objects.
 //!
-//! Based on capnproto: https://capnproto.org/language.html, https://docs.rs/capnp/latest/capnp/
+//! Based on capnproto: <https://capnproto.org/language.html>, <https://docs.rs/capnp/latest/capnp/>
 
 use std::convert::Infallible;
 use std::fmt::{Debug, Display};
@@ -18,7 +18,7 @@ use uuid::Uuid;
 use crate::registry::RegistryName;
 
 /// Common game object types.
-#[allow(missing_docs, clippy::all)] // Auto-generated
+#[allow(missing_docs, clippy::all, clippy::pedantic)] // Auto-generated
 pub mod game_types_capnp {
     include!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -42,7 +42,7 @@ pub mod game_types_capnp {
 }
 
 /// Voxel mesh encoding for resource bundles.
-#[allow(missing_docs, clippy::all)] // Auto-generated
+#[allow(missing_docs, clippy::all, clippy::pedantic)] // Auto-generated
 pub mod voxel_mesh_capnp {
     include!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -51,7 +51,7 @@ pub mod voxel_mesh_capnp {
 }
 
 /// The RPC network protocol.
-#[allow(missing_docs, clippy::all)] // Auto-generated
+#[allow(missing_docs, clippy::all, clippy::pedantic)] // Auto-generated
 pub mod network_capnp {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/capnp-generated/network_capnp.rs"));
 }

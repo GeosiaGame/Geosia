@@ -111,7 +111,7 @@ impl PartialEq for BlockDefinition {
 
 impl Hash for BlockDefinition {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.name.hash(state)
+        self.name.hash(state);
     }
 }
 

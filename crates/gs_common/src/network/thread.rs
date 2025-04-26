@@ -20,7 +20,7 @@ pub struct NetworkThread<State: NetworkThreadState> {
 /// Trait that needs to be implemented for the state object of the network thread.
 #[allow(async_fn_in_trait)]
 pub trait NetworkThreadState: 'static {
-    /// Command type passed to [`on_command`].
+    /// Command type passed to [`Self::on_command`].
     type StateCommand: Sized + Send + 'static;
 
     /// Handle a single custom command for the thread.

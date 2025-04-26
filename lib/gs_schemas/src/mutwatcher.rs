@@ -142,8 +142,8 @@ impl<T> MutWatcher<T> {
     }
 
     /// Grants mutable access to the inner value and increases or calculates the current predicted revision.
-    /// Make sure to send one mutation request to the server for each client call to this method, and server-side to call mutate_stored once for each received client mutation request (even if it fails).
-    /// Otherwise [`Self::update_from_remote_revision`] will not work as intended.
+    /// Make sure to send one mutation request to the server for each client call to this method, and server-side to call [`Self::mutate_stored`] once for each received client mutation request (even if it fails).
+    /// Otherwise [`Self::mutate_from_server_revision`] will not work as intended.
     #[inline]
     pub fn mutate_predicted(&mut self) -> &mut T {
         match &mut self.predicted_revision {

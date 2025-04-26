@@ -167,6 +167,7 @@ impl PacketWrapper {
 
     /// Clones the packet for broadcast transmission, converts from capnp to serialized form if needed (including `self` for efficient further clones).
     /// Might incur serialization cost once, after which further clones of either copy are cheap refcounted pointer copies.
+    #[must_use]
     pub fn clone_mut(&mut self) -> Self {
         match self {
             Self::Serialized(bytes) => Self::Serialized(bytes.clone()),
@@ -392,7 +393,7 @@ impl PacketStream {
                     let mut buf = AlignedBytesMut::new(len);
                     raw_rx.read_exact(&mut buf).await?;
                     assert_eq!(len, buf.len());
-                    tx_incoming.send(PacketWrapper::from(buf))?
+                    tx_incoming.send(PacketWrapper::from(buf))?;
                 }
             }()
             .await;

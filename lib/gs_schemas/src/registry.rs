@@ -49,7 +49,7 @@ pub struct RegistryName {
     pub key: KString,
 }
 
-/// Reference to a simple namespaced registry object name, see RegistryNamed for the owned variant
+/// Reference to a simple namespaced registry object name, see [`RegistryName`] for the owned variant
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Default, Hash)]
 pub struct RegistryNameRef<'n> {
     /// The namespace

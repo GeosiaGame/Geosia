@@ -39,7 +39,7 @@ pub enum ChunkDeserializationError {
     IllegalBlockID,
 }
 
-/// Manual clone implementation, because the auto-derived one puts an unnecessary bound on ExtraData.
+/// Manual clone implementation, because the auto-derived one puts an unnecessary bound on [`GsExtraData`].
 impl<ExtraData: GsExtraData> Clone for Chunk<ExtraData> {
     fn clone(&self) -> Self {
         Self {
@@ -51,7 +51,7 @@ impl<ExtraData: GsExtraData> Clone for Chunk<ExtraData> {
 }
 
 impl<ExtraData: GsExtraData> Chunk<ExtraData> {
-    /// Creates a new chunk filled with fill_block and the given extra data.
+    /// Creates a new chunk filled with `fill_block` and the given extra data.
     pub fn new(fill_block: BlockEntry, extra_data: ExtraData::ChunkData) -> Self {
         Self {
             blocks: PaletteStorage::new(fill_block),

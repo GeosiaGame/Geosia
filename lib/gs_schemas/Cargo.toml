@@ -9,6 +9,9 @@ license.workspace = true
 edition.workspace = true
 repository = "https://github.com/GeosiaGame/Geosia/tree/dev/lib/gs_schemas"
 
+[lints]
+workspace = true
+
 [features]
 default = []
 regenerate-capnp = []

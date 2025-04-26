@@ -148,7 +148,7 @@ impl NetworkThreadClientState {
     /// Constructor.
     pub async fn new() -> Result<Self> {
         Ok(Self {
-            variant: Default::default(),
+            variant: NetworkThreadClientStateVariant::default(),
         })
     }
 
@@ -268,7 +268,7 @@ impl NetworkThreadClientState {
                 let msg = err.get_message()?.to_str()?;
                 return Err(anyhow!("Server authentication error {kind:?}: {msg}"));
             }
-        };
+        }
 
         info!(
             "Authenticated to the server at {}",
@@ -424,7 +424,7 @@ impl NetworkThreadClientState {
                     received_at: Instant::now(),
                     connection_key: default(),
                     stream_key,
-                    stream: stream.clone(),
+                    stream: Arc::clone(&stream),
                 })
                 .is_err()
             {

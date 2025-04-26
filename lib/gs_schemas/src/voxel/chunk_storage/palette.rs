@@ -15,7 +15,7 @@ use crate::voxel::chunk_storage::{ChunkDataType, ChunkIterator, ChunkStorage};
 #[derive(Clone, Eq, PartialEq)]
 pub struct PaletteStorage<DataType: ChunkDataType> {
     palette: SmallVec<[DataType; 16]>,
-    /// Invariant: The length is 1, CHUNK_DIM3Z / 2 (u8 indices) or CHUNK_DIM3Z (u16 indices)
+    /// Invariant: The length is `1`, `CHUNK_DIM3Z / 2` (u8 indices) or `CHUNK_DIM3Z` (u16 indices)
     data_storage: SmallVec<[u16; 1]>,
     /// Length of [`palette`] at the last palette GC call
     last_gc_palette_len: usize,
@@ -184,7 +184,7 @@ impl<DataType: ChunkDataType + Copy> PaletteStorage<DataType> {
     fn palette_gc(&mut self, ignored_coord: Option<InChunkPos>) {
         self.last_gc_palette_len = self.palette.len();
         let mut pal_entry_used = bitarr!(0; CHUNK_DIM3Z); // 4 kiB
-        let ignored_idx = ignored_coord.map(InChunkPos::as_index).unwrap_or(CHUNK_DIM3Z);
+        let ignored_idx = ignored_coord.map_or(CHUNK_DIM3Z, InChunkPos::as_index);
         fn mark_used_entries<T: Into<usize> + Copy>(
             ignored_idx: usize,
             indices: &[T],
@@ -307,7 +307,7 @@ impl<DataType: ChunkDataType + Copy> PaletteStorage<DataType> {
                 len => panic!("Invalid data array size of {} items", len),
             }
         }
-        upgrade(&mut self.data_storage)
+        upgrade(&mut self.data_storage);
     }
 }
 impl<DataType: ChunkDataType + Copy + Default> Default for PaletteStorage<DataType> {

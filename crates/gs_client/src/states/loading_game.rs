@@ -90,7 +90,7 @@ fn kickoff_game_transition(world: &mut World) {
 
             let (connect_result, connect_result_tx) = AsyncResult::new_pair();
             net_thread.send_command(NetworkThreadClientCommand::ConnectLocally(
-                net_thread.clone(),
+                Arc::clone(&net_thread),
                 control_tx.clone(),
                 server_pipe,
                 connect_result_tx,
@@ -117,7 +117,7 @@ fn kickoff_game_transition(world: &mut World) {
 
             let (connect_result, connect_result_tx) = AsyncResult::new_pair();
             net_thread.send_command(NetworkThreadClientCommand::ConnectRemotely(
-                net_thread.clone(),
+                Arc::clone(&net_thread),
                 control_tx.clone(),
                 server_address,
                 connect_result_tx,

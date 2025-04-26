@@ -2,7 +2,6 @@
 
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, AbsChunkRange, RelChunkPos};
 use gs_schemas::dependencies::itertools::Itertools;
@@ -51,7 +50,7 @@ impl<ExtraData: GsExtraData> Plugin for VoxelUniversePlugin<ExtraData> {
         }
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "common::VoxelUniversePlugin"
     }
 
@@ -63,9 +62,7 @@ impl<ExtraData: GsExtraData> Plugin for VoxelUniversePlugin<ExtraData> {
 impl<ExtraData: GsExtraData> VoxelUniversePlugin<ExtraData> {
     /// Constructor.
     pub fn new() -> Self {
-        Self {
-            _extra_data: Default::default(),
-        }
+        Self { _extra_data: default() }
     }
 }
 
@@ -87,7 +84,7 @@ pub struct VoxelUniverse<ExtraData: GsExtraData> {
     _extra_data: PhantomData<ExtraData>,
 }
 
-/// Persistent storage for chunks, exists alongside VoxelUniverse on servers.
+/// Persistent storage for chunks, exists alongside [`VoxelUniverse`] on servers.
 #[derive(Component)]
 pub struct PersistentVoxelStorage<ExtraData: GsExtraData> {
     persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>,
@@ -168,7 +165,7 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
         Ok(self)
     }
 
-    /// Finishes the setup, returns the entity ID holding the VoxelUniverse component.
+    /// Finishes the setup, returns the entity ID holding the [`VoxelUniverse`] component.
     pub fn build(self) -> EntityWorldMut<'world> {
         self.bundle
     }
@@ -179,7 +176,7 @@ impl<ExtraData: GsExtraData> VoxelUniverse<ExtraData> {
     pub fn new(group_data: ExtraData::GroupData) -> Self {
         Self {
             loaded_chunks: ChunkGroup::with_data(group_data),
-            _extra_data: Default::default(),
+            _extra_data: default(),
         }
     }
 
@@ -306,7 +303,7 @@ fn server_system_open_chunk_stream(
                     ready_inserts.push((
                         entity,
                         ConnectedPlayerChunkStream {
-                            s2c_chunk_stream: stream.clone(),
+                            s2c_chunk_stream: Arc::clone(stream),
                             s2c_chunk_stream_key: *key,
                         },
                     ));

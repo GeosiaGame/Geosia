@@ -1,11 +1,3 @@
-#![warn(missing_docs)]
-#![deny(
-    clippy::disallowed_types,
-    clippy::await_holding_refcell_ref,
-    clippy::await_holding_lock
-)]
-#![allow(clippy::type_complexity)]
-
 //! The common client&server code for Geosia
 
 pub mod config;
@@ -19,7 +11,7 @@ pub mod voxel;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use bevy::app::{AppExit, ScheduleRunnerPlugin};
+use bevy::app::ScheduleRunnerPlugin;
 use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::log::LogPlugin;
@@ -44,15 +36,15 @@ use crate::voxel::persistence::memory::MemoryPersistenceLayer;
 use crate::voxel::plugin::VoxelUniversePlugin;
 
 // TODO: Populate these from build/git info
-/// The major SemVer field of the current build's version
+/// The major semantic version field of the current build's version
 pub static GAME_VERSION_MAJOR: u32 = 0;
-/// The minor SemVer field of the current build's version
+/// The minor semantic version field of the current build's version
 pub static GAME_VERSION_MINOR: u32 = 0;
-/// The patch SemVer field of the current build's version
+/// The patch semantic version field of the current build's version
 pub static GAME_VERSION_PATCH: u32 = 1;
-/// The build SemVer field of the current build's version
+/// The build semantic version field of the current build's version
 pub static GAME_VERSION_BUILD: &str = "todo";
-/// The prerelease SemVer field of the current build's version
+/// The prerelease semantic version field of the current build's version
 pub static GAME_VERSION_PRERELEASE: &str = "";
 /// The name of the game
 pub static GAME_BRAND_NAME: &str = "Geosia";
@@ -155,7 +147,10 @@ impl GameServer {
         let (listen_result, listen_tx) = AsyncResult::new_pair();
         server
             .network_thread
-            .send_command(NetworkThreadServerCommand::UpdateListeners(server.clone(), listen_tx));
+            .send_command(NetworkThreadServerCommand::UpdateListeners(
+                Arc::clone(&server),
+                listen_tx,
+            ));
         if let Err(e) = listen_result.blocking_wait() {
             let _ = server.shutdown().blocking_wait();
             return Err(e);
@@ -239,7 +234,10 @@ impl GameServer {
     pub fn create_local_connection(self: &Arc<Self>) -> AsyncOneshotReceiver<NetworkConnection> {
         let (lc_tx, lc_rx) = async_oneshot_channel();
         self.network_thread
-            .send_command(NetworkThreadServerCommand::CreateLocalConnection(self.clone(), lc_tx));
+            .send_command(NetworkThreadServerCommand::CreateLocalConnection(
+                Arc::clone(self),
+                lc_tx,
+            ));
         lc_rx
     }
 

@@ -1,6 +1,5 @@
 //! Mesh generators taking in voxel data and producing vertex data.
 
-use anyhow::Context;
 use bevy::color::palettes::tailwind;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline};
 use bevy::render::mesh::{Indices, MeshVertexAttribute, MeshVertexBufferLayoutRef, PrimitiveTopology};
@@ -25,8 +24,7 @@ pub fn does_chunk_need_rendering(chunk: &ClientChunk, registry: &BlockRegistry) 
     chunk.blocks.palette_entries().iter().any(|pe| {
         registry
             .lookup_id_to_object(pe.id)
-            .map(|blk| blk.has_drawable_mesh)
-            .unwrap_or(false)
+            .is_some_and(|blk| blk.has_drawable_mesh)
     })
 }
 

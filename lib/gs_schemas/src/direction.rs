@@ -2,7 +2,6 @@
 use std::fmt::Debug;
 
 use bevy_math::prelude::*;
-use bevy_math::{Mat3A, Vec3A};
 use itertools::Itertools;
 
 /// A direction in the right-handed coordinate system of the game
@@ -44,6 +43,7 @@ impl Direction {
     pub const FRONT: Direction = Direction::ZPlus;
 
     /// Calculates the direction with the sign flipped (X+ -> X- etc.)
+    #[must_use]
     pub fn opposite(self) -> Self {
         use Direction::*;
         match self {
@@ -68,7 +68,7 @@ impl Direction {
                 .map(|x| x.abs())
                 .position_max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                 .unwrap_or(1);
-            Self::try_from_index(maxaxis * 2 + if vc[maxaxis] < 0.0 { 0 } else { 1 }).unwrap()
+            Self::try_from_index(maxaxis * 2 + usize::from(vc[maxaxis] >= 0.0)).unwrap()
         }
     }
 
@@ -112,7 +112,7 @@ impl Direction {
         }
     }
 
-    /// Converts a direction index (from [`Self::to_index`]) into a Direction, or None if not valid.
+    /// Converts a direction index (from [`Self::as_index`]) into a Direction, or None if not valid.
     pub fn try_from_index(idx: usize) -> Option<Self> {
         use Direction::*;
         match idx {
@@ -210,7 +210,7 @@ impl Default for OctahedralOrientation {
 impl OctahedralOrientation {
     /// A default orientation of local right&up aligning with global right&up.
     pub fn new() -> Self {
-        Default::default()
+        Self::default()
     }
 
     /// Tries to construct an orientation from the given local directions.
@@ -255,7 +255,7 @@ impl OctahedralOrientation {
         (right_idx * 4 + up_idx + 24 - 5) % 24
     }
 
-    /// Converts an index (0..24, as returned from to_index) to an orientation
+    /// Converts an index (0..24, as returned from [`Self::to_index`]) to an orientation
     pub fn try_from_index(i: usize) -> Option<Self> {
         if i >= 24 {
             None
