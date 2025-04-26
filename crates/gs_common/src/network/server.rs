@@ -154,8 +154,7 @@ impl Component for ConnectedPlayer {
                     .username;
                 let old_nick = world
                     .get::<ConnectedPlayer>(old)
-                    .map(|p| &p.authenticated_info.username as &str)
-                    .unwrap_or("<missing nickname>");
+                    .map_or("<missing nickname>", |p| &p.authenticated_info.username as &str);
                 panic!(
                     "Attempting to insert a player `{new_nick}` with a duplicate peer address: {addr} of `{old_nick}`"
                 );

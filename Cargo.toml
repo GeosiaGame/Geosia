@@ -25,6 +25,8 @@ cloned_instead_of_copied = "deny"
 default_trait_access = "deny"
 disallowed_types = "deny"
 doc_markdown = "deny"
+manual_is_variant_and = "deny"
+map_unwrap_or = "deny"
 return_self_not_must_use = "deny"
 semicolon_if_nothing_returned = "deny"
 

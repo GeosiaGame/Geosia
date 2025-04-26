@@ -184,7 +184,7 @@ impl<DataType: ChunkDataType + Copy> PaletteStorage<DataType> {
     fn palette_gc(&mut self, ignored_coord: Option<InChunkPos>) {
         self.last_gc_palette_len = self.palette.len();
         let mut pal_entry_used = bitarr!(0; CHUNK_DIM3Z); // 4 kiB
-        let ignored_idx = ignored_coord.map(InChunkPos::as_index).unwrap_or(CHUNK_DIM3Z);
+        let ignored_idx = ignored_coord.map_or(CHUNK_DIM3Z, InChunkPos::as_index);
         fn mark_used_entries<T: Into<usize> + Copy>(
             ignored_idx: usize,
             indices: &[T],

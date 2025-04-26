@@ -25,8 +25,7 @@ pub fn does_chunk_need_rendering(chunk: &ClientChunk, registry: &BlockRegistry) 
     chunk.blocks.palette_entries().iter().any(|pe| {
         registry
             .lookup_id_to_object(pe.id)
-            .map(|blk| blk.has_drawable_mesh)
-            .unwrap_or(false)
+            .is_some_and(|blk| blk.has_drawable_mesh)
     })
 }
 
