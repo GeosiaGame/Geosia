@@ -1,6 +1,5 @@
 //! Mesh generators taking in voxel data and producing vertex data.
 
-use anyhow::Context;
 use bevy::color::palettes::tailwind;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline};
 use bevy::render::mesh::{Indices, MeshVertexAttribute, MeshVertexBufferLayoutRef, PrimitiveTopology};

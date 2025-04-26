@@ -6,7 +6,6 @@
 
 use bevy::color::palettes::tailwind;
 use bevy::input::mouse::AccumulatedMouseMotion;
-use bevy::math::{Vec3A, vec3};
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use bevy_egui::egui::Align2;
 use bevy_egui::input::egui_wants_any_input;

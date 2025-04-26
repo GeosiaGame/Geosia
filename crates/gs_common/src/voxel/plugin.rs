@@ -2,7 +2,6 @@
 
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, AbsChunkRange, RelChunkPos};
 use gs_schemas::dependencies::itertools::Itertools;

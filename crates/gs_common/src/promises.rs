@@ -1,6 +1,5 @@
 //! Simple promise types that allow easily interacting with an asynchronous operation.
 
-use std::future::Future;
 use std::pin::Pin;
 
 use anyhow::Error;

@@ -1,6 +1,5 @@
 //! The main menu state that lets the user start a single player game or connect to a server.
 
-use bevy::app::AppExit;
 use bevy_egui::EguiContextPass;
 use bevy_egui::EguiContexts;
 use bevy_egui::egui;

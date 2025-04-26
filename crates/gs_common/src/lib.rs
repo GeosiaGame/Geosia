@@ -11,7 +11,7 @@ pub mod voxel;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use bevy::app::{AppExit, ScheduleRunnerPlugin};
+use bevy::app::ScheduleRunnerPlugin;
 use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::log::LogPlugin;

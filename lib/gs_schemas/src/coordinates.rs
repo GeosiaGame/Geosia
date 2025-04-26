@@ -16,7 +16,7 @@
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, Deref, Sub};
 
-use bevy_math::{DVec3, Vec3A, prelude::*};
+use bevy_math::{DVec3, prelude::*};
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

@@ -1,6 +1,6 @@
 //! Math helper functions.
 
-use bevy_math::{Vec3A, prelude::*};
+use bevy_math::prelude::*;
 
 /// An epsilon value so small that it should be indistinguishable from zero for most operations performed on close-to-natural numbers.
 /// Based on the floating-point precision around a value of `1`.

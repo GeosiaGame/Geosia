@@ -3,7 +3,6 @@
 
 use std::sync::LazyLock;
 
-use bevy_math::Vec3A;
 use bevy_math::prelude::*;
 use smallvec::{SmallVec, smallvec};
 

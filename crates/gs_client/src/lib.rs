@@ -173,7 +173,6 @@ mod debug_window {
     use std::f32::consts::PI;
 
     use bevy::color::palettes::tailwind;
-    use bevy::math::vec3;
 
     use crate::prelude::*;
 

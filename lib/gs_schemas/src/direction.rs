@@ -2,7 +2,6 @@
 use std::fmt::Debug;
 
 use bevy_math::prelude::*;
-use bevy_math::{Mat3A, Vec3A};
 use itertools::Itertools;
 
 /// A direction in the right-handed coordinate system of the game
