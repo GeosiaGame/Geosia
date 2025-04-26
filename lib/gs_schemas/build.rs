@@ -1,3 +1,5 @@
+//! Runs capnp codegen for the crate.
+
 fn main() {
     #[cfg(feature = "regenerate-capnp")]
     {

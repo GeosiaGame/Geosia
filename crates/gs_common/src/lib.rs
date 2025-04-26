@@ -1,11 +1,3 @@
-#![warn(missing_docs)]
-#![deny(
-    clippy::disallowed_types,
-    clippy::await_holding_refcell_ref,
-    clippy::await_holding_lock
-)]
-#![allow(clippy::type_complexity)]
-
 //! The common client&server code for Geosia
 
 pub mod config;

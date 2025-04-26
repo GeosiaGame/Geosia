@@ -1,3 +1,5 @@
+//! Benchmarks chunk storage.
+
 use std::cell::Cell;
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group};
@@ -9,7 +11,7 @@ use rand_pcg::Pcg64Mcg;
 
 const RANDOM_SEED: u64 = 0xd48ba01b5725fd49;
 
-pub fn fill_chunk_with_random(block_types: u16, chunk: &mut dyn ChunkStorage<u64>) {
+fn fill_chunk_with_random(block_types: u16, chunk: &mut dyn ChunkStorage<u64>) {
     let mut rng = Pcg64Mcg::seed_from_u64(RANDOM_SEED);
     let mut blocks = Vec::with_capacity(block_types as usize);
     for _ in 0..block_types {
@@ -28,7 +30,7 @@ pub fn fill_chunk_with_random(block_types: u16, chunk: &mut dyn ChunkStorage<u64
     }
 }
 
-pub fn random_paletted_chunk(block_types: u16) -> PaletteStorage<u64> {
+fn random_paletted_chunk(block_types: u16) -> PaletteStorage<u64> {
     let mut palstorage = PaletteStorage::default();
     fill_chunk_with_random(block_types, &mut palstorage);
     palstorage

@@ -1,3 +1,4 @@
+//! Benchmarks the z-order encoding of coordinates into integers.
 use bevy_math::prelude::*;
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group};
 use gs_schemas::coordinates::{zpack_3d, zpack_3d_naive};

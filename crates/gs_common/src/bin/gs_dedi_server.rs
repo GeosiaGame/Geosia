@@ -1,3 +1,4 @@
+//! Dedicated server binary for the game.
 use anyhow::Result;
 use gs_common::dedicated_server::run_dedicated_server;
 use gs_common::geosia_pre_main;

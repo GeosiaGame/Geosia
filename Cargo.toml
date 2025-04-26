@@ -11,6 +11,17 @@ repository = "https://github.com/GeosiaGame/Geosia"
 keywords = ["gaming", "games", "voxel"]
 categories = ["games"]
 
+[workspace.lints.rust]
+missing_docs = "warn"
+
+[workspace.lints.rustdoc]
+
+[workspace.lints.clippy]
+disallowed_types = "deny"
+await_holding_refcell_ref = "deny"
+await_holding_lock = "deny"
+type_complexity = "allow" # Some bevy types get really wordy but still readable
+
 [workspace.dependencies]
 # Local, unpublished (versions stay at 0.0.0 to reduce churn)
 gs_client = { path = "crates/gs_client", version = "0.0.0" }
