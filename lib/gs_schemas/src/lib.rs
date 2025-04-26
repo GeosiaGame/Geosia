@@ -72,11 +72,11 @@ pub mod dependencies {
     pub use zorder;
 }
 
-/// A simple wrapper type that's either a slice borrow, or an owned SmallVec.
+/// A simple wrapper type that's either a slice borrow, or an owned [`SmallVec`].
 pub enum SmallCowVec<'b, A: Array> {
     /// The slice variant.
     Borrowed(&'b [A::Item]),
-    /// The SmallVec variant.
+    /// The [`SmallVec`] variant.
     Owned(SmallVec<A>),
 }
 

@@ -1,6 +1,6 @@
 //! Generic code for a stable forwards/backwards compatible serialization framework for game objects.
 //!
-//! Based on capnproto: https://capnproto.org/language.html, https://docs.rs/capnp/latest/capnp/
+//! Based on capnproto: <https://capnproto.org/language.html>, <https://docs.rs/capnp/latest/capnp/>
 
 use std::convert::Infallible;
 use std::fmt::{Debug, Display};

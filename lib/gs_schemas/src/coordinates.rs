@@ -42,9 +42,9 @@ pub const CHUNK_DIM2Z: usize = (CHUNK_DIM * CHUNK_DIM) as usize;
 pub const CHUNK_DIM3: i32 = CHUNK_DIM * CHUNK_DIM * CHUNK_DIM;
 /// Number of blocks in the volume of the chunk
 pub const CHUNK_DIM3Z: usize = (CHUNK_DIM * CHUNK_DIM * CHUNK_DIM) as usize;
-/// Chunk dimensions in blocks as a [Vec3A] for convenience
+/// Chunk dimensions in blocks as a [`Vec3A`] for convenience
 pub const CHUNK_DIM3V: Vec3A = Vec3A::splat(CHUNK_DIMF);
-/// Chunk dimensions in blocks as a [IVec3] for convenience
+/// Chunk dimensions in blocks as a [`IVec3`] for convenience
 pub const CHUNK_DIM3IV: IVec3 = IVec3::splat(CHUNK_DIM);
 /// Maximum block position allowed, +-2^30 or 1 billion blocks to have a safe margin to avoid integer overflows.
 pub const MAX_BLOCK_POS: i32 = 1 << 30;
@@ -142,7 +142,7 @@ impl WorldPos {
         self.chunk.as_world_dvec3() + self.offset.as_dvec3()
     }
 
-    /// Adds together two WorldPos structs componentwise and renormalizes the result, used in the implementation of vector math operations.
+    /// Adds together two [`WorldPos`] structs componentwise and renormalizes the result, used in the implementation of vector math operations.
     #[inline]
     fn add_components(self, rhs: Self) -> Self {
         Self {
@@ -201,7 +201,7 @@ impl Default for WorldPos {
 
 // xxx yyy zzz -> zyxzyxzyx bit pattern
 // reference for tests
-/// Slower reference implementation of zpack_3d, public for benchmark purposes
+/// Slower reference implementation of [`zpack_3d`], public for benchmark purposes
 pub fn zpack_3d_naive(vec: IVec3) -> u128 {
     let vec = vec.as_uvec3();
     let x = vec.x;
@@ -368,12 +368,12 @@ pub struct InChunkIndexError(usize);
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Pod, Zeroable, Serialize, Deserialize)]
 #[repr(transparent)]
-/// A block position inside of a chunk, limited to 0..=[CHUNK_DIM]
+/// A block position inside of a chunk, limited to 0..=[`CHUNK_DIM`]
 pub struct InChunkPos(pub(crate) IVec3);
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Pod, Zeroable, Serialize, Deserialize)]
 #[repr(C)]
-/// A range of block positions inside of a chunk, with coordinates limited to 0..[CHUNK_DIM] (min&max are *inclusive*)
+/// A range of block positions inside of a chunk, with coordinates limited to 0..[`CHUNK_DIM`] (min&max are *inclusive*)
 pub struct InChunkRange {
     pub(crate) min: InChunkPos,
     pub(crate) max: InChunkPos,

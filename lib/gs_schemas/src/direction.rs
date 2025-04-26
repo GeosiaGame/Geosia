@@ -255,7 +255,7 @@ impl OctahedralOrientation {
         (right_idx * 4 + up_idx + 24 - 5) % 24
     }
 
-    /// Converts an index (0..24, as returned from to_index) to an orientation
+    /// Converts an index (0..24, as returned from [`to_index`]) to an orientation
     pub fn try_from_index(i: usize) -> Option<Self> {
         if i >= 24 {
             None

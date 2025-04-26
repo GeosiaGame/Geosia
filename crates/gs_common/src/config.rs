@@ -31,7 +31,7 @@ pub struct GameConfig {
     pub server: ServerConfig,
 }
 
-/// A GameConfig handle that can listen to changes, used as the primary way of accessing the game configuration.
+/// A [`GameConfig`] handle that can listen to changes, used as the primary way of accessing the game configuration.
 pub type GameConfigHandle = Arc<(AsyncWatchSender<GameConfig>, AsyncWatchReceiver<GameConfig>)>;
 
 impl GameConfig {

@@ -22,11 +22,11 @@ use crate::voxel::meshgen::{ChunkMeshMaterial, default_chunk_material};
 pub mod client_plugin;
 pub mod meshgen;
 
-/// Client Chunk type
+/// Client [`Chunk`] type
 pub type ClientChunk = Chunk<ClientData>;
-/// Client ChunkGroup type
+/// Client [`ChunkGroup`] type
 pub type ClientChunkGroup = ChunkGroup<ClientData>;
-/// Client VoxelUniverse
+/// Client [`VoxelUniverse`]
 pub type ClientVoxelUniverse = VoxelUniverse<ClientData>;
 
 /// Keeps track of the render entities associated with a chunk
@@ -50,7 +50,7 @@ pub struct ClientChunkGroupData {
 /// Network chunk streaming client, exists alongside [`VoxelUniverse`] on clients.
 #[derive(Component)]
 pub struct NetworkVoxelClient {
-    /// Public for gs_client usage, to allow receiving&processing chunk packets.
+    /// Public for [`gs_client`] usage, to allow receiving&processing chunk packets.
     pub chunk_packet_queue: VecDeque<QueuedPacket>,
 }
 

@@ -36,15 +36,15 @@ use crate::voxel::persistence::memory::MemoryPersistenceLayer;
 use crate::voxel::plugin::VoxelUniversePlugin;
 
 // TODO: Populate these from build/git info
-/// The major SemVer field of the current build's version
+/// The major semantic version field of the current build's version
 pub static GAME_VERSION_MAJOR: u32 = 0;
-/// The minor SemVer field of the current build's version
+/// The minor semantic version field of the current build's version
 pub static GAME_VERSION_MINOR: u32 = 0;
-/// The patch SemVer field of the current build's version
+/// The patch semantic version field of the current build's version
 pub static GAME_VERSION_PATCH: u32 = 1;
-/// The build SemVer field of the current build's version
+/// The build semantic version field of the current build's version
 pub static GAME_VERSION_BUILD: &str = "todo";
-/// The prerelease SemVer field of the current build's version
+/// The prerelease semantic version field of the current build's version
 pub static GAME_VERSION_PRERELEASE: &str = "";
 /// The name of the game
 pub static GAME_BRAND_NAME: &str = "Geosia";

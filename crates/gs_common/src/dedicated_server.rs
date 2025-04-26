@@ -1,4 +1,4 @@
-//! The dedicated server main() implementation
+//! The dedicated server `main` implementation
 
 use clap::Parser;
 use rustyline::DefaultEditor;

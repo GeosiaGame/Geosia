@@ -87,7 +87,7 @@ pub struct VoxelUniverse<ExtraData: GsExtraData> {
     _extra_data: PhantomData<ExtraData>,
 }
 
-/// Persistent storage for chunks, exists alongside VoxelUniverse on servers.
+/// Persistent storage for chunks, exists alongside [`VoxelUniverse`] on servers.
 #[derive(Component)]
 pub struct PersistentVoxelStorage<ExtraData: GsExtraData> {
     persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>,
@@ -168,7 +168,7 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
         Ok(self)
     }
 
-    /// Finishes the setup, returns the entity ID holding the VoxelUniverse component.
+    /// Finishes the setup, returns the entity ID holding the [`VoxelUniverse`] component.
     pub fn build(self) -> EntityWorldMut<'world> {
         self.bundle
     }

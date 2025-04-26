@@ -15,7 +15,7 @@ use crate::voxel::chunk_storage::{ChunkDataType, ChunkIterator, ChunkStorage};
 #[derive(Clone, Eq, PartialEq)]
 pub struct PaletteStorage<DataType: ChunkDataType> {
     palette: SmallVec<[DataType; 16]>,
-    /// Invariant: The length is 1, CHUNK_DIM3Z / 2 (u8 indices) or CHUNK_DIM3Z (u16 indices)
+    /// Invariant: The length is `1`, `CHUNK_DIM3Z / 2` (u8 indices) or `CHUNK_DIM3Z` (u16 indices)
     data_storage: SmallVec<[u16; 1]>,
     /// Length of [`palette`] at the last palette GC call
     last_gc_palette_len: usize,
