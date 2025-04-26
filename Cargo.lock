@@ -1865,6 +1865,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "build-rs"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b00b8763668c99f8d9101b8a0dd82106f58265464531a79b2cef0d9a30c17dd2"
+
+[[package]]
 name = "built"
 version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3350,6 +3356,7 @@ dependencies = [
  "bevy_reflect",
  "bitflags 2.9.0",
  "bitvec",
+ "build-rs",
  "bytemuck",
  "bytes",
  "capnp",

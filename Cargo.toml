@@ -98,6 +98,7 @@ anyhow = "1.0.97"
 arc-swap = "1.7.1"
 bitflags = { version = "2.9.0", features = ["bytemuck", "serde"] }
 bitvec = { version = "1.0.1", features = ["serde"] }
+build-rs = "0.1.2"
 bytemuck = { version = "1.22.0", features = [
     "extern_crate_alloc",
     "extern_crate_std",

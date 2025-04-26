@@ -54,4 +54,6 @@ quickcheck.workspace = true
 quickcheck_macros.workspace = true
 
 [build-dependencies]
+build-rs.workspace = true
 capnpc.workspace = true
+rusqlite.workspace = true
