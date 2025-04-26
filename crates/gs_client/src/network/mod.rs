@@ -268,7 +268,7 @@ impl NetworkThreadClientState {
                 let msg = err.get_message()?.to_str()?;
                 return Err(anyhow!("Server authentication error {kind:?}: {msg}"));
             }
-        };
+        }
 
         info!(
             "Authenticated to the server at {}",

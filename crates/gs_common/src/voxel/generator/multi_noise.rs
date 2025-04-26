@@ -134,7 +134,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
             for (i, v) in vparams[..].iter_mut().enumerate() {
                 let ix = (i % CHUNK_DIMZ) as i32;
                 let iz = ((i / CHUNK_DIMZ) % CHUNK_DIMZ) as i32;
-                let (biomes, _) = self.find_biomes_at_point(
+                let (biomes, _) = Self::find_biomes_at_point(
                     DVec2::new((ix + point.x) as f64, (iz + point.z) as f64),
                     void_id,
                     &centers,
@@ -263,12 +263,15 @@ impl MultiNoiseGenerator {
         heights / weights
     }
 
-    fn add_to_list(v: &mut Vec<usize>, x: &Option<usize>) {
-        if x.is_some() && !v.contains(x.as_ref().unwrap()) {
-            v.push(x.unwrap());
+    fn add_to_list_if_not_present(v: &mut Vec<usize>, x: Option<usize>) {
+        if let Some(x) = x {
+            if !v.contains(&x) {
+                v.push(x);
+            }
         }
     }
-    fn make_corner(&self, point: DVec2, corners: &mut Vec<Corner>, corner_map: &mut HashMap<[i32; 2], usize>) -> usize {
+
+    fn make_corner(point: DVec2, corners: &mut Vec<Corner>, corner_map: &mut HashMap<[i32; 2], usize>) -> usize {
         let x = point.x.round() as i32;
         let y = point.y.round() as i32;
         for (x, y) in iproduct!(
@@ -292,7 +295,7 @@ impl MultiNoiseGenerator {
         corner_map.insert([x, y], index);
         index
     }
-    fn make_centers_corners_for_edge(&self, edge: &Edge, index: usize, centers: &mut [Center], corners: &mut [Corner]) {
+    fn make_centers_corners_for_edge(edge: &Edge, index: usize, centers: &mut [Center], corners: &mut [Corner]) {
         // Centers point to edges. Corners point to edges.
         if let Some(d0) = edge.d0 {
             let d0 = &mut centers[d0];
@@ -314,43 +317,43 @@ impl MultiNoiseGenerator {
         // Centers point to centers.
         if let (Some(i0), Some(i1)) = (edge.d0, edge.d1) {
             let d0 = &mut centers[i0];
-            Self::add_to_list(&mut d0.neighbors, &Some(i1));
+            Self::add_to_list_if_not_present(&mut d0.neighbors, Some(i1));
             let d1 = &mut centers[i1];
-            Self::add_to_list(&mut d1.neighbors, &Some(i0));
+            Self::add_to_list_if_not_present(&mut d1.neighbors, Some(i0));
         }
 
         // Corners point to corners
         if let (Some(i0), Some(i1)) = (edge.v0, edge.v0) {
             let v0 = &mut corners[i0];
-            Self::add_to_list(&mut v0.adjacent, &Some(i1));
+            Self::add_to_list_if_not_present(&mut v0.adjacent, Some(i1));
             let v1 = &mut corners[i1];
-            Self::add_to_list(&mut v1.adjacent, &Some(i0));
+            Self::add_to_list_if_not_present(&mut v1.adjacent, Some(i0));
         }
 
         // Centers point to corners
         if let Some(d0) = edge.d0 {
             let d0 = &mut centers[d0];
-            Self::add_to_list(&mut d0.corners, &edge.v0);
-            Self::add_to_list(&mut d0.corners, &edge.v1);
+            Self::add_to_list_if_not_present(&mut d0.corners, edge.v0);
+            Self::add_to_list_if_not_present(&mut d0.corners, edge.v1);
         }
 
         // Centers point to corners
         if let Some(d1) = edge.d1 {
             let d1 = &mut centers[d1];
-            Self::add_to_list(&mut d1.corners, &edge.v0);
-            Self::add_to_list(&mut d1.corners, &edge.v1);
+            Self::add_to_list_if_not_present(&mut d1.corners, edge.v0);
+            Self::add_to_list_if_not_present(&mut d1.corners, edge.v1);
         }
 
         // Corners point to centers
         if let Some(v0) = edge.v0 {
             let v0 = &mut corners[v0];
-            Self::add_to_list(&mut v0.touches, &edge.d0);
-            Self::add_to_list(&mut v0.touches, &edge.d1);
+            Self::add_to_list_if_not_present(&mut v0.touches, edge.d0);
+            Self::add_to_list_if_not_present(&mut v0.touches, edge.d1);
         }
         if let Some(v1) = edge.v1 {
             let v1 = &mut corners[v1];
-            Self::add_to_list(&mut v1.touches, &edge.d0);
-            Self::add_to_list(&mut v1.touches, &edge.d1);
+            Self::add_to_list_if_not_present(&mut v1.touches, edge.d0);
+            Self::add_to_list_if_not_present(&mut v1.touches, edge.d1);
         }
     }
 
@@ -384,8 +387,8 @@ impl MultiNoiseGenerator {
             edge.midpoint = voronoi_edge.0.lerp(voronoi_edge.1, 0.5);
 
             // Edges point to corners. Edges point to centers.
-            edge.v0 = Some(self.make_corner(voronoi_edge.0, corners, corner_map));
-            edge.v1 = Some(self.make_corner(voronoi_edge.1, corners, corner_map));
+            edge.v0 = Some(Self::make_corner(voronoi_edge.0, corners, corner_map));
+            edge.v1 = Some(Self::make_corner(voronoi_edge.1, corners, corner_map));
             let d0_pos = [delaunay_edge.0.x.round() as i32, delaunay_edge.0.y.round() as i32];
             edge.d0 = center_lookup.get(&d0_pos).copied().or_else(|| {
                 let mut center = Center::new(delaunay_edge.0);
@@ -406,7 +409,7 @@ impl MultiNoiseGenerator {
             });
 
             let index = edges.len();
-            self.make_centers_corners_for_edge(&edge, index, centers, corners);
+            Self::make_centers_corners_for_edge(&edge, index, centers, corners);
             edges.push(edge);
         }
 
@@ -518,7 +521,6 @@ impl MultiNoiseGenerator {
     }
 
     fn find_biomes_at_point(
-        &self,
         point: DVec2,
         default: RegistryId,
         centers: &[Center],

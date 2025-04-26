@@ -19,7 +19,7 @@ missing_docs = "warn"
 [workspace.lints.clippy]
 await_holding_lock = "deny"
 await_holding_refcell_ref = "deny"
-bool-to-int-with-if = "deny"
+bool_to_int_with_if = "deny"
 clone_on_ref_ptr = "deny"
 cloned_instead_of_copied = "deny"
 default_trait_access = "deny"
@@ -27,10 +27,52 @@ disallowed_types = "deny"
 doc_markdown = "deny"
 manual_is_variant_and = "deny"
 map_unwrap_or = "deny"
+ref_option = "deny"
 return_self_not_must_use = "deny"
 semicolon_if_nothing_returned = "deny"
+unnecessary_literal_bound = "deny"
+unnecessary_semicolon = "deny"
+
+unused_self = "warn"
 
 type_complexity = "allow" # Some bevy types get really wordy but still readable
+
+# Uncomment the pedantic lint when reviewing whether to add more lints (with Rust updates, etc.)
+# pedantic = { level = "warn", priority = -1 }
+
+# Pedantic suppressions for mostly false positive lints
+cast_lossless = "allow"
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+checked_conversions = "allow"
+enum_glob_use = "allow"
+explicit_deref_methods = "allow"
+explicit_into_iter_loop = "allow"
+explicit_iter_loop = "allow"
+from_iter_instead_of_collect = "allow"
+if_not_else = "allow"
+ignored_unit_patterns = "allow"
+inline_always = "allow"
+items_after_statements = "allow"
+manual_midpoint = "allow"
+match_same_arms = "allow"
+match_wildcard_for_single_variants = "allow"
+missing_errors_doc = "allow"
+missing_fields_in_debug = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+needless_continue = "allow"
+needless_pass_by_value = "allow"
+redundant_closure_for_method_calls = "allow"
+similar_names = "allow"
+single_match_else = "allow"
+too_many_lines = "allow"
+uninlined_format_args = "allow"
+unreadable_literal = "allow"
+unused_async = "allow"
+wildcard_imports = "allow"
 
 [workspace.dependencies]
 # Local, unpublished (versions stay at 0.0.0 to reduce churn)
@@ -112,7 +154,13 @@ uuid = { version = "1.9.1", features = [
 zorder = "0.2.2"
 
 # Remote, bevy plugins
-bevy_egui = { version = "0.34.0", default-features = false, features = ["manage_clipboard", "open_url", "default_fonts", "render", "serde"] }
+bevy_egui = { version = "0.34.0", default-features = false, features = [
+    "manage_clipboard",
+    "open_url",
+    "default_fonts",
+    "render",
+    "serde",
+] }
 
 # Remote, testing
 criterion = { version = "0.5.1", features = ["html_reports"] }
@@ -149,7 +197,7 @@ version = "0.16.0"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
-    "std"
+    "std",
 ]
 
 [workspace.dependencies.bevy_color]
@@ -157,7 +205,7 @@ version = "0.16.0"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
-    "std"
+    "std",
 ]
 
 [workspace.dependencies.bevy_reflect]

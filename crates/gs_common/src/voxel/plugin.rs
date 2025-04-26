@@ -51,7 +51,7 @@ impl<ExtraData: GsExtraData> Plugin for VoxelUniversePlugin<ExtraData> {
         }
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "common::VoxelUniversePlugin"
     }
 
