@@ -12,7 +12,19 @@ keywords = ["gaming", "games", "voxel"]
 categories = ["games"]
 
 [workspace.lints.rust]
+non_ascii_idents = "forbid"
+
+ambiguous_negative_literals = "deny"
+closure_returning_async_block = "deny"
+macro_use_extern_crate = "deny"
+missing_unsafe_on_extern = "deny"
+unit_bindings = "deny"
+unsafe_attr_outside_unsafe = "deny"
+unstable_features = "deny"
+
 missing_docs = "warn"
+redundant_imports = "warn"
+redundant_lifetimes = "warn"
 
 [workspace.lints.rustdoc]
 
