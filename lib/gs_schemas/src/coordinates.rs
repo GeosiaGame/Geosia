@@ -124,6 +124,7 @@ impl WorldPos {
     ///
     /// Makes sure that [`WorldPos::offset`] is in the range of `[0, CHUNK_DIMF)`.
     #[inline]
+    #[must_use]
     pub fn renormalized(mut self) -> Self {
         self.renormalize();
         self
@@ -903,6 +904,7 @@ impl AbsBlockPos {
 
     /// Moves the block position in the given direction by the given amount.
     #[inline]
+    #[must_use]
     pub fn direction_offset(self, direction: Direction, offset: i32) -> AbsBlockPos {
         AbsBlockPos::from_ivec3(self.0 + direction.as_ivec() * offset)
     }

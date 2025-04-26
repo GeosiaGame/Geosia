@@ -44,6 +44,7 @@ impl Direction {
     pub const FRONT: Direction = Direction::ZPlus;
 
     /// Calculates the direction with the sign flipped (X+ -> X- etc.)
+    #[must_use]
     pub fn opposite(self) -> Self {
         use Direction::*;
         match self {

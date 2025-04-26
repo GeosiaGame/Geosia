@@ -40,6 +40,7 @@ pub enum GameSide {
 
 impl GameSide {
     /// Returns the opposite side
+    #[must_use]
     pub fn opposite(self) -> GameSide {
         match self {
             Self::Client => Self::Server,

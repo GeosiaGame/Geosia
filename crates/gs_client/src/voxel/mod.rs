@@ -57,6 +57,7 @@ pub struct NetworkVoxelClient {
 /// Extensions to the [`VoxelUniverseBuilder`]
 pub trait ClientVoxelUniverseBuilder: Sized {
     /// Attaches the client-specific parts of the chunk streaming system.
+    #[must_use]
     fn with_client_chunk_system(self) -> Self;
 }
 
