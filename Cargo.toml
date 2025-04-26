@@ -91,7 +91,7 @@ uuid = { version = "1.9.1", features = [
 zorder = "0.2.2"
 
 # Remote, bevy plugins
-bevy_egui = { version = "0.34.0-rc.2", default-features = false, features = ["manage_clipboard", "open_url", "default_fonts", "render", "serde"] }
+bevy_egui = { version = "0.34.0", default-features = false, features = ["manage_clipboard", "open_url", "default_fonts", "render", "serde"] }
 
 # Remote, testing
 criterion = { version = "0.5.1", features = ["html_reports"] }
@@ -99,7 +99,7 @@ quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
 [workspace.dependencies.bevy]
-version = "0.16.0-rc.5"
+version = "0.16.0"
 default-features = false
 # Extra features are used in gs_client on top of these common ones
 features = [
@@ -124,7 +124,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_math]
-version = "0.16.0-rc.5"
+version = "0.16.0"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -132,7 +132,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_color]
-version = "0.16.0-rc.5"
+version = "0.16.0"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -140,7 +140,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_reflect]
-version = "0.16.0-rc.5"
+version = "0.16.0"
 features = ["smallvec", "glam", "uuid", "std"]
 
 [profile.dev]
