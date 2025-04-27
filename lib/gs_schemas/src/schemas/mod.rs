@@ -327,7 +327,7 @@ impl CapnpExt for RegistryName {
     fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
         let ns = reader.get_ns()?.to_str()?;
         let key = reader.get_key()?.to_str()?;
-        Ok(RegistryName::new(ns, key))
+        RegistryName::new(ns, key).map_err(|e| capnp::Error::failed(e.to_string()))
     }
 }
 

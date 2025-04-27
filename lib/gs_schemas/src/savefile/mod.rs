@@ -5,16 +5,50 @@
 
 use std::{
     fs::{self, FileType},
+    ops::{Deref, DerefMut},
     path::{Path, PathBuf},
     sync::OnceLock,
 };
 
 use anyhow::{Context, anyhow};
-use rusqlite::OpenFlags;
+use kstring::KString;
+use rusqlite::{OpenFlags, ToSql, types::FromSql};
 
 use crate::ErrorList;
 
 pub mod sql;
+
+/// sqlite-compatible [`KString`] wrapper
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
+pub struct SqlKString(KString);
+
+impl Deref for SqlKString {
+    type Target = KString;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for SqlKString {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl FromSql for SqlKString {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        Ok(Self(KString::from_ref(value.as_str()?)))
+    }
+}
+
+impl ToSql for SqlKString {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::Borrowed(rusqlite::types::ValueRef::Text(
+            self.as_bytes(),
+        )))
+    }
+}
 
 const NEWEST_SUPPORTED_SAVE_VERSION: i32 = sql::SQL_MIGRATIONS.last().unwrap().0;
 static WRITABLE_DATA_DIRECTORY_CACHE: OnceLock<&'static Path> = OnceLock::new();

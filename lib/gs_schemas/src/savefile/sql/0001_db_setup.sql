@@ -18,7 +18,7 @@ INSERT INTO geosia_savefile_metadata (field_name, field_value)
 -- Logs about changes done to the savefile for analysing corruption and changes to the database over time.
 CREATE TABLE geosia_critical_log(
     unix_timestamp REAL NOT NULL,
-    log_message TEXT NOT NULL,
+    log_message TEXT NOT NULL
 ) STRICT;
 
 -- RegistryName keys for various ID registry types, like gs:blocks.
