@@ -22,9 +22,9 @@ struct SqlMigrationFile {
     var_name: String,
 }
 
-fn write_file_if_changed(path: &Path, contents: String) -> std::io::Result<()> {
-    let old_contents = std::fs::read_to_string(path).unwrap_or_default();
-    if old_contents != contents {
+fn write_file_if_changed(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    let old_contents: Vec<u8> = std::fs::read(path).unwrap_or_default();
+    if &old_contents[..] != contents {
         std::fs::write(path, contents)?;
     }
     Ok(())
@@ -33,6 +33,7 @@ fn write_file_if_changed(path: &Path, contents: String) -> std::io::Result<()> {
 fn regen_sql() -> Result<()> {
     let sql_dir = Path::new("src/savefile/sql");
     let sql_rs_path = Path::new("src/savefile/sql.rs");
+    let new_game_template_path = Path::new("src/savefile/sql/0000_new_game.sqlite.zst");
     build::rerun_if_changed(sql_dir);
 
     let mut sql_rs =
@@ -42,6 +43,14 @@ fn regen_sql() -> Result<()> {
 
     let mut dir_entries: Vec<DirEntry> = std::fs::read_dir(sql_dir)?.filter_map(Result::ok).collect::<Vec<_>>();
     dir_entries.sort_by_key(|de| de.file_name());
+
+    writeln!(&mut sql_rs, "\n/// Template database data for a new game savefile").unwrap();
+    writeln!(
+        &mut sql_rs,
+        r#"pub static SQL_0000_NEW_GAME_TEMPLATE_ZST: &[u8] = include_bytes!("sql/0000_new_game.sqlite.zst");"#
+    )
+    .unwrap();
+
     for de in dir_entries {
         if !de.file_type()?.is_file() {
             continue;
@@ -106,7 +115,7 @@ fn regen_sql() -> Result<()> {
     }
     writeln!(&mut sql_rs, "];").unwrap();
 
-    write_file_if_changed(sql_rs_path, sql_rs)?;
+    write_file_if_changed(sql_rs_path, sql_rs.as_bytes())?;
 
     // Test all migrations
     let conn = rusqlite::Connection::open_in_memory()?;
@@ -115,6 +124,12 @@ fn regen_sql() -> Result<()> {
         conn.execute_batch(&std::fs::read_to_string(&migration.path)?)?;
     }
     conn.execute_batch(&std::fs::read_to_string("src/savefile/sql/0000_quit.sql")?)?;
+    conn.execute_batch("VACUUM;")?;
+    // Save new savefile template to bytes
+    let db_data = conn.serialize(rusqlite::DatabaseName::Main)?;
+    let db_zstd_data = zstd::encode_all(&db_data as &[u8], 3)?;
+    write_file_if_changed(new_game_template_path, &db_zstd_data)?;
+
     conn.close().map_err(|(_, e)| e)?;
 
     Ok(())

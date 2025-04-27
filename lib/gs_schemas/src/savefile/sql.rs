@@ -1,5 +1,8 @@
 //! Auto-generated module including all the SQL sources as static string literals.
 
+/// Template database data for a new game savefile
+pub static SQL_0000_NEW_GAME_TEMPLATE_ZST: &[u8] = include_bytes!("sql/0000_new_game.sqlite.zst");
+
 /// Ran on database initialization, configures the DB engine
 pub static SQL_0000_INIT: &str = include_str!("sql/0000_init.sql");
 

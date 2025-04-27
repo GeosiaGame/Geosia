@@ -16,3 +16,4 @@ Thumbs.db
 .vscode/*
 
 /output/
+lib/gs_schemas/src/savefile/sql/0000_new_game.sqlite.zst

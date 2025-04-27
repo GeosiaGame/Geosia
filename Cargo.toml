@@ -132,16 +132,17 @@ rcgen = "0.13.2"
 rustls = { version = "0.23.25" }
 rustyline = "15.0.0"
 rusqlite = { version = "0.35.0", features = [
-    "bundled",
-    "backup",
-    "functions",
-    "trace",
-    "blob",
-    "vtab",
     "array",
-    "i128_blob",
-    "uuid",
+    "backup",
+    "blob",
+    "bundled",
     "column_decltype",
+    "functions",
+    "i128_blob",
+    "serialize",
+    "trace",
+    "uuid",
+    "vtab",
 ] }
 serde = { version = "1.0.219", features = ["derive"] }
 slotmap = "1.0.7"

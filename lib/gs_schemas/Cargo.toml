@@ -57,3 +57,4 @@ quickcheck_macros.workspace = true
 build-rs.workspace = true
 capnpc.workspace = true
 rusqlite.workspace = true
+zstd.workspace = true
