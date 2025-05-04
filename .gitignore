@@ -1,6 +1,7 @@
 /target/
 /dist/
 crates/*/target
+lib/*/target
 **/*.rs.bk
 **/*.rs.pending-snap
 .idea/*
@@ -16,4 +17,5 @@ Thumbs.db
 .vscode/*
 
 /output/
-lib/gs_schemas/src/savefile/sql/0000_new_game.sqlite.zst
+lib/gs_schemas/src/savefile/sql/*.sqlite
+lib/gs_schemas/src/savefile/sql/*.sqlite.zst

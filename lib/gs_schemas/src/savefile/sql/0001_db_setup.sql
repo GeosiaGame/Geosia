@@ -6,6 +6,8 @@ BEGIN EXCLUSIVE TRANSACTION;
 -- Each new change to the savefile format must create a new .sql number with a higher filename number and a matching PRAGMA like this.
 PRAGMA user_version = 1;
 
+PRAGMA application_id = 0x47735366; -- GsSf - Geosia Savefile
+
 -- Simple RegistryName key - value store for arbitrary savefile metadata
 CREATE TABLE geosia_savefile_metadata (
     field_name TEXT NOT NULL PRIMARY KEY ON CONFLICT REPLACE,
@@ -33,6 +35,7 @@ CREATE TABLE geosia_registry_entries (
     entry_registry INTEGER NOT NULL,
     entry_name TEXT NOT NULL,
     entry_id INTEGER NOT NULL,
+    CHECK (entry_id != 0),
     UNIQUE(entry_registry, entry_name),
     UNIQUE(entry_registry, entry_id),
     FOREIGN KEY(entry_registry) REFERENCES geosia_registry_types(registry_id) ON UPDATE CASCADE ON DELETE CASCADE

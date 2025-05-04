@@ -30,6 +30,7 @@ bevy_math.workspace = true
 bevy_color.workspace = true
 bevy_reflect.workspace = true
 capnp.workspace = true
+chrono.workspace = true
 either.workspace = true
 futures.workspace = true
 hashbrown.workspace = true
@@ -50,6 +51,7 @@ zstd.workspace = true
 criterion.workspace = true
 rand.workspace = true
 rand_pcg.workspace = true
+tempfile.workspace = true
 quickcheck.workspace = true
 quickcheck_macros.workspace = true
 

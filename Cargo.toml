@@ -111,6 +111,7 @@ bytes = "1.10.1"
 capnp = { version = "0.21.0" }
 capnp-futures = "0.21.0"
 capnpc = "0.21.0"
+chrono = "0.4.40"
 clap = { version = "4.5.37", features = ["derive"] }
 either = "1.13.0"
 futures = "0.3.31"
@@ -136,6 +137,7 @@ rusqlite = { version = "0.35.0", features = [
     "backup",
     "blob",
     "bundled",
+    "chrono",
     "column_decltype",
     "functions",
     "i128_blob",
@@ -157,6 +159,7 @@ smart-default = "0.7.1"
 socket2 = "0.5.8"
 spade = { version = "2.13.1", features = ["serde"] }
 static_assertions = "1.1.0"
+tempfile = "3.19.1"
 thiserror = "2.0.12"
 thread_local = "1.1.8"
 tokio = { version = "1.44.1", features = [

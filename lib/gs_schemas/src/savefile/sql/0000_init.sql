@@ -1,6 +1,5 @@
 -- Ran on database initialization, configures the DB engine
 
-PRAGMA application_id = 0x47735366; -- GsSf - Geosia Savefile
 PRAGMA auto_vacuum = INCREMENTAL; -- needs manual trigger by PRAGMA incremental_vacuum;
 PRAGMA automatic_index = 0;
 PRAGMA cache_size = -8000;
@@ -16,4 +15,4 @@ PRAGMA recursive_triggers = 1;
 PRAGMA synchronous = NORMAL;
 PRAGMA trusted_schema = 0;
 
-PRAGMA main.optimize=0x10002;
+PRAGMA main.optimize = 0x10002;

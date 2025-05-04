@@ -60,6 +60,7 @@ pub mod dependencies {
     pub use bytemuck;
     pub use bytes;
     pub use capnp;
+    pub use chrono;
     pub use either;
     pub use hashbrown;
     pub use itertools;

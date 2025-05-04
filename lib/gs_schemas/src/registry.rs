@@ -10,7 +10,7 @@ use hashbrown::{Equivalent, HashMap};
 use itertools::Itertools;
 use kstring::{KString, KStringRef};
 use rusqlite::ToSql;
-use rusqlite::types::FromSql;
+use rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -205,6 +205,18 @@ impl Equivalent<RegistryNameRef<'_>> for RegistryName {
     }
 }
 
+impl PartialEq<RegistryName> for RegistryNameRef<'_> {
+    fn eq(&self, other: &RegistryName) -> bool {
+        self.ns.as_str() == other.ns.as_str() && self.key.as_str() == other.key.as_str()
+    }
+}
+
+impl PartialEq<RegistryNameRef<'_>> for RegistryName {
+    fn eq(&self, other: &RegistryNameRef) -> bool {
+        self.ns.as_str() == other.ns.as_str() && self.key.as_str() == other.key.as_str()
+    }
+}
+
 impl<'a> From<&'a RegistryName> for RegistryNameRef<'a> {
     fn from(value: &'a RegistryName) -> Self {
         RegistryNameRef {
@@ -255,6 +267,14 @@ impl ToSql for RegistryName {
     }
 }
 
+impl ToSql for RegistryNameRef<'_> {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::Owned(rusqlite::types::Value::Text(
+            self.to_string(),
+        )))
+    }
+}
+
 /// Newtype wrapper around a u32 registry ID.
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize, TransparentWrapper)]
@@ -265,9 +285,37 @@ unsafe impl ZeroableInOption for RegistryId {}
 // SAFETY: transparent NonZeroU32 wrapper, NonZeroU32 implements this trait
 unsafe impl PodInOption for RegistryId {}
 
+impl RegistryId {
+    /// Const-safe `try_from`
+    pub const fn try_new(id: u32) -> Option<Self> {
+        match NonZeroU32::new(id) {
+            None => None,
+            Some(id) => Some(Self(id)),
+        }
+    }
+}
+
 impl Display for RegistryId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
+    }
+}
+
+impl From<NonZeroU32> for RegistryId {
+    fn from(value: NonZeroU32) -> Self {
+        Self(value)
+    }
+}
+
+impl FromSql for RegistryId {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        Ok(Self::from(NonZeroU32::column_result(value)?))
+    }
+}
+
+impl ToSql for RegistryId {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        NonZeroU32::to_sql(&self.0)
     }
 }
 

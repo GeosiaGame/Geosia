@@ -4,6 +4,7 @@
 //! The basic save format is a sqlite database at `local/saves/dir-name/geosia.sqlite`.
 
 use std::{
+    fmt::Write,
     fs::{self, FileType},
     ops::{Deref, DerefMut},
     path::{Path, PathBuf},
@@ -11,11 +12,14 @@ use std::{
 };
 
 use anyhow::{Context, anyhow};
+use chrono::{DateTime, Utc};
 use kstring::KString;
 use rusqlite::{OpenFlags, ToSql, types::FromSql};
+use uuid::Uuid;
 
-use crate::ErrorList;
+use crate::{ErrorList, registry::RegistryName};
 
+pub mod queries;
 pub mod sql;
 
 /// sqlite-compatible [`KString`] wrapper
@@ -50,11 +54,17 @@ impl ToSql for SqlKString {
     }
 }
 
-const NEWEST_SUPPORTED_SAVE_VERSION: i32 = sql::SQL_MIGRATIONS.last().unwrap().0;
+static NEWEST_SUPPORTED_SAVE_VERSION: i32 = sql::SQL_MIGRATIONS.last().unwrap().0;
 static WRITABLE_DATA_DIRECTORY_CACHE: OnceLock<&'static Path> = OnceLock::new();
 static SAVES_DIRECTORY_CACHE: OnceLock<&'static Path> = OnceLock::new();
 /// Name of the database file inside the savefile directory.
 pub static SAVEFILE_DB_NAME: &str = "geosia.sqlite";
+/// The savefile meta table key for the savefile's display name.
+pub static SAVEFILE_META_NAME_KEY: RegistryName = RegistryName::gs_const("name");
+/// The savefile meta table key for the savefile's creation timestamp in ISO 8601 UTC time.
+pub static SAVEFILE_META_CREATED_AT_UTC_KEY: RegistryName = RegistryName::gs_const("created_at_utc");
+/// The savefile meta table key for the savefile's universe UUID.
+pub static SAVEFILE_META_UNIVERSE_UUID_KEY: RegistryName = RegistryName::gs_const("universe_uuid");
 
 fn ensure_writable_dir(path: &Path) -> std::io::Result<&Path> {
     if !path.is_dir() {
@@ -103,7 +113,7 @@ pub fn saves_directory() -> &'static Path {
 }
 
 /// Metadata about a game savefile.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SavefileMetadata {
     /// The full path to the savefile directory.
     pub path: PathBuf,
@@ -113,6 +123,12 @@ pub struct SavefileMetadata {
     pub dir_name: String,
     /// Size of the savefile on disk in bytes.
     pub disk_size: u64,
+    /// Save creation time.
+    pub created_at: DateTime<Utc>,
+    /// Time the save was last modified at.
+    pub modified_at: DateTime<Utc>,
+    /// UUID of the universe saved in this file.
+    pub uuid: Uuid,
 }
 
 /// Reads the savefile metadata (if available) for a given save directory.
@@ -123,21 +139,16 @@ pub fn get_save_metadata(save_dir_path: &Path) -> anyhow::Result<SavefileMetadat
         &db_path,
         OpenFlags::SQLITE_OPEN_EXRESCODE | OpenFlags::SQLITE_OPEN_NO_MUTEX | OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
-    let schema_ver = conn
-        .query_row("SELECT user_version FROM pragma_user_version", [], |row| {
-            row.get::<_, i32>(0)
-        })
-        .context("Reading the schema version")?;
+    let schema_ver = queries::select_savefile_schema_version(&conn).context("Reading the schema version")?;
     if schema_ver > NEWEST_SUPPORTED_SAVE_VERSION {
         return Err(anyhow!(
             "Saved schema version {schema_ver} greater than max supported {NEWEST_SUPPORTED_SAVE_VERSION}, you probably need to update the game."
         ));
     }
-    let name = conn.query_row(
-        "SELECT field_name, field_value FROM geosia_savefile_metadata WHERE field_name='name'",
-        [],
-        |row| row.get::<_, String>(1),
-    )?;
+    let name = queries::select_savefile_meta_name(&conn)?;
+    let created_at = queries::select_savefile_meta_created_at(&conn)?;
+    let uuid = queries::select_savefile_meta_universe_uuid(&conn)?;
+    let modified_at = db_stat.modified().map(DateTime::<Utc>::from).unwrap_or_default();
     conn.close().map_err(|(_, e)| e)?;
     Ok(SavefileMetadata {
         path: save_dir_path.to_owned(),
@@ -148,6 +159,9 @@ pub fn get_save_metadata(save_dir_path: &Path) -> anyhow::Result<SavefileMetadat
             .to_string_lossy()
             .into_owned(),
         disk_size: db_stat.len(),
+        created_at,
+        modified_at,
+        uuid,
     })
 }
 
@@ -183,4 +197,137 @@ pub fn list_saves(saves_directory: &Path) -> (Vec<SavefileMetadata>, ErrorList) 
     }
 
     (saves, errors)
+}
+
+/// Converts an sqlite error into an IO error.
+pub fn sql_to_io_error(err: rusqlite::Error) -> std::io::Error {
+    use std::io::ErrorKind;
+    let Some(err_code) = err.sqlite_error_code() else {
+        return std::io::Error::other(err);
+    };
+    let kind = match err_code {
+        rusqlite::ErrorCode::InternalMalfunction => ErrorKind::Other,
+        rusqlite::ErrorCode::PermissionDenied => ErrorKind::PermissionDenied,
+        rusqlite::ErrorCode::OperationAborted => ErrorKind::Interrupted,
+        rusqlite::ErrorCode::DatabaseBusy => ErrorKind::ResourceBusy,
+        rusqlite::ErrorCode::DatabaseLocked => ErrorKind::ResourceBusy,
+        rusqlite::ErrorCode::OutOfMemory => ErrorKind::OutOfMemory,
+        rusqlite::ErrorCode::ReadOnly => ErrorKind::ReadOnlyFilesystem,
+        rusqlite::ErrorCode::OperationInterrupted => ErrorKind::Interrupted,
+        rusqlite::ErrorCode::SystemIoFailure => ErrorKind::BrokenPipe,
+        rusqlite::ErrorCode::DatabaseCorrupt => ErrorKind::InvalidData,
+        rusqlite::ErrorCode::NotFound => ErrorKind::NotFound,
+        rusqlite::ErrorCode::DiskFull => ErrorKind::StorageFull,
+        rusqlite::ErrorCode::CannotOpen => ErrorKind::PermissionDenied,
+        rusqlite::ErrorCode::FileLockingProtocolFailed => ErrorKind::Deadlock,
+        rusqlite::ErrorCode::SchemaChanged => ErrorKind::ResourceBusy,
+        rusqlite::ErrorCode::TooBig => ErrorKind::QuotaExceeded,
+        rusqlite::ErrorCode::ConstraintViolation => ErrorKind::InvalidData,
+        rusqlite::ErrorCode::TypeMismatch => ErrorKind::InvalidData,
+        rusqlite::ErrorCode::ApiMisuse => ErrorKind::Unsupported,
+        rusqlite::ErrorCode::NoLargeFileSupport => ErrorKind::Unsupported,
+        rusqlite::ErrorCode::AuthorizationForStatementDenied => ErrorKind::PermissionDenied,
+        rusqlite::ErrorCode::ParameterOutOfRange => ErrorKind::InvalidInput,
+        rusqlite::ErrorCode::NotADatabase => ErrorKind::InvalidData,
+        rusqlite::ErrorCode::Unknown => ErrorKind::Other,
+        _ => todo!(),
+    };
+    std::io::Error::new(kind, err)
+}
+
+/// Creates a new savefile with the given display name in the saves directory (subdirectory name is automatically computed).
+/// The saves directory should already exist.
+pub fn new_save(saves_directory: &Path, mut name: &str) -> Result<SavefileMetadata, std::io::Error> {
+    name = name.trim();
+    if name.is_empty() {
+        name = "Geosia";
+    }
+    // Checks for some common illegal or easily confusing characters
+    fn illegal_path_char(c: char) -> bool {
+        if c.is_control() {
+            return true;
+        }
+        ['/', '\\', '.', '<', '>', ':', '"', '\'', '|', '?', '*', '!', '&'].contains(&c)
+    }
+    let pathsafe_name = name.replace(illegal_path_char, "_");
+    let mut final_dir_name = String::with_capacity(pathsafe_name.len() + 4);
+    let mut i = 0i32;
+    loop {
+        final_dir_name.clear();
+        if i == 0 {
+            final_dir_name.push_str(&pathsafe_name);
+        } else {
+            write!(&mut final_dir_name, "{pathsafe_name}_{i}").expect("Path format error");
+        }
+        match fs::create_dir(&final_dir_name) {
+            Ok(()) => break Ok(()),
+            Err(e) if i >= 1024 => break Err(e),
+            Err(_) => {}
+        }
+        i += 1;
+    }?;
+    let save_dir = saves_directory.join(&final_dir_name);
+    fs::create_dir(&save_dir)?;
+    let save_data =
+        zstd::decode_all(sql::SQL_0000_NEW_GAME_TEMPLATE_ZST).expect("Internal new save file template is broken");
+    let save_db_path = save_dir.join(SAVEFILE_DB_NAME);
+    fs::write(&save_db_path, &save_data)?;
+    // Write the save name and creation time.
+    let conn = rusqlite::Connection::open_with_flags(
+        &save_db_path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX | OpenFlags::SQLITE_OPEN_EXRESCODE,
+    )
+    .map_err(sql_to_io_error)?;
+    let created_at = Utc::now();
+    let uuid = Uuid::new_v4();
+    queries::insert_new_savefile_meta(&conn, name, created_at, uuid).map_err(sql_to_io_error)?;
+    conn.close().map_err(|(_, e)| sql_to_io_error(e))?;
+    let db_meta = fs::metadata(&save_db_path)?;
+    let modified_at = db_meta.modified().map(DateTime::<Utc>::from).unwrap_or_default();
+    Ok(SavefileMetadata {
+        path: save_dir,
+        name: name.to_owned(),
+        dir_name: final_dir_name,
+        disk_size: db_meta.len(),
+        created_at,
+        modified_at,
+        uuid,
+    })
+}
+
+#[cfg(test)]
+mod test {
+    use anyhow::Result;
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[test]
+    fn savefile_manipulation() -> Result<()> {
+        let tmpdir = tempdir()?;
+        let saves_path = tmpdir.path().join("saves");
+        ensure_writable_dir(&saves_path)?;
+
+        let (saves, errs) = list_saves(&saves_path);
+        errs.into_result()?;
+        assert!(saves.is_empty());
+
+        let sv1_meta = new_save(&saves_path, "Save 1")?;
+        let sv2_meta = new_save(&saves_path, "Save 2")?;
+        let sv3_meta = new_save(&saves_path, "Save 3")?;
+
+        let (mut saves, errs) = list_saves(&saves_path);
+        errs.into_result()?;
+        saves.sort_by_cached_key(|s| s.name.clone());
+        assert_eq!([sv1_meta.clone(), sv2_meta.clone(), sv3_meta.clone()], &saves[..]);
+
+        fs::remove_dir_all(&sv2_meta.path)?;
+
+        let (mut saves, errs) = list_saves(&saves_path);
+        errs.into_result()?;
+        saves.sort_by_cached_key(|s| s.name.clone());
+        assert_eq!([sv1_meta.clone(), sv3_meta.clone()], &saves[..]);
+
+        Ok(())
+    }
 }

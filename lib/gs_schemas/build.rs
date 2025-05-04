@@ -33,6 +33,8 @@ fn write_file_if_changed(path: &Path, contents: &[u8]) -> std::io::Result<()> {
 fn regen_sql() -> Result<()> {
     let sql_dir = Path::new("src/savefile/sql");
     let sql_rs_path = Path::new("src/savefile/sql.rs");
+    // Used for intellisense
+    let new_game_template_path_uncompressed = Path::new("src/savefile/sql/0000_new_game.sqlite");
     let new_game_template_path = Path::new("src/savefile/sql/0000_new_game.sqlite.zst");
     build::rerun_if_changed(sql_dir);
 
@@ -127,6 +129,7 @@ fn regen_sql() -> Result<()> {
     conn.execute_batch("VACUUM;")?;
     // Save new savefile template to bytes
     let db_data = conn.serialize(rusqlite::DatabaseName::Main)?;
+    write_file_if_changed(new_game_template_path_uncompressed, &db_data)?;
     let db_zstd_data = zstd::encode_all(&db_data as &[u8], 3)?;
     write_file_if_changed(new_game_template_path, &db_zstd_data)?;
 
