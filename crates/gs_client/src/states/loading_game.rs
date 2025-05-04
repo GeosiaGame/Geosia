@@ -7,6 +7,7 @@ use gs_common::GameServer;
 use gs_common::config::{GameConfig, ServerConfig};
 use gs_common::network::thread::NetworkThread;
 use gs_schemas::GameSide;
+use gs_schemas::savefile::SavefileMetadata;
 
 use crate::network::{NetworkThreadClientCommand, NetworkThreadClientState};
 use crate::prelude::*;
@@ -34,7 +35,10 @@ pub enum LoadingTransitionParams {
     /// Unload the game and go to the main menu
     GoToMainMenu,
     /// Begin a singleplayer game.
-    SinglePlayer {},
+    SinglePlayer {
+        /// The savefile to load.
+        savefile_metadata: SavefileMetadata,
+    },
     /// Join a multiplayer game.
     MultiPlayer {
         /// The not-yet-resolved address to join
@@ -63,7 +67,7 @@ fn kickoff_game_transition(world: &mut World) {
             info!("Shutting down the currently running game");
             //
         }
-        LoadingTransitionParams::SinglePlayer {} => {
+        LoadingTransitionParams::SinglePlayer { savefile_metadata } => {
             info!("Starting a new single player game");
 
             let game_config = GameConfig {
