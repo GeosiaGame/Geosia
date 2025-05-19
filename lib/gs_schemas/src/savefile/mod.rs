@@ -14,7 +14,7 @@ use std::{
 use anyhow::{Context, anyhow};
 use chrono::{DateTime, Utc};
 use kstring::KString;
-use rusqlite::{OpenFlags, ToSql, types::FromSql};
+use rusqlite::{Connection, DatabaseName, OpenFlags, ToSql, types::FromSql};
 use uuid::Uuid;
 
 use crate::{ErrorList, registry::RegistryName};
@@ -112,11 +112,30 @@ pub fn saves_directory() -> &'static Path {
     SAVES_DIRECTORY_CACHE.get_or_init(init_saves_diretory)
 }
 
+/// Identifies where the savefile should be stored.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum SavefileLocation {
+    /// In a persistent directory on disk
+    Path(PathBuf),
+    /// In a temporary in-memory database
+    Memory,
+}
+
+impl SavefileLocation {
+    /// Access the filesystem path if this is the `Path` variant.
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            Self::Path(path) => Some(path),
+            Self::Memory => None,
+        }
+    }
+}
+
 /// Metadata about a game savefile.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct SavefileMetadata {
     /// The full path to the savefile directory.
-    pub path: PathBuf,
+    pub location: SavefileLocation,
     /// The name of the save.
     pub name: String,
     /// The directory name, shown as a secondary name in the UI if not the same as `name`.
@@ -131,11 +150,44 @@ pub struct SavefileMetadata {
     pub uuid: Uuid,
 }
 
+impl SavefileMetadata {
+    /// Creates a new in-memory savefile for testing.
+    pub fn new_memory_savefile() -> Self {
+        let now = Utc::now();
+        Self {
+            location: SavefileLocation::Memory,
+            name: "Test Savefile".to_string(),
+            dir_name: "Test Savefile".to_string(),
+            disk_size: 0,
+            created_at: now,
+            modified_at: now,
+            uuid: Uuid::new_v4(),
+        }
+    }
+
+    /// Opens a DB connection with the given flags to this savefile's location.
+    pub fn open_with_flags(&self, flags: OpenFlags) -> rusqlite::Result<Connection> {
+        match &self.location {
+            SavefileLocation::Path(path) => Connection::open_with_flags(path, flags),
+            SavefileLocation::Memory => {
+                let mut conn = Connection::open_in_memory_with_flags(
+                    flags.difference(OpenFlags::SQLITE_OPEN_READ_ONLY) | OpenFlags::SQLITE_OPEN_READ_WRITE,
+                )?;
+                let save_data = zstd::decode_all(sql::SQL_0000_NEW_GAME_TEMPLATE_ZST)
+                    .expect("Internal new save file template is broken");
+                conn.deserialize_read_exact(DatabaseName::Main, &save_data[..], save_data.len(), false)?;
+                queries::insert_new_savefile_meta(&conn, &self.name, self.created_at, self.uuid)?;
+                Ok(conn)
+            }
+        }
+    }
+}
+
 /// Reads the savefile metadata (if available) for a given save directory.
 pub fn get_save_metadata(save_dir_path: &Path) -> anyhow::Result<SavefileMetadata> {
     let db_path = save_dir_path.join(SAVEFILE_DB_NAME);
     let db_stat = fs::metadata(&db_path)?;
-    let conn = rusqlite::Connection::open_with_flags(
+    let conn = Connection::open_with_flags(
         &db_path,
         OpenFlags::SQLITE_OPEN_EXRESCODE | OpenFlags::SQLITE_OPEN_NO_MUTEX | OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
@@ -151,7 +203,7 @@ pub fn get_save_metadata(save_dir_path: &Path) -> anyhow::Result<SavefileMetadat
     let modified_at = db_stat.modified().map(DateTime::<Utc>::from).unwrap_or_default();
     conn.close().map_err(|(_, e)| e)?;
     Ok(SavefileMetadata {
-        path: save_dir_path.to_owned(),
+        location: SavefileLocation::Path(save_dir_path.to_owned()),
         name,
         dir_name: save_dir_path
             .file_name()
@@ -273,7 +325,7 @@ pub fn new_save(saves_directory: &Path, mut name: &str) -> Result<SavefileMetada
     let save_db_path = save_dir.join(SAVEFILE_DB_NAME);
     fs::write(&save_db_path, &save_data)?;
     // Write the save name and creation time.
-    let conn = rusqlite::Connection::open_with_flags(
+    let conn = Connection::open_with_flags(
         &save_db_path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX | OpenFlags::SQLITE_OPEN_EXRESCODE,
     )
@@ -285,7 +337,7 @@ pub fn new_save(saves_directory: &Path, mut name: &str) -> Result<SavefileMetada
     let db_meta = fs::metadata(&save_db_path)?;
     let modified_at = db_meta.modified().map(DateTime::<Utc>::from).unwrap_or_default();
     Ok(SavefileMetadata {
-        path: save_dir,
+        location: SavefileLocation::Path(save_dir),
         name: name.to_owned(),
         dir_name: final_dir_name,
         disk_size: db_meta.len(),
@@ -321,7 +373,7 @@ mod test {
         saves.sort_by_cached_key(|s| s.name.clone());
         assert_eq!([sv1_meta.clone(), sv2_meta.clone(), sv3_meta.clone()], &saves[..]);
 
-        fs::remove_dir_all(&sv2_meta.path)?;
+        fs::remove_dir_all(sv2_meta.location.path().unwrap())?;
 
         let (mut saves, errs) = list_saves(&saves_path);
         errs.into_result()?;

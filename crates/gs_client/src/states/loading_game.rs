@@ -77,7 +77,8 @@ fn kickoff_game_transition(world: &mut World) {
                 },
             };
             let game_config = GameConfig::new_handle(game_config);
-            let integ_server = GameServer::new(game_config).expect("Could not start integrated server");
+            let integ_server =
+                GameServer::new(game_config, savefile_metadata).expect("Could not start integrated server");
             integ_server.set_paused(false);
             let server_pipe = integ_server
                 .create_local_connection()

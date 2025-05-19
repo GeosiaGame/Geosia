@@ -20,6 +20,7 @@ use bevy::time::TimePlugin;
 use bevy::utils::synccell::SyncCell;
 use gs_schemas::registries::GameRegistries;
 use gs_schemas::registry::Registry;
+use gs_schemas::savefile::SavefileMetadata;
 use gs_schemas::{GameSide, GsExtraData};
 use network::server::NetworkThreadServerCommand;
 use network::transport::NetworkConnection;
@@ -100,6 +101,7 @@ pub enum GameServerControlCommand {
 /// It has its own bevy App with a very limited set of plugins enabled to be able to run without a graphical user interface.
 pub struct GameServer {
     config: GameConfigHandle,
+    savefile: SavefileMetadata,
     server_data: ServerData,
     engine_thread: JoinHandle<()>,
     network_thread: NetworkThread<NetworkThreadServerState>,
@@ -117,7 +119,7 @@ struct GameServerControlCommandReceiver(SyncCell<StdUnboundedReceiver<GameServer
 impl GameServer {
     /// Spawns a new thread that runs the engine in a paused state, and returns a handle to control it.
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(config: GameConfigHandle) -> Result<Arc<GameServer>> {
+    pub fn new(config: GameConfigHandle, savefile: SavefileMetadata) -> Result<Arc<GameServer>> {
         let (tx, rx) = std_bounded_channel(1);
         let (ctrl_tx, ctrl_rx) = std_unbounded_channel();
 
@@ -135,6 +137,7 @@ impl GameServer {
 
         let server = Self {
             config,
+            savefile,
             server_data,
             engine_thread,
             network_thread,
@@ -164,7 +167,11 @@ impl GameServer {
         "Test server".clone_into(&mut game_config.server.server_title);
         game_config.server.server_subtitle = format!("Thread {:?}", std::thread::current().id());
         game_config.server.listen_addresses.clear();
-        Self::new(GameConfig::new_handle(game_config)).expect("Could not create a GameServer test instance")
+        Self::new(
+            GameConfig::new_handle(game_config),
+            SavefileMetadata::new_memory_savefile(),
+        )
+        .expect("Could not create a GameServer test instance")
     }
 
     /// Returns a shared accessor to the global game configuration handle.
