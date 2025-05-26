@@ -19,6 +19,7 @@ use smallvec::SmallVec;
 use uuid::Uuid;
 
 use super::{
+    SharedRegistryHolder,
     server::{ConnectedPlayer, QueuedPacket},
     transport::PacketWrapper,
 };
@@ -56,6 +57,7 @@ pub struct BootstrappedGameDataTag;
 
 fn bootstrap_players_system(
     engine: Res<GameServerResource>,
+    shared_registries: Res<SharedRegistryHolder>,
     to_bootstrap: Populated<
         (Entity, &ConnectedPlayer),
         (Without<BootstrappedGameDataTag>, Without<BootstrappingGameDataTag>),
@@ -71,7 +73,7 @@ fn bootstrap_players_system(
     Uuid::parse_str("05aaf964-aefa-49d0-9b6a-0aa376016ac2")
         .unwrap()
         .write_to_message(&mut payload.reborrow().init_universe_id());
-    engine.server_data.shared_registries.serialize_ids(&mut payload);
+    shared_registries.serialize_ids(&mut payload);
     let mut packet = PacketWrapper::from(bootstrap_packet);
 
     let mut bootstrapped_players: SmallVec<[_; 4]> = SmallVec::new();

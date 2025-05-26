@@ -2,6 +2,8 @@
 
 extern crate core;
 
+use std::fmt::{Debug, Formatter};
+
 use anyhow::Context;
 use smallvec::{Array, SmallVec};
 
@@ -20,7 +22,7 @@ pub mod voxel;
 
 /// A trait implemented by the game server and client, specifying the concrete types to attach as extra metadata for every chunk, chunk group, entity, etc.
 /// Used to inject side-specific data into common data structures.
-pub trait GsExtraData: Send + Sync + 'static {
+pub trait GsExtraData: Default + Debug + Copy + Clone + Send + Sync + 'static {
     /// Per-chunk data
     type ChunkData: Default + Clone + Send + Sync + 'static;
     /// Per-chunk group data
@@ -46,6 +48,15 @@ impl GameSide {
         match self {
             Self::Client => Self::Server,
             Self::Server => Self::Client,
+        }
+    }
+}
+
+impl std::fmt::Display for GameSide {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Server => f.write_str("Server"),
+            Self::Client => f.write_str("Client"),
         }
     }
 }

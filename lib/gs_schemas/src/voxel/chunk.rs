@@ -15,7 +15,7 @@ use crate::{GsExtraData, SmallCowVec};
 pub struct BlockLight(u16);
 
 /// A 32³ grid of voxel data
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Chunk<ExtraData: GsExtraData> {
     /// Block data
     pub blocks: PaletteStorage<BlockEntry>,
@@ -37,17 +37,6 @@ pub enum ChunkDeserializationError {
     /// Illegal block ID in palette data.
     #[error("Illegal block ID in palette data")]
     IllegalBlockID,
-}
-
-/// Manual clone implementation, because the auto-derived one puts an unnecessary bound on [`GsExtraData`].
-impl<ExtraData: GsExtraData> Clone for Chunk<ExtraData> {
-    fn clone(&self) -> Self {
-        Self {
-            blocks: self.blocks.clone(),
-            light_level: self.light_level.clone(),
-            extra_data: self.extra_data.clone(),
-        }
-    }
 }
 
 impl<ExtraData: GsExtraData> Chunk<ExtraData> {

@@ -29,6 +29,7 @@ use voxel::persistence::generator::GeneratorPersistenceLayer;
 use voxel::plugin::VoxelUniverseBuilder;
 
 use crate::config::{GameConfig, GameConfigHandle};
+use crate::network::SharedRegistryHolder;
 use crate::network::server::{NetworkServerPlugin, NetworkThreadServerState};
 use crate::network::thread::NetworkThread;
 use crate::prelude::*;
@@ -73,11 +74,9 @@ static_assertions::const_assert_eq!(1_000_000i64 / MICROSECONDS_PER_TICK, TICKS_
 pub struct InGameSystemSet;
 
 /// An [`GsExtraData`] implementation containing server-side data for the game engine.
-/// The struct holds server state, the trait points to per chunk/group/etc. data.
-pub struct ServerData {
-    /// Shared client/server registries.
-    pub shared_registries: GameRegistries,
-}
+/// The trait points to per chunk/group/etc. data.
+#[derive(Copy, Clone, Default, Debug)]
+pub struct ServerData;
 
 impl GsExtraData for ServerData {
     type ChunkData = voxel::plugin::ServerChunkMetadata;
@@ -102,7 +101,7 @@ pub enum GameServerControlCommand {
 pub struct GameServer {
     config: GameConfigHandle,
     savefile: SavefileMetadata,
-    server_data: ServerData,
+    shared_registries: GameRegistries,
     engine_thread: JoinHandle<()>,
     network_thread: NetworkThread<NetworkThreadServerState>,
     pause: AtomicBool,
@@ -131,14 +130,10 @@ impl GameServer {
             .spawn(move || GameServer::engine_thread_main(rx, ctrl_rx))
             .expect("Could not create a thread for the engine");
 
-        let server_data = ServerData {
-            shared_registries: builtin_game_registries(),
-        };
-
         let server = Self {
             config,
             savefile,
-            server_data,
+            shared_registries: builtin_game_registries(),
             engine_thread,
             network_thread,
             pause: AtomicBool::new(true),
@@ -284,8 +279,9 @@ impl GameServer {
         app.add_plugins(VoxelUniversePlugin::<ServerData>::new())
             .add_plugins(NetworkServerPlugin);
 
-        let block_registry = Arc::clone(&engine.server_data.shared_registries.block_types);
-        let biome_registry = Arc::clone(&engine.server_data.shared_registries.biome_types);
+        app.insert_resource(SharedRegistryHolder(engine.shared_registries.clone()));
+        let block_registry = Arc::clone(&engine.shared_registries.block_types);
+        let biome_registry = Arc::clone(&engine.shared_registries.biome_types);
 
         let generator = MultiNoiseGenerator::new(123456789, Arc::clone(&biome_registry), Arc::clone(&block_registry));
         let gen_world = GeneratorPersistenceLayer::new(Arc::new(generator), default());

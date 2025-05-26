@@ -41,11 +41,8 @@ use crate::prelude::*;
 use crate::voxel::client_plugin::VoxelUniverseClientPlugin;
 
 /// An [`GsExtraData`] implementation containing the client-side data for the game engine.
-#[derive(Resource)]
-pub struct ClientData {
-    /// Shared client/server registries.
-    pub shared_registries: GameRegistries,
-}
+#[derive(Copy, Clone, Default, Debug)]
+pub struct ClientData;
 
 impl GsExtraData for ClientData {
     type ChunkData = voxel::ClientChunkData;
