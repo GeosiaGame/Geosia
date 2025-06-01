@@ -306,7 +306,7 @@ pub fn new_save(saves_directory: &Path, mut name: &str) -> Result<SavefileMetada
         } else {
             write!(&mut final_dir_name, "{pathsafe_name}_{i}").expect("Path format error");
         }
-        match fs::create_dir(&final_dir_name) {
+        match fs::create_dir(saves_directory.join(&final_dir_name)) {
             Ok(()) => break Ok(()),
             Err(e) if i >= 1024 => break Err(e),
             Err(_) => {}
@@ -314,7 +314,6 @@ pub fn new_save(saves_directory: &Path, mut name: &str) -> Result<SavefileMetada
         i += 1;
     }?;
     let save_dir = saves_directory.join(&final_dir_name);
-    fs::create_dir(&save_dir)?;
     let save_data =
         zstd::decode_all(sql::SQL_0000_NEW_GAME_TEMPLATE_ZST).expect("Internal new save file template is broken");
     let save_db_path = save_dir.join(SAVEFILE_DB_NAME);
@@ -374,6 +373,8 @@ mod test {
         errs.into_result()?;
         saves.sort_by_cached_key(|s| s.name.clone());
         assert_eq!([sv1_meta.clone(), sv3_meta.clone()], &saves[..]);
+
+        tmpdir.close()?;
 
         Ok(())
     }
