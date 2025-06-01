@@ -5,14 +5,18 @@
 //!  - Use `sqlite3 -readonly lib/gs_schemas/src/savefile/sql/0000_new_game.sqlite` to access the template DB for local query explaining
 
 use std::path::Path;
+use std::rc::Rc;
 use std::time::{Duration, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
+use itertools::Itertools;
+use rusqlite::types::Value;
 use rusqlite::{Connection, DatabaseName, OpenFlags, Result, Transaction, named_params, params};
 use uuid::Uuid;
 
 use super::sql;
 use super::{SAVEFILE_META_CREATED_AT_UTC_KEY, SAVEFILE_META_NAME_KEY, SAVEFILE_META_UNIVERSE_UUID_KEY};
+use crate::coordinates::AbsChunkPos;
 use crate::registry::{RegistryId, RegistryName, RegistryNameRef};
 
 /// Creates an empty savefile in-memory DB of the latest version for testing.
@@ -259,9 +263,95 @@ pub fn update_registry_entries<'names>(
     Ok((modified, log_entries))
 }
 
+/// A database query result for a given chunk's serialized data.
+#[derive(Clone, Hash, Debug, Eq, PartialEq)]
+pub enum ReadChunkResult {
+    /// There was no chunk stored with the given position.
+    Missing(AbsChunkPos),
+    /// There was a chunk stored with the given position.
+    Present {
+        /// The position of the stored chunk.
+        position: AbsChunkPos,
+        /// The serialized data.
+        data: Vec<u8>,
+    },
+}
+
+impl ReadChunkResult {
+    /// Gets the position of the read chunk.
+    pub fn position(&self) -> AbsChunkPos {
+        match self {
+            ReadChunkResult::Missing(position) => *position,
+            ReadChunkResult::Present { position, .. } => *position,
+        }
+    }
+}
+
+/// Attempts to read the data for chunks at all the given positions, returns a [`ReadChunkResult`] for every entry in the positions array (not necessarily in order).
+pub fn try_read_chunks(db: &Connection, positions: &[AbsChunkPos]) -> Result<Vec<ReadChunkResult>> {
+    // TODO: This is some horrible allocation spam, we might need to switch this to the C api.
+    let input_positions: Vec<Value> = positions.iter().map(|p| p.into()).collect_vec();
+    let input_positions = Rc::new(input_positions);
+    // language=sqlite
+    let mut query_stmt = db.prepare_cached(
+        "SELECT inputs.value, chunks.packed_coordinates, chunks.chunk_data
+            FROM rarray(?1) AS inputs
+            LEFT JOIN geosia_chunks AS chunks ON inputs.value = chunks.packed_coordinates;",
+    )?;
+    let mut q = query_stmt.query([input_positions])?;
+    let mut read_results = Vec::with_capacity(positions.len());
+    while let Some(row) = q.next()? {
+        let input_position: AbsChunkPos = row.get(0)?;
+        let output_position: Option<AbsChunkPos> = row.get(1)?;
+        let Some(output_position) = output_position else {
+            read_results.push(ReadChunkResult::Missing(input_position));
+            continue;
+        };
+        // This should only misbehave if the SQL query is wrong.
+        debug_assert_eq!(input_position, output_position);
+        let chunk_data: Option<Vec<u8>> = row.get(2)?;
+        let Some(chunk_data) = chunk_data else {
+            read_results.push(ReadChunkResult::Missing(input_position));
+            continue;
+        };
+        read_results.push(ReadChunkResult::Present {
+            position: output_position,
+            data: chunk_data,
+        });
+    }
+    Ok(read_results)
+}
+
+/// A query parameter for writing new chunk data to the database.
+pub struct ChunkWriteRequest {
+    /// The position of the chunk to overwrite.
+    position: AbsChunkPos,
+    /// The new data for the chunk.
+    data: Vec<u8>,
+}
+
+/// Overwrites the chunks at the given positions with new data, returns the number of rows written.
+pub fn overwrite_chunks(
+    tx: &mut Transaction,
+    write_requests: impl Iterator<Item = ChunkWriteRequest>,
+) -> Result<usize> {
+    // language=sqlite
+    let mut q = tx.prepare_cached(
+        "INSERT INTO geosia_chunks (packed_coordinates, chunk_data)
+        VALUES (?1, ?2)
+        ON CONFLICT(packed_coordinates) DO UPDATE SET chunk_data=excluded.chunk_data;",
+    )?;
+    let mut changes = 0;
+    for ChunkWriteRequest { position, data } in write_requests {
+        changes += q.execute(params!(position, data))?;
+    }
+    Ok(changes)
+}
+
 #[cfg(test)]
 mod test {
     use anyhow::Result;
+    use rusqlite::TransactionBehavior;
 
     use super::*;
 
@@ -302,7 +392,7 @@ mod test {
         let mut db = create_test_memory_db()?;
 
         {
-            let tx = db.transaction()?;
+            let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
             assert_eq!(0, select_registry_entries(&tx, reg_ref)?.len());
             assert_eq!(1, update_registry_entries(&tx, reg_ref, [(id_1, ref_a)].into_iter())?.0);
             assert_eq!([(id_1, obj_a.clone())], &id_sorted_entries(&tx, reg_ref)?[..]);
@@ -338,6 +428,161 @@ mod test {
             );
         }
 
+        close_rw_connection(db)?;
+        Ok(())
+    }
+
+    #[test]
+    fn chunk_storage() -> Result<()> {
+        let mut db = create_test_memory_db()?;
+        let c0 = AbsChunkPos::ZERO;
+        let c1 = AbsChunkPos::X;
+        assert!(c0 < c1);
+
+        let mut tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        // Ensure no chunks are saved in a blank db
+        {
+            let mut result = try_read_chunks(&tx, &[c0, c1])?;
+            result.sort_by_key(ReadChunkResult::position);
+            assert_eq!(vec![ReadChunkResult::Missing(c0), ReadChunkResult::Missing(c1)], result);
+        }
+        // Save 1 chunk
+        {
+            let modified = overwrite_chunks(
+                &mut tx,
+                [ChunkWriteRequest {
+                    position: c0,
+                    data: vec![0],
+                }]
+                .into_iter(),
+            )?;
+            assert_eq!(1, modified);
+        }
+        // Read 2 chunks
+        {
+            let mut result = try_read_chunks(&tx, &[c0, c1])?;
+            result.sort_by_key(ReadChunkResult::position);
+            assert_eq!(
+                vec![
+                    ReadChunkResult::Present {
+                        position: c0,
+                        data: vec![0]
+                    },
+                    ReadChunkResult::Missing(c1)
+                ],
+                result
+            );
+        }
+        // Overwrite 1 chunk, save 1 new chunk
+        {
+            let modified = overwrite_chunks(
+                &mut tx,
+                [
+                    ChunkWriteRequest {
+                        position: c0,
+                        data: vec![1],
+                    },
+                    ChunkWriteRequest {
+                        position: c1,
+                        data: vec![1],
+                    },
+                ]
+                .into_iter(),
+            )?;
+            assert_eq!(2, modified);
+        }
+        // Read 2 chunks
+        {
+            let mut result = try_read_chunks(&tx, &[c0, c1])?;
+            result.sort_by_key(ReadChunkResult::position);
+            assert_eq!(
+                vec![
+                    ReadChunkResult::Present {
+                        position: c0,
+                        data: vec![1]
+                    },
+                    ReadChunkResult::Present {
+                        position: c1,
+                        data: vec![1]
+                    }
+                ],
+                result
+            );
+        }
+        // Overwrite 2 chunks, keeping 1 identical
+        {
+            let modified = overwrite_chunks(
+                &mut tx,
+                [
+                    ChunkWriteRequest {
+                        position: c0,
+                        data: vec![1],
+                    },
+                    ChunkWriteRequest {
+                        position: c1,
+                        data: vec![2],
+                    },
+                ]
+                .into_iter(),
+            )?;
+            assert_eq!(2, modified);
+        }
+        // Read 2 chunks
+        {
+            let mut result = try_read_chunks(&tx, &[c0, c1])?;
+            result.sort_by_key(ReadChunkResult::position);
+            assert_eq!(
+                vec![
+                    ReadChunkResult::Present {
+                        position: c0,
+                        data: vec![1]
+                    },
+                    ReadChunkResult::Present {
+                        position: c1,
+                        data: vec![2]
+                    }
+                ],
+                result
+            );
+        }
+        // Overwrite 1 chunk twice, make sure last write wins
+        {
+            let modified = overwrite_chunks(
+                &mut tx,
+                [
+                    ChunkWriteRequest {
+                        position: c0,
+                        data: vec![3],
+                    },
+                    ChunkWriteRequest {
+                        position: c0,
+                        data: vec![4],
+                    },
+                ]
+                .into_iter(),
+            )?;
+            assert_eq!(2, modified);
+        }
+        // Read 2 chunks
+        {
+            let mut result = try_read_chunks(&tx, &[c0, c1])?;
+            result.sort_by_key(ReadChunkResult::position);
+            assert_eq!(
+                vec![
+                    ReadChunkResult::Present {
+                        position: c0,
+                        data: vec![4]
+                    },
+                    ReadChunkResult::Present {
+                        position: c1,
+                        data: vec![2]
+                    }
+                ],
+                result
+            );
+        }
+
+        drop(tx);
         close_rw_connection(db)?;
         Ok(())
     }

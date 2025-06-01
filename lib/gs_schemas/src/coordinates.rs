@@ -18,6 +18,8 @@ use std::ops::{Add, Deref, Sub};
 
 use bevy_math::{DVec3, prelude::*};
 use bytemuck::{Pod, Zeroable};
+use rusqlite::ToSql;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -772,6 +774,32 @@ impl From<AbsBlockPos> for AbsChunkPos {
             value.y.div_euclid(CHUNK_DIM),
             value.z.div_euclid(CHUNK_DIM),
         )
+    }
+}
+
+impl FromSql for AbsChunkPos {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let blob = value.as_blob()?;
+        let packed = u128::from_be_bytes(blob.try_into().map_err(|_| FromSqlError::InvalidBlobSize {
+            expected_size: 16,
+            blob_size: blob.len(),
+        })?);
+        Ok(AbsChunkPos::from_zpack(packed))
+    }
+}
+
+impl ToSql for AbsChunkPos {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        let value: Value = self.into();
+        Ok(ToSqlOutput::Owned(value))
+    }
+}
+
+impl From<&AbsChunkPos> for Value {
+    fn from(value: &AbsChunkPos) -> Self {
+        let packed = value.as_zpack();
+        let blob = u128::to_be_bytes(packed);
+        Value::Blob(blob.into())
     }
 }
 

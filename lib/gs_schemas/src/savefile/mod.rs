@@ -14,7 +14,7 @@ use std::{
 use anyhow::{Context, anyhow};
 use chrono::{DateTime, Utc};
 use kstring::KString;
-use rusqlite::{Connection, DatabaseName, OpenFlags, ToSql, types::FromSql};
+use rusqlite::{Connection, OpenFlags, ToSql, types::FromSql};
 use uuid::Uuid;
 
 use crate::{ErrorList, registry::RegistryName};
@@ -165,17 +165,12 @@ impl SavefileMetadata {
         }
     }
 
-    /// Opens a DB connection with the given flags to this savefile's location.
-    pub fn open_with_flags(&self, flags: OpenFlags) -> rusqlite::Result<Connection> {
+    /// Opens a read-write DB connection to this savefile's location.
+    pub fn open_rw(&self) -> rusqlite::Result<Connection> {
         match &self.location {
-            SavefileLocation::Path(path) => Connection::open_with_flags(path, flags),
+            SavefileLocation::Path(path) => queries::open_rw_connection(path),
             SavefileLocation::Memory => {
-                let mut conn = Connection::open_in_memory_with_flags(
-                    flags.difference(OpenFlags::SQLITE_OPEN_READ_ONLY) | OpenFlags::SQLITE_OPEN_READ_WRITE,
-                )?;
-                let save_data = zstd::decode_all(sql::SQL_0000_NEW_GAME_TEMPLATE_ZST)
-                    .expect("Internal new save file template is broken");
-                conn.deserialize_read_exact(DatabaseName::Main, &save_data[..], save_data.len(), false)?;
+                let conn = queries::create_test_memory_db()?;
                 queries::insert_new_savefile_meta(&conn, &self.name, self.created_at, self.uuid)?;
                 Ok(conn)
             }

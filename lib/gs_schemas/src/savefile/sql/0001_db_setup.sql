@@ -43,9 +43,8 @@ CREATE TABLE geosia_registry_entries (
 
 -- Per-chunk data store.
 CREATE TABLE geosia_chunks (
-    packed_coordinates BLOB NOT NULL PRIMARY KEY, -- z-packed i128 AbsChunkPos
-    voxel_data BLOB,
-    entity_data BLOB
+    packed_coordinates BLOB NOT NULL PRIMARY KEY, -- z-packed i128 AbsChunkPos, big-endian to enable fast range queries
+    chunk_data BLOB
 ) STRICT;
 
 -- Storage for entities that should be globally loaded and are not tied to a particular chunk.
