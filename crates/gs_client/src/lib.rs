@@ -30,7 +30,6 @@ use bevy_egui::{EguiContextPass, EguiPlugin};
 use gs_common::network::thread::NetworkThread;
 use gs_common::{GAME_BRAND_NAME, GameBevyCommand};
 use gs_schemas::dependencies::smallvec::SmallVec;
-use gs_schemas::registries::GameRegistries;
 use gs_schemas::{GameSide, GsExtraData};
 use network::client_packet_handlers::ClientPacketHandlerPlugin;
 use states::{ClientAppState, InGameSystemSet, LoadingGameSystemSet, MainMenuSystemSet};
@@ -41,11 +40,8 @@ use crate::prelude::*;
 use crate::voxel::client_plugin::VoxelUniverseClientPlugin;
 
 /// An [`GsExtraData`] implementation containing the client-side data for the game engine.
-#[derive(Resource)]
-pub struct ClientData {
-    /// Shared client/server registries.
-    pub shared_registries: GameRegistries,
-}
+#[derive(Copy, Clone, Default, Debug)]
+pub struct ClientData;
 
 impl GsExtraData for ClientData {
     type ChunkData = voxel::ClientChunkData;

@@ -30,6 +30,7 @@ bevy_math.workspace = true
 bevy_color.workspace = true
 bevy_reflect.workspace = true
 capnp.workspace = true
+chrono.workspace = true
 either.workspace = true
 futures.workspace = true
 hashbrown.workspace = true
@@ -41,15 +42,21 @@ thiserror.workspace = true
 uuid.workspace = true
 rand.workspace = true
 rand_xoshiro.workspace = true
+rusqlite.workspace = true
 noise.workspace = true
 zorder.workspace = true
+zstd.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
 rand.workspace = true
 rand_pcg.workspace = true
+tempfile.workspace = true
 quickcheck.workspace = true
 quickcheck_macros.workspace = true
 
 [build-dependencies]
+build-rs.workspace = true
 capnpc.workspace = true
+rusqlite.workspace = true
+zstd.workspace = true

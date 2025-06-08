@@ -87,7 +87,7 @@ pub struct VoxelUniverse<ExtraData: GsExtraData> {
 /// Persistent storage for chunks, exists alongside [`VoxelUniverse`] on servers.
 #[derive(Component)]
 pub struct PersistentVoxelStorage<ExtraData: GsExtraData> {
-    persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>,
+    pub(crate) persistence_layer: Box<dyn ChunkPersistenceLayer<ExtraData>>,
     live_requests: BTreeSet<AbsChunkPos>,
 }
 
@@ -379,12 +379,11 @@ fn send_chunk_to_players(
     pkt_root.set_timestamp_ms(engine.network_thread.packet_timestamp());
     let mut root = pkt_root.init_payload();
     root.set_tick(tick);
-    root.set_revision(chunk.local_revision().into());
     let mut position = root.reborrow().init_position();
     position.set_x(pos.x);
     position.set_y(pos.y);
     position.set_z(pos.z);
-    chunk.write_full(&mut root.reborrow().init_data());
+    chunk.write_full(chunk.local_revision(), &mut root.reborrow().init_data());
     let mut packet = PacketWrapper::from(builder);
 
     // TODO: error handling, throttling

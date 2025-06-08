@@ -1,6 +1,7 @@
 /target/
 /dist/
 crates/*/target
+lib/*/target
 **/*.rs.bk
 **/*.rs.pending-snap
 .idea/*
@@ -16,3 +17,6 @@ Thumbs.db
 .vscode/*
 
 /output/
+/local/
+lib/gs_schemas/src/savefile/sql/*.sqlite
+lib/gs_schemas/src/savefile/sql/*.sqlite.zst

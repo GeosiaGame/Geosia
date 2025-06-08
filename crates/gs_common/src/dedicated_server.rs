@@ -1,6 +1,7 @@
 //! The dedicated server `main` implementation
 
 use clap::Parser;
+use gs_schemas::savefile::{get_save_metadata, new_save, saves_directory};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
@@ -16,6 +17,10 @@ struct CliOptions {}
 pub fn run_dedicated_server() -> Result<()> {
     let _cli = CliOptions::parse();
 
+    let save_name = "Dedicated Server";
+    let save_path = saves_directory().join(save_name);
+    let savefile = get_save_metadata(&save_path).or_else(|_| -> Result<_> { Ok(new_save(&save_path, save_name)?) })?;
+
     let game_config = GameConfig {
         server: ServerConfig {
             server_title: String::from("Dedicated server"),
@@ -23,7 +28,7 @@ pub fn run_dedicated_server() -> Result<()> {
         },
     };
     let game_config = GameConfig::new_handle(game_config);
-    let integ_server = GameServer::new(game_config).expect("Could not start dedicated server");
+    let integ_server = GameServer::new(game_config, savefile).expect("Could not start dedicated server");
     integ_server.set_paused(false);
 
     if let Ok(mut rl) = DefaultEditor::new() {
@@ -54,7 +59,6 @@ pub fn run_dedicated_server() -> Result<()> {
                     integ_server.shutdown().blocking_wait()?;
                     break;
                 }
-                Err(ReadlineError::WindowResized) => continue,
                 Err(e) => {
                     error!("Error reading commandline prompt: {e}");
                     break;

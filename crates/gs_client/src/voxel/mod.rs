@@ -8,7 +8,7 @@ use gs_common::network::transport::RPC_CLIENT_READER_OPTIONS;
 use gs_common::prelude::rpc::chunk_data_stream_packet;
 use gs_common::voxel::plugin::{BlockRegistryHolder, CHUNK_PACKET_QUEUE_LENGTH, VoxelUniverse, VoxelUniverseBuilder};
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos};
-use gs_schemas::mutwatcher::{MutWatcher, RevisionNumber};
+use gs_schemas::mutwatcher::MutWatcher;
 use gs_schemas::schemas::CapnpExt;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
@@ -106,7 +106,6 @@ fn handle_chunk_packet(packet: QueuedPacket, voxels: &mut ClientVoxelUniverse) -
     let root = typed_reader.get()?.get_payload()?;
     let pos = AbsChunkPos::from(IVec3::read_from_message(&root.reborrow().get_position()?)?);
     let data_r = root.reborrow().get_data()?;
-    let revision: RevisionNumber = root.get_revision().try_into()?;
 
     let mut chunk_entry = voxels.loaded_chunks_mut().chunks.entry(pos);
     let extra_data = if let std::collections::btree_map::Entry::Occupied(ref mut occupied) = chunk_entry {
@@ -114,7 +113,9 @@ fn handle_chunk_packet(packet: QueuedPacket, voxels: &mut ClientVoxelUniverse) -
     } else {
         default()
     };
-    let chunk = ClientChunk::read_full(&data_r, extra_data)?;
+    let chunk_with_revision = ClientChunk::read_full(&data_r, extra_data)?;
+    let revision = chunk_with_revision.local_revision();
+    let chunk = chunk_with_revision.into_inner();
 
     match chunk_entry {
         std::collections::btree_map::Entry::Occupied(occupied) => {

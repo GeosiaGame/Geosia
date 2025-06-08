@@ -3,6 +3,10 @@
 use std::fmt::{Display, Formatter};
 use std::net::SocketAddr;
 
+use gs_schemas::registries::GameRegistries;
+
+use crate::prelude::*;
+
 pub mod server;
 pub mod server_packet_handler;
 pub mod thread;
@@ -40,3 +44,7 @@ impl Display for PeerAddress {
         }
     }
 }
+
+/// A [`Resource`] holding the shared network registries copy for the currently running game.
+#[derive(Clone, Resource, Deref, DerefMut)]
+pub struct SharedRegistryHolder(pub GameRegistries);

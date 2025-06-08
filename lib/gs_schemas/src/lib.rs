@@ -2,6 +2,8 @@
 
 extern crate core;
 
+use std::fmt::{Debug, Formatter};
+
 use anyhow::Context;
 use smallvec::{Array, SmallVec};
 
@@ -14,12 +16,13 @@ pub mod range;
 pub mod raycast;
 pub mod registries;
 pub mod registry;
+pub mod savefile;
 pub mod schemas;
 pub mod voxel;
 
 /// A trait implemented by the game server and client, specifying the concrete types to attach as extra metadata for every chunk, chunk group, entity, etc.
 /// Used to inject side-specific data into common data structures.
-pub trait GsExtraData: Send + Sync + 'static {
+pub trait GsExtraData: Default + Debug + Copy + Clone + Send + Sync + 'static {
     /// Per-chunk data
     type ChunkData: Default + Clone + Send + Sync + 'static;
     /// Per-chunk group data
@@ -49,6 +52,15 @@ impl GameSide {
     }
 }
 
+impl std::fmt::Display for GameSide {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Server => f.write_str("Server"),
+            Self::Client => f.write_str("Client"),
+        }
+    }
+}
+
 /// Re-exported dependencies used in API types
 pub mod dependencies {
     pub use anyhow;
@@ -59,6 +71,7 @@ pub mod dependencies {
     pub use bytemuck;
     pub use bytes;
     pub use capnp;
+    pub use chrono;
     pub use either;
     pub use hashbrown;
     pub use itertools;
@@ -66,11 +79,13 @@ pub mod dependencies {
     pub use noise;
     pub use rand;
     pub use rand_xoshiro;
+    pub use rusqlite;
     pub use serde;
     pub use smallvec;
     pub use thiserror;
     pub use uuid;
     pub use zorder;
+    pub use zstd;
 }
 
 /// A simple wrapper type that's either a slice borrow, or an owned [`SmallVec`].

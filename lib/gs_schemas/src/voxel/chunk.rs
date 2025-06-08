@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use thiserror::Error;
 
+use crate::mutwatcher::{MutWatcher, RevisionNumber};
 use crate::voxel::chunk_storage::palette::PaletteDeserializationError;
 use crate::voxel::chunk_storage::{ArrayStorage, PaletteStorage};
 use crate::voxel::voxeltypes::BlockEntry;
@@ -15,7 +16,7 @@ use crate::{GsExtraData, SmallCowVec};
 pub struct BlockLight(u16);
 
 /// A 32³ grid of voxel data
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Chunk<ExtraData: GsExtraData> {
     /// Block data
     pub blocks: PaletteStorage<BlockEntry>,
@@ -37,17 +38,9 @@ pub enum ChunkDeserializationError {
     /// Illegal block ID in palette data.
     #[error("Illegal block ID in palette data")]
     IllegalBlockID,
-}
-
-/// Manual clone implementation, because the auto-derived one puts an unnecessary bound on [`GsExtraData`].
-impl<ExtraData: GsExtraData> Clone for Chunk<ExtraData> {
-    fn clone(&self) -> Self {
-        Self {
-            blocks: self.blocks.clone(),
-            light_level: self.light_level.clone(),
-            extra_data: self.extra_data.clone(),
-        }
-    }
+    /// Illegal (zero) revision.
+    #[error("Illegal chunk revision stored")]
+    IllegalRevision,
 }
 
 impl<ExtraData: GsExtraData> Chunk<ExtraData> {
@@ -61,7 +54,12 @@ impl<ExtraData: GsExtraData> Chunk<ExtraData> {
     }
 
     /// Writes a full copy of the chunk to the given builder.
-    pub fn write_full(&self, output: &mut crate::schemas::game_types_capnp::full_chunk_data::Builder) {
+    pub fn write_full(
+        &self,
+        revision: RevisionNumber,
+        output: &mut crate::schemas::game_types_capnp::full_chunk_data::Builder,
+    ) {
+        output.set_revision(revision.into());
         let block_palette = self.blocks.serialized_palette();
         let block_data = self.blocks.serialized_data();
         let mut palette_builder = output
@@ -77,7 +75,7 @@ impl<ExtraData: GsExtraData> Chunk<ExtraData> {
     pub fn read_full(
         reader: &crate::schemas::game_types_capnp::full_chunk_data::Reader,
         extra_data: ExtraData::ChunkData,
-    ) -> Result<Self, ChunkDeserializationError> {
+    ) -> Result<MutWatcher<Self>, ChunkDeserializationError> {
         let palette_reader = reader.get_block_palette()?;
         let data_reader = reader.get_block_data()?;
         let palette = palette_reader.as_slice();
@@ -101,7 +99,8 @@ impl<ExtraData: GsExtraData> Chunk<ExtraData> {
             light_level: ArrayStorage::default(),
             extra_data,
         };
+        let revision = RevisionNumber::new(reader.get_revision()).ok_or(ChunkDeserializationError::IllegalRevision)?;
 
-        Ok(chunk)
+        Ok(MutWatcher::new_saved(chunk, revision))
     }
 }

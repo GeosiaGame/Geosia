@@ -19,8 +19,12 @@
 
 struct ChunkVertex {
     @builtin(instance_index) instance_index: u32,
-    @location(0) position: vec3<f32>,
-    @location(1) normal: vec3<f32>,
+    #ifdef VERTEX_POSITIONS
+        @location(0) position: vec3<f32>,
+    #endif
+    #ifdef VERTEX_NORMALS
+        @location(1) normal: vec3<f32>,
+    #endif
     #ifdef VERTEX_UVS_A
         @location(2) uv: vec2<f32>,
     #endif
@@ -30,12 +34,16 @@ struct ChunkVertex {
     #ifdef VERTEX_TANGENTS
         @location(4) tangent: vec4<f32>,
     #endif
-    @location(5) color: vec4<f32>,
+    #ifdef VERTEX_COLORS
+        @location(5) color: vec4<f32>,
+    #endif
     @location(6) barycentric_color_offset: vec3<f32>,
     @location(7) block_index_with_flags: u32,
 }
 
 struct ChunkVertexOutput {
+    // This is `clip position` when the struct is used as a vertex stage output
+    // and `frag coord` when used as a fragment stage input
     @builtin(position) position: vec4<f32>,
     @location(0) world_position: vec4<f32>,
     @location(1) world_normal: vec3<f32>,
@@ -48,13 +56,18 @@ struct ChunkVertexOutput {
 #ifdef VERTEX_TANGENTS
     @location(4) world_tangent: vec4<f32>,
 #endif
-    @location(5) @interpolate(linear, center) color: vec4<f32>,
+#ifdef VERTEX_COLORS
+    @location(5) color: vec4<f32>,
+#endif
 #ifdef VERTEX_OUTPUT_INSTANCE_INDEX
     @location(6) @interpolate(flat) instance_index: u32,
 #endif
-    @location(7) barycentric_coords: vec2<f32>,
-    @location(8) barycentric_color_offset: vec3<f32>,
-    @location(9) block_index: u32,
+#ifdef VISIBILITY_RANGE_DITHER
+    @location(7) @interpolate(flat) visibility_range_dither: i32,
+#endif
+    @location(8) barycentric_coords: vec2<f32>,
+    @location(9) barycentric_color_offset: vec3<f32>,
+    @location(10) block_index: u32,
 }
 
 /*
@@ -81,15 +94,11 @@ fn vertex(vertex: ChunkVertex) -> ChunkVertexOutput {
 
     let mesh_world_from_local = mesh_functions::get_world_from_local(vertex.instance_index);
 
-    // Use vertex.instance_index instead of vertex.instance_index to work around a wgpu dx12 bug.
-    // See https://github.com/gfx-rs/naga/issues/2416 .
     var world_from_local = mesh_world_from_local;
 
 #ifdef VERTEX_NORMALS
     out.world_normal = mesh_functions::mesh_normal_local_to_world(
         vertex.normal,
-        // Use vertex.instance_index instead of vertex.instance_index to work around a wgpu dx12 bug.
-        // See https://github.com/gfx-rs/naga/issues/2416
         vertex.instance_index
     );
 #endif
@@ -108,8 +117,6 @@ fn vertex(vertex: ChunkVertex) -> ChunkVertexOutput {
     out.world_tangent = mesh_functions::mesh_tangent_local_to_world(
         world_from_local,
         vertex.tangent,
-        // Use vertex.instance_index instead of vertex.instance_index to work around a wgpu dx12 bug.
-        // See https://github.com/gfx-rs/naga/issues/2416
         vertex.instance_index
     );
 #endif
@@ -117,8 +124,6 @@ fn vertex(vertex: ChunkVertex) -> ChunkVertexOutput {
     out.color = vertex.color;
 
 #ifdef VERTEX_OUTPUT_INSTANCE_INDEX
-    // Use vertex.instance_index instead of vertex.instance_index to work around a wgpu dx12 bug.
-    // See https://github.com/gfx-rs/naga/issues/2416
     out.instance_index = vertex.instance_index;
 #endif
 

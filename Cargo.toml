@@ -3,7 +3,7 @@ members = ["lib/*", "crates/*"]
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.86"
+rust-version = "1.87"
 edition = "2024"
 license = "LGPL-3.0-only"
 authors = ["Geosia team"]
@@ -25,6 +25,8 @@ unstable_features = "deny"
 missing_docs = "warn"
 redundant_imports = "warn"
 redundant_lifetimes = "warn"
+
+mismatched_lifetime_syntaxes = "allow"
 
 [workspace.lints.rustdoc]
 
@@ -94,11 +96,12 @@ gs_common = { path = "crates/gs_common", version = "0.0.0" }
 gs_schemas = { version = "0.0.1", path = "lib/gs_schemas" }
 
 # Remote
-anyhow = "1.0.97"
+anyhow = "1.0.98"
 arc-swap = "1.7.1"
-bitflags = { version = "2.9.0", features = ["bytemuck", "serde"] }
+bitflags = { version = "2.9.1", features = ["bytemuck", "serde"] }
 bitvec = { version = "1.0.1", features = ["serde"] }
-bytemuck = { version = "1.22.0", features = [
+build-rs = "0.1.2"
+bytemuck = { version = "1.23.0", features = [
     "extern_crate_alloc",
     "extern_crate_std",
     "min_const_generics",
@@ -107,29 +110,44 @@ bytemuck = { version = "1.22.0", features = [
     "zeroable_atomics",
 ] }
 bytes = "1.10.1"
-capnp = { version = "0.21.0" }
+capnp = { version = "0.21.1" }
 capnp-futures = "0.21.0"
 capnpc = "0.21.0"
-clap = { version = "4.5.37", features = ["derive"] }
-either = "1.13.0"
+chrono = "0.4.41"
+clap = { version = "4.5.39", features = ["derive"] }
+either = "1.15.0"
 futures = "0.3.31"
 glam = { version = "0.29.3", features = [
     "bytemuck",
     "serde",
 ] } # Keep in sync with bevy
-hashbrown = { version = "0.15.2", features = ["serde"] }
-image = "0.25.2" # Keep in sync with bevy
+hashbrown = { version = "0.15.4", features = ["serde"] }
+image = "0.25.6" # Keep in sync with bevy
 itertools = "0.14.0"
 kstring = { version = "2.0.2", features = ["serde"] }
 lru = "0.14.0"
 noise = "0.9.0"
-quinn = { version = "0.11.7", features = ["futures-io", "runtime-tokio"] }
+quinn = { version = "0.11.8", features = ["futures-io", "runtime-tokio"] }
 rand = "0.9.1"
 rand_pcg = "0.9.0"
 rand_xoshiro = "0.7.0"
 rcgen = "0.13.2"
-rustls = { version = "0.23.25" }
-rustyline = "15.0.0"
+rustls = { version = "0.23.27" }
+rustyline = "16.0.0"
+rusqlite = { version = "0.36.0", features = [
+    "array",
+    "backup",
+    "blob",
+    "bundled",
+    "chrono",
+    "column_decltype",
+    "functions",
+    "i128_blob",
+    "serialize",
+    "trace",
+    "uuid",
+    "vtab",
+] }
 serde = { version = "1.0.219", features = ["derive"] }
 slotmap = "1.0.7"
 smallvec = { version = "1.14.0", features = [
@@ -140,12 +158,13 @@ smallvec = { version = "1.14.0", features = [
     "union",
 ] }
 smart-default = "0.7.1"
-socket2 = "0.5.8"
+socket2 = "0.5.10"
 spade = { version = "2.13.1", features = ["serde"] }
 static_assertions = "1.1.0"
+tempfile = "3.20.0"
 thiserror = "2.0.12"
 thread_local = "1.1.8"
-tokio = { version = "1.44.1", features = [
+tokio = { version = "1.45.1", features = [
     "sync",
     "rt",
     "net",
@@ -154,9 +173,9 @@ tokio = { version = "1.44.1", features = [
     "time",
     "macros",
 ] }
-tokio-util = { version = "0.7.14", features = ["compat", "io-util"] }
+tokio-util = { version = "0.7.15", features = ["compat", "io-util"] }
 tracing = "0.1.41"
-uuid = { version = "1.9.1", features = [
+uuid = { version = "1.17.0", features = [
     "fast-rng",
     "serde",
     "bytemuck",
@@ -164,9 +183,10 @@ uuid = { version = "1.9.1", features = [
     "v6",
 ] }
 zorder = "0.2.2"
+zstd = "0.13.3"
 
 # Remote, bevy plugins
-bevy_egui = { version = "0.34.0", default-features = false, features = [
+bevy_egui = { version = "0.34.1", default-features = false, features = [
     "manage_clipboard",
     "open_url",
     "default_fonts",
@@ -175,12 +195,12 @@ bevy_egui = { version = "0.34.0", default-features = false, features = [
 ] }
 
 # Remote, testing
-criterion = { version = "0.5.1", features = ["html_reports"] }
+criterion = { version = "0.6.0", features = ["html_reports"] }
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
 [workspace.dependencies.bevy]
-version = "0.16.0"
+version = "=0.16.0"
 default-features = false
 # Extra features are used in gs_client on top of these common ones
 features = [
@@ -205,7 +225,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_math]
-version = "0.16.0"
+version = "=0.16.0"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -213,7 +233,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_color]
-version = "0.16.0"
+version = "=0.16.1"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -221,7 +241,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_reflect]
-version = "0.16.0"
+version = "=0.16.0"
 features = ["smallvec", "glam", "uuid", "std"]
 
 [profile.dev]

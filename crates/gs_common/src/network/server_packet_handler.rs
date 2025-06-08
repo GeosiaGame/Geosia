@@ -19,9 +19,11 @@ use smallvec::SmallVec;
 use uuid::Uuid;
 
 use super::{
+    SharedRegistryHolder,
     server::{ConnectedPlayer, QueuedPacket},
     transport::PacketWrapper,
 };
+use crate::voxel::plugin::PersistentVoxelStorage;
 use crate::{
     GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE,
     GameServerResource, InGameSystemSet, ServerData,
@@ -56,6 +58,7 @@ pub struct BootstrappedGameDataTag;
 
 fn bootstrap_players_system(
     engine: Res<GameServerResource>,
+    shared_registries: Res<SharedRegistryHolder>,
     to_bootstrap: Populated<
         (Entity, &ConnectedPlayer),
         (Without<BootstrappedGameDataTag>, Without<BootstrappingGameDataTag>),
@@ -71,7 +74,7 @@ fn bootstrap_players_system(
     Uuid::parse_str("05aaf964-aefa-49d0-9b6a-0aa376016ac2")
         .unwrap()
         .write_to_message(&mut payload.reborrow().init_universe_id());
-    engine.server_data.shared_registries.serialize_ids(&mut payload);
+    shared_registries.serialize_ids(&mut payload);
     let mut packet = PacketWrapper::from(bootstrap_packet);
 
     let mut bootstrapped_players: SmallVec<[_; 4]> = SmallVec::new();
@@ -99,7 +102,10 @@ pub fn server_packet_handler_system(
     )>,
     all_players: Query<(Entity, &ConnectedPlayer)>,
     block_registry: Option<Res<BlockRegistryHolder>>,
-    mut voxel_universe: Query<&mut VoxelUniverse<ServerData>>,
+    mut voxel_universe: Query<(
+        &mut VoxelUniverse<ServerData>,
+        Option<&mut PersistentVoxelStorage<ServerData>>,
+    )>,
 ) {
     let engine = &*engine.0;
     let response_timestamp = engine.network_thread.packet_timestamp();
@@ -187,7 +193,8 @@ pub fn server_packet_handler_system(
                         hit_mask: RaycastHitMask::all(),
                     };
                     let bregistry = &**block_registry.as_ref().context("missing block registry")?;
-                    let voxels = &mut *voxel_universe.single_mut()?;
+                    let mut voxels = voxel_universe.single_mut()?;
+                    let (voxels, voxel_storage) = (&mut *voxels.0, voxels.1.as_deref_mut());
                     let ray_ctx = RaycastContext {
                         block_registry: Some(bregistry),
                         voxel_world: Some(voxels),
@@ -206,8 +213,8 @@ pub fn server_packet_handler_system(
                     let (i_stone, _) = bregistry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
                     let (i_empty, _) = bregistry.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
 
-                    let (chunk, local) = pos.split_chunk_component();
-                    if let Some(chunk) = voxels.loaded_chunks_mut().get_chunk_mut(chunk) {
+                    let (chunk_pos, local) = pos.split_chunk_component();
+                    if let Some(chunk) = voxels.loaded_chunks_mut().get_chunk_mut(chunk_pos) {
                         match which_action {
                             block_action::Which::PlaceBlock(_) => {
                                 chunk.mutate_stored().blocks.put(local, BlockEntry::new(i_stone, 0));
@@ -215,6 +222,11 @@ pub fn server_packet_handler_system(
                             block_action::Which::BreakBlock(_) => {
                                 chunk.mutate_stored().blocks.put(local, BlockEntry::new(i_empty, 0));
                             }
+                        }
+                        if let Some(voxel_storage) = voxel_storage {
+                            voxel_storage
+                                .persistence_layer
+                                .request_save(vec![(chunk_pos, chunk.clone())].into_boxed_slice());
                         }
                     }
 

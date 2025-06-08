@@ -9,6 +9,8 @@ use bytemuck::{PodInOption, TransparentWrapper, ZeroableInOption};
 use hashbrown::{Equivalent, HashMap};
 use itertools::Itertools;
 use kstring::{KString, KStringRef};
+use rusqlite::ToSql;
+use rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -40,6 +42,17 @@ pub const fn is_valid_registry_name(name: &str) -> bool {
     true
 }
 
+/// Parse error when an illegal registry name is encountered.
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum RegistryNameParseError {
+    /// Could not find the splitting colon.
+    #[error("Missing colon in registry name")]
+    MissingColon,
+    /// One of the name components does not match `[a-z0-9_]+`.
+    #[error("Illegal characters used in registry name component")]
+    InvalidComponent,
+}
+
 /// Simple namespaced registry object name
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Default, Hash, Serialize, Deserialize)]
 pub struct RegistryName {
@@ -60,15 +73,22 @@ pub struct RegistryNameRef<'n> {
 
 impl RegistryName {
     /// Constructs a `gs:`-namespaced name.
-    pub fn gs(key: &str) -> Self {
-        Self {
+    pub fn gs(key: &str) -> Result<Self, RegistryNameParseError> {
+        if !is_valid_registry_name(key) {
+            return Err(RegistryNameParseError::InvalidComponent);
+        }
+        Ok(Self {
             ns: GS_REGISTRY_DOMAIN_KS.clone(),
             key: KString::from_ref(key),
-        }
+        })
     }
 
     /// A compile time constructor for `gs:`-namespaced names.
+    /// Panics when an invalid name is passed in.
     pub const fn gs_const(key: &'static str) -> Self {
+        if !is_valid_registry_name(key) {
+            panic!("Invalid registry key");
+        }
         Self {
             ns: KString::from_static(GS_REGISTRY_DOMAIN_CONST),
             key: KString::from_static(key),
@@ -76,15 +96,28 @@ impl RegistryName {
     }
 
     /// Constructs a name out of the given namespace and key.
-    pub fn new(ns: &str, key: &str) -> Self {
-        Self {
+    pub fn new(ns: &str, key: &str) -> Result<Self, RegistryNameParseError> {
+        if !is_valid_registry_name(ns) {
+            return Err(RegistryNameParseError::InvalidComponent);
+        }
+        if !is_valid_registry_name(key) {
+            return Err(RegistryNameParseError::InvalidComponent);
+        }
+        Ok(Self {
             ns: KString::from_ref(ns),
             key: KString::from_ref(key),
-        }
+        })
     }
 
     /// Constructs a name out of the given namespace and key, at compile time.
+    /// Panics when an invalid name is passed in.
     pub const fn new_const(ns: &'static str, key: &'static str) -> Self {
+        if !is_valid_registry_name(ns) {
+            panic!("Invalid registry namespace");
+        }
+        if !is_valid_registry_name(key) {
+            panic!("Invalid registry key");
+        }
         Self {
             ns: KString::from_static(ns),
             key: KString::from_static(key),
@@ -99,18 +132,56 @@ impl RegistryName {
 
 impl<'a> RegistryNameRef<'a> {
     /// Constructs a name reference out of the given namespace and key.
-    pub fn new(ns: impl Into<KStringRef<'a>>, key: impl Into<KStringRef<'a>>) -> Self {
+    pub fn new(ns: impl Into<KStringRef<'a>>, key: impl Into<KStringRef<'a>>) -> Result<Self, RegistryNameParseError> {
+        let ns: KStringRef = ns.into();
+        let key: KStringRef = key.into();
+
+        if !is_valid_registry_name(&ns) {
+            return Err(RegistryNameParseError::InvalidComponent);
+        }
+        if !is_valid_registry_name(&key) {
+            return Err(RegistryNameParseError::InvalidComponent);
+        }
+
+        Ok(Self { ns, key })
+    }
+
+    /// Constructs a name reference out of the given namespace and key, at compile time.
+    /// Panics when an invalid name is passed in.
+    pub const fn new_const(ns: &'static str, key: &'static str) -> Self {
+        if !is_valid_registry_name(ns) {
+            panic!("Invalid registry namespace");
+        }
+        if !is_valid_registry_name(key) {
+            panic!("Invalid registry key");
+        }
         Self {
-            ns: ns.into(),
-            key: key.into(),
+            ns: KStringRef::from_static(ns),
+            key: KStringRef::from_static(key),
         }
     }
 
     /// Constructs a `gs:`-namespaced name reference
-    pub fn gs(key: impl Into<KStringRef<'a>>) -> Self {
-        Self {
+    pub fn gs(key: impl Into<KStringRef<'a>>) -> Result<Self, RegistryNameParseError> {
+        let key: KStringRef = key.into();
+        if !is_valid_registry_name(&key) {
+            return Err(RegistryNameParseError::InvalidComponent);
+        }
+        Ok(Self {
             ns: KStringRef::from(&GS_REGISTRY_DOMAIN_KS),
-            key: key.into(),
+            key,
+        })
+    }
+
+    /// A compile time constructor for `gs:`-namespaced name references.
+    /// Panics when an invalid name is passed in.
+    pub const fn gs_const(key: &'static str) -> Self {
+        if !is_valid_registry_name(key) {
+            panic!("Invalid registry key");
+        }
+        Self {
+            ns: KStringRef::from_static(GS_REGISTRY_DOMAIN_CONST),
+            key: KStringRef::from_static(key),
         }
     }
 
@@ -134,6 +205,18 @@ impl Equivalent<RegistryNameRef<'_>> for RegistryName {
     }
 }
 
+impl PartialEq<RegistryName> for RegistryNameRef<'_> {
+    fn eq(&self, other: &RegistryName) -> bool {
+        self.ns.as_str() == other.ns.as_str() && self.key.as_str() == other.key.as_str()
+    }
+}
+
+impl PartialEq<RegistryNameRef<'_>> for RegistryName {
+    fn eq(&self, other: &RegistryNameRef) -> bool {
+        self.ns.as_str() == other.ns.as_str() && self.key.as_str() == other.key.as_str()
+    }
+}
+
 impl<'a> From<&'a RegistryName> for RegistryNameRef<'a> {
     fn from(value: &'a RegistryName) -> Self {
         RegistryNameRef {
@@ -152,6 +235,46 @@ impl<'a> From<&RegistryNameRef<'a>> for RegistryName {
     }
 }
 
+impl<'s> TryFrom<&'s str> for RegistryNameRef<'s> {
+    type Error = RegistryNameParseError;
+
+    fn try_from(value: &'s str) -> Result<Self, Self::Error> {
+        let (ns, key) = value.split_once(':').ok_or(RegistryNameParseError::MissingColon)?;
+        Self::new(ns, key)
+    }
+}
+
+impl TryFrom<&str> for RegistryName {
+    type Error = RegistryNameParseError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let (ns, key) = value.split_once(':').ok_or(RegistryNameParseError::MissingColon)?;
+        Self::new(ns, key)
+    }
+}
+
+impl FromSql for RegistryName {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        Self::try_from(value.as_str()?).map_err(|e| rusqlite::types::FromSqlError::Other(e.into()))
+    }
+}
+
+impl ToSql for RegistryName {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::Owned(rusqlite::types::Value::Text(
+            self.to_string(),
+        )))
+    }
+}
+
+impl ToSql for RegistryNameRef<'_> {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::Owned(rusqlite::types::Value::Text(
+            self.to_string(),
+        )))
+    }
+}
+
 /// Newtype wrapper around a u32 registry ID.
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize, TransparentWrapper)]
@@ -162,9 +285,37 @@ unsafe impl ZeroableInOption for RegistryId {}
 // SAFETY: transparent NonZeroU32 wrapper, NonZeroU32 implements this trait
 unsafe impl PodInOption for RegistryId {}
 
+impl RegistryId {
+    /// Const-safe `try_from`
+    pub const fn try_new(id: u32) -> Option<Self> {
+        match NonZeroU32::new(id) {
+            None => None,
+            Some(id) => Some(Self(id)),
+        }
+    }
+}
+
 impl Display for RegistryId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
+    }
+}
+
+impl From<NonZeroU32> for RegistryId {
+    fn from(value: NonZeroU32) -> Self {
+        Self(value)
+    }
+}
+
+impl FromSql for RegistryId {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        Ok(Self::from(NonZeroU32::column_result(value)?))
+    }
+}
+
+impl ToSql for RegistryId {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        NonZeroU32::to_sql(&self.0)
     }
 }
 
@@ -282,9 +433,6 @@ impl<Object: RegistryObject> Registry<Object> {
     /// On failure, no ID is allocated and a precise error is returned.
     pub fn push_object(&mut self, object: Object) -> Result<RegistryId, RegistryError> {
         let name = object.registry_name().to_owned();
-        if !is_valid_registry_name(&name.ns) || !is_valid_registry_name(&name.key) {
-            return Err(RegistryError::IllegalName { name });
-        }
         if self.name_to_id.contains_key(&name) {
             return Err(RegistryError::NameAlreadyExists { name });
         }
@@ -319,9 +467,6 @@ impl<Object: RegistryObject> Registry<Object> {
             });
         }
         let name = object.registry_name().to_owned();
-        if !is_valid_registry_name(&name.ns) || !is_valid_registry_name(&name.key) {
-            return Err(RegistryError::IllegalName { name });
-        }
         if self.name_to_id.contains_key(&name) {
             return Err(RegistryError::NameAlreadyExists { name });
         }
@@ -426,7 +571,7 @@ impl<Object: RegistryObject> Registry<Object> {
             let new_id = RegistryId::try_from(new_id).or(Err(RegistryDeserializationError::IllegalID))?;
             let ns = nss.get(idx)?.to_str()?;
             let key = keys.get(idx)?.to_str()?;
-            let name = RegistryName::new(ns, key);
+            let name = RegistryName::new(ns, key).or(Err(RegistryDeserializationError::IllegalID))?;
 
             let old_obj = self.lookup_name_to_object(name.as_ref());
             if let Some((_old_id, old_obj)) = old_obj {
@@ -460,20 +605,20 @@ mod test {
     #[test]
     pub fn simple_registry() {
         let mut reg: Registry<DummyObject> = Registry::default();
-        let a_id = reg.push_object(DummyObject(RegistryName::gs("a"))).unwrap();
+        let a_id = reg.push_object(DummyObject(RegistryName::gs_const("a"))).unwrap();
         assert_eq!(a_id.0.get(), 1);
         let b_id = RegistryId::try_from(2).unwrap();
         let c_id = RegistryId::try_from(3).unwrap(); // non-existent
-        reg.insert_object_with_id(b_id, DummyObject(RegistryName::gs("b")))
+        reg.insert_object_with_id(b_id, DummyObject(RegistryName::gs_const("b")))
             .unwrap();
-        assert!(reg.push_object(DummyObject(RegistryName::gs("a"))).is_err());
-        assert!(reg.push_object(DummyObject(RegistryName::gs("b"))).is_err());
+        assert!(reg.push_object(DummyObject(RegistryName::gs_const("a"))).is_err());
+        assert!(reg.push_object(DummyObject(RegistryName::gs_const("b"))).is_err());
         assert!(
-            reg.insert_object_with_id(b_id, DummyObject(RegistryName::gs("new")))
+            reg.insert_object_with_id(b_id, DummyObject(RegistryName::gs_const("new")))
                 .is_err()
         );
         assert!(
-            reg.insert_object_with_id(c_id, DummyObject(RegistryName::gs("b")))
+            reg.insert_object_with_id(c_id, DummyObject(RegistryName::gs_const("b")))
                 .is_err()
         );
 
@@ -486,17 +631,17 @@ mod test {
         let dyn_c = KString::from_string(String::from("c"));
 
         assert_eq!(
-            reg.lookup_name_to_object(RegistryNameRef::gs(&dyn_a))
+            reg.lookup_name_to_object(RegistryNameRef::gs(&dyn_a).unwrap())
                 .map(|(id, o)| (id, o.0.key.as_str())),
             Some((a_id, "a"))
         );
         assert_eq!(
-            reg.lookup_name_to_object(RegistryNameRef::gs(&dyn_b))
+            reg.lookup_name_to_object(RegistryNameRef::gs(&dyn_b).unwrap())
                 .map(|(id, o)| (id, o.0.key.as_str())),
             Some((b_id, "b"))
         );
         assert_eq!(
-            reg.lookup_name_to_object(RegistryNameRef::gs(&dyn_c))
+            reg.lookup_name_to_object(RegistryNameRef::gs(&dyn_c).unwrap())
                 .map(|(id, o)| (id, o.0.key.as_str())),
             None
         );
@@ -557,21 +702,21 @@ mod test {
         let original_result = original.clone_with_serialized_ids(&bundle_reader).unwrap();
         assert_eq!(
             original_result
-                .lookup_name_to_object(RegistryNameRef::gs("a"))
+                .lookup_name_to_object(RegistryNameRef::gs_const("a"))
                 .unwrap()
                 .0,
             o_a
         );
         assert_eq!(
             original_result
-                .lookup_name_to_object(RegistryNameRef::gs("b"))
+                .lookup_name_to_object(RegistryNameRef::gs_const("b"))
                 .unwrap()
                 .0,
             o_b
         );
         assert_eq!(
             original_result
-                .lookup_name_to_object(RegistryNameRef::gs("c"))
+                .lookup_name_to_object(RegistryNameRef::gs_const("c"))
                 .unwrap()
                 .0,
             o_c
@@ -580,21 +725,21 @@ mod test {
         let original_rev_result = original_rev.clone_with_serialized_ids(&bundle_reader).unwrap();
         assert_eq!(
             original_rev_result
-                .lookup_name_to_object(RegistryNameRef::gs("a"))
+                .lookup_name_to_object(RegistryNameRef::gs_const("a"))
                 .unwrap()
                 .0,
             o_a
         );
         assert_eq!(
             original_rev_result
-                .lookup_name_to_object(RegistryNameRef::gs("b"))
+                .lookup_name_to_object(RegistryNameRef::gs_const("b"))
                 .unwrap()
                 .0,
             o_b
         );
         assert_eq!(
             original_rev_result
-                .lookup_name_to_object(RegistryNameRef::gs("c"))
+                .lookup_name_to_object(RegistryNameRef::gs_const("c"))
                 .unwrap()
                 .0,
             o_c

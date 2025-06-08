@@ -1,8 +1,10 @@
 //! UI Views for the game.
 
+use std::collections::BTreeMap;
+
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use bevy_egui::{
-    EguiContext, EguiGlobalSettings,
+    EguiContext, EguiGlobalSettings, EguiStartupSet, egui,
     input::{EguiContextPointerPosition, EguiInputEvent},
 };
 
@@ -14,6 +16,7 @@ pub mod chat;
 pub fn common_game_ui_plugin(app: &mut App) {
     app.insert_resource(IsCursorGrabbed(false));
     app.add_observer(update_grab_mode);
+    app.add_systems(Startup, setup_egui_theme.after(EguiStartupSet::InitContexts));
     app.add_systems(Last, center_cursor_delay);
 }
 
@@ -27,6 +30,30 @@ pub struct SetGrabMode(pub bool);
 
 #[derive(Component)]
 struct CenterCursorDelay(i32);
+
+fn setup_egui_theme(egui_contexts: Query<&mut EguiContext>) {
+    use egui::FontFamily::*;
+    use egui::FontId;
+    use egui::TextStyle;
+    for mut ctx in egui_contexts {
+        let ctx = ctx.get_mut();
+        let fonts = egui::FontDefinitions::default();
+        ctx.set_fonts(fonts);
+        let text_styles: BTreeMap<_, _> = [
+            (TextStyle::Heading, FontId::new(30.0, Proportional)),
+            (TextStyle::Name("Heading2".into()), FontId::new(25.0, Proportional)),
+            (TextStyle::Name("Context".into()), FontId::new(23.0, Proportional)),
+            (TextStyle::Body, FontId::new(16.0, Proportional)),
+            (TextStyle::Monospace, FontId::new(16.0, Proportional)),
+            (TextStyle::Button, FontId::new(16.0, Proportional)),
+            (TextStyle::Small, FontId::new(12.0, Proportional)),
+        ]
+        .into();
+        ctx.all_styles_mut(|style| {
+            style.text_styles = text_styles.clone();
+        });
+    }
+}
 
 fn update_grab_mode(
     trigger: Trigger<SetGrabMode>,
