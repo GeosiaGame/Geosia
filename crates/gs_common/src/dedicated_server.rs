@@ -59,7 +59,6 @@ pub fn run_dedicated_server() -> Result<()> {
                     integ_server.shutdown().blocking_wait()?;
                     break;
                 }
-                Err(ReadlineError::WindowResized) => continue,
                 Err(e) => {
                     error!("Error reading commandline prompt: {e}");
                     break;

@@ -11,7 +11,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use rusqlite::types::Value;
-use rusqlite::{Connection, DatabaseName, OpenFlags, Result, Transaction, named_params, params};
+use rusqlite::{Connection, MAIN_DB, OpenFlags, Result, Transaction, named_params, params};
 use uuid::Uuid;
 
 use super::sql;
@@ -30,7 +30,7 @@ pub fn create_test_memory_db() -> Result<Connection> {
     conn.set_prepared_statement_cache_capacity(64);
     let data =
         zstd::decode_all(sql::SQL_0000_NEW_GAME_TEMPLATE_ZST).expect("Could not decompress builtin savefile template");
-    conn.deserialize_read_exact(DatabaseName::Main, &data[..], data.len(), false)?;
+    conn.deserialize_read_exact(MAIN_DB, &data[..], data.len(), false)?;
     Ok(conn)
 }
 

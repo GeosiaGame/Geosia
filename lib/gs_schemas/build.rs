@@ -128,7 +128,7 @@ fn regen_sql() -> Result<()> {
     conn.execute_batch(&std::fs::read_to_string("src/savefile/sql/0000_quit.sql")?)?;
     conn.execute_batch("VACUUM;")?;
     // Save new savefile template to bytes
-    let db_data = conn.serialize(rusqlite::DatabaseName::Main)?;
+    let db_data = conn.serialize(rusqlite::MAIN_DB)?;
     write_file_if_changed(new_game_template_path_uncompressed, &db_data)?;
     let db_zstd_data = zstd::encode_all(&db_data as &[u8], 3)?;
     write_file_if_changed(new_game_template_path, &db_zstd_data)?;
