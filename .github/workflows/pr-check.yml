@@ -22,19 +22,20 @@ env:
 
 jobs:
   tests:
-    name: ${{ matrix.rust }} (${{ matrix.os }})
+    name: ${{ matrix.rust.name }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ ubuntu-24.04 ]
-        rust: [ '1.87.0', nightly-2025-06-07 ]
-        include:
-          - os: ubuntu-24.04
-#          - os: macos-latest
+        rust:
+          - version: '1.87.0'
+            name: 'stable'
+          - version: 'nightly-2025-06-07'
+            name: 'nightly'
     env:
       RUST_BACKTRACE: full
-      RUSTV: ${{ matrix.rust }}
+      RUSTV: ${{ matrix.rust.version }}
     steps:
       - name: Install dependencies
         if: matrix.os == 'ubuntu-24.04'
@@ -50,22 +51,22 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-r${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
-      - name: Install Rust ${{ matrix.rust }}
+          key: ${{ runner.os }}-cargo-r${{ matrix.rust.version }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+      - name: Install Rust ${{ matrix.rust.version }}
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: ${{ matrix.rust.version }}
           components: rustfmt, clippy
 
       - name: Run tests
-        run: cargo "+${{ matrix.rust }}" test --workspace
+        run: cargo "+${{ matrix.rust.version }}" test --workspace
       - name: Clippy
-        run: cargo "+${{ matrix.rust }}" clippy --all-targets -- -D warnings
+        run: cargo "+${{ matrix.rust.version }}" clippy --all-targets -- -D warnings
       - name: Clippy - Server-only build
-        run: cargo "+${{ matrix.rust }}" clippy -p gs_common -- -D warnings
+        run: cargo "+${{ matrix.rust.version }}" clippy -p gs_common -- -D warnings
       - name: Clippy - Schemas-only build
-        run: cargo "+${{ matrix.rust }}" clippy -p gs_schemas -- -D warnings
+        run: cargo "+${{ matrix.rust.version }}" clippy -p gs_schemas -- -D warnings
       - name: Check formatting
-        if: startsWith(matrix.rust, 'nightly')
-        run: cargo "+${{ matrix.rust }}" fmt --check --all
+        if: startsWith(matrix.rust.version, 'nightly')
+        run: cargo "+${{ matrix.rust.version }}" fmt --check --all
 
