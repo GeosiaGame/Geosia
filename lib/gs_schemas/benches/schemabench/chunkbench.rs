@@ -1,8 +1,9 @@
 //! Benchmarks chunk storage.
 
 use std::cell::Cell;
+use std::hint::black_box;
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group};
+use criterion::{BenchmarkId, Criterion, criterion_group};
 use gs_schemas::coordinates::{CHUNK_DIM3, CHUNK_DIM3Z, InChunkPos};
 use gs_schemas::voxel::chunk_storage::{ChunkStorage, PaletteStorage};
 use rand::distr::Uniform;
