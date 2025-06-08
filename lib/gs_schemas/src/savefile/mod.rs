@@ -12,6 +12,7 @@ use std::{
 };
 
 use anyhow::{Context, anyhow};
+use capnp::message::ReaderOptions;
 use chrono::{DateTime, Utc};
 use kstring::KString;
 use rusqlite::{Connection, OpenFlags, ToSql, types::FromSql};
@@ -21,6 +22,12 @@ use crate::{ErrorList, registry::RegistryName};
 
 pub mod queries;
 pub mod sql;
+
+/// Capnproto reader options for remote server connections on the client
+pub static SAVEFILE_CAPNP_READER_OPTIONS: ReaderOptions = ReaderOptions {
+    traversal_limit_in_words: Some(256 * 1024 * 1024),
+    nesting_limit: 48,
+};
 
 /// sqlite-compatible [`KString`] wrapper
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -168,7 +175,7 @@ impl SavefileMetadata {
     /// Opens a read-write DB connection to this savefile's location.
     pub fn open_rw(&self) -> rusqlite::Result<Connection> {
         match &self.location {
-            SavefileLocation::Path(path) => queries::open_rw_connection(path),
+            SavefileLocation::Path(path) => queries::open_rw_connection(&path.join(SAVEFILE_DB_NAME)),
             SavefileLocation::Memory => {
                 let conn = queries::create_test_memory_db()?;
                 queries::insert_new_savefile_meta(&conn, &self.name, self.created_at, self.uuid)?;

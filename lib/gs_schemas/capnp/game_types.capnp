@@ -104,8 +104,10 @@ struct GameBootstrapData @0xb0778941893c57e5 {
 }
 
 struct FullChunkData {
-    blockPalette @0 :List(UInt64);
-    blockData @1 :List(UInt16);
+    # Revision number of the chunk, used by MutWatcher deserialization.
+    revision @0 :UInt64;
+    blockPalette @1 :List(UInt64);
+    blockData @2 :List(UInt16);
 }
 
 # Action Data

@@ -101,10 +101,8 @@ struct BlockActionRequest @0xa74244e28dcb5f2f {
 struct ChunkDataStreamPacket {
     # Game tick on which this chunk was updated.
     tick @0 :UInt64;
-    # Revision number of the chunk, used by MutWatcher deserialization.
-    revision @1 :UInt64;
     # AbsChunkPos of the chunk.
-    position @2 :GameTypes.IVec3;
+    position @1 :GameTypes.IVec3;
     # Serialized chunk data.
-    data @3 :GameTypes.FullChunkData;
+    data @2 :GameTypes.FullChunkData;
 }

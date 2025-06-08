@@ -3,7 +3,8 @@
 //! Based on capnproto: <https://capnproto.org/language.html>, <https://docs.rs/capnp/latest/capnp/>
 
 use std::convert::Infallible;
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 
 use bevy_math::{I64Vec2, I64Vec3, prelude::*};
@@ -67,7 +68,7 @@ impl Display for network_capnp::PacketId {
 pub const CAPNP_ZERO_WORD: Word = word(0, 0, 0, 0, 0, 0, 0, 0);
 
 /// A byte array over-aligned to Cap'n proto requirements.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone)]
 pub struct AlignedBytesMut {
     buffer: Vec<Word>,
     len: usize,
@@ -90,6 +91,23 @@ impl AlignedBytesMut {
         }
     }
 
+    /// Copies a byte array into an aligned buffer.
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let mut data = Self::new(bytes.len());
+        data.as_bytes_mut().copy_from_slice(bytes);
+        data
+    }
+
+    /// Accesses the byte array as a slice
+    pub fn as_bytes(&self) -> &[u8] {
+        &Word::words_to_bytes(&self.buffer)[0..self.len]
+    }
+
+    /// Accesses the byte array as a mutable slice
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
+        &mut Word::words_to_bytes_mut(&mut self.buffer)[0..self.len]
+    }
+
     /// Shrinks the spare capacity of the inner vector as much as possible.
     pub fn shrink_to_fit(&mut self) {
         self.buffer.shrink_to_fit();
@@ -99,13 +117,13 @@ impl AlignedBytesMut {
 impl Deref for AlignedBytesMut {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
-        &Word::words_to_bytes(&self.buffer)[0..self.len]
+        self.as_bytes()
     }
 }
 
 impl DerefMut for AlignedBytesMut {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut Word::words_to_bytes_mut(&mut self.buffer)[0..self.len]
+        self.as_bytes_mut()
     }
 }
 
@@ -125,6 +143,38 @@ impl From<AlignedBytesMut> for Bytes {
     fn from(mut value: AlignedBytesMut) -> Self {
         value.shrink_to_fit();
         Self::from_owner(value)
+    }
+}
+
+impl From<&[u8]> for AlignedBytesMut {
+    fn from(value: &[u8]) -> Self {
+        Self::from_bytes(value)
+    }
+}
+
+impl From<Vec<u8>> for AlignedBytesMut {
+    fn from(value: Vec<u8>) -> Self {
+        Self::from_bytes(&value)
+    }
+}
+
+impl PartialEq for AlignedBytesMut {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_bytes().eq(other.as_bytes())
+    }
+}
+
+impl Eq for AlignedBytesMut {}
+
+impl Debug for AlignedBytesMut {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.as_bytes().fmt(f)
+    }
+}
+
+impl Hash for AlignedBytesMut {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_bytes().hash(state);
     }
 }
 

@@ -18,6 +18,7 @@ use super::sql;
 use super::{SAVEFILE_META_CREATED_AT_UTC_KEY, SAVEFILE_META_NAME_KEY, SAVEFILE_META_UNIVERSE_UUID_KEY};
 use crate::coordinates::AbsChunkPos;
 use crate::registry::{RegistryId, RegistryName, RegistryNameRef};
+use crate::schemas::AlignedBytesMut;
 
 /// Creates an empty savefile in-memory DB of the latest version for testing.
 pub fn create_test_memory_db() -> Result<Connection> {
@@ -272,8 +273,8 @@ pub enum ReadChunkResult {
     Present {
         /// The position of the stored chunk.
         position: AbsChunkPos,
-        /// The serialized data.
-        data: Vec<u8>,
+        /// The serialized data, aligned to a 8 byte boundary.
+        data: AlignedBytesMut,
     },
 }
 
@@ -309,31 +310,31 @@ pub fn try_read_chunks(db: &Connection, positions: &[AbsChunkPos]) -> Result<Vec
         };
         // This should only misbehave if the SQL query is wrong.
         debug_assert_eq!(input_position, output_position);
-        let chunk_data: Option<Vec<u8>> = row.get(2)?;
-        let Some(chunk_data) = chunk_data else {
+        let chunk_data_unaligned: Option<Vec<u8>> = row.get(2)?;
+        let Some(chunk_data_unaligned) = chunk_data_unaligned else {
             read_results.push(ReadChunkResult::Missing(input_position));
             continue;
         };
         read_results.push(ReadChunkResult::Present {
             position: output_position,
-            data: chunk_data,
+            data: AlignedBytesMut::from_bytes(&chunk_data_unaligned),
         });
     }
     Ok(read_results)
 }
 
 /// A query parameter for writing new chunk data to the database.
-pub struct ChunkWriteRequest {
+pub struct OverwriteChunkRequest {
     /// The position of the chunk to overwrite.
-    position: AbsChunkPos,
+    pub position: AbsChunkPos,
     /// The new data for the chunk.
-    data: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 /// Overwrites the chunks at the given positions with new data, returns the number of rows written.
 pub fn overwrite_chunks(
     tx: &mut Transaction,
-    write_requests: impl Iterator<Item = ChunkWriteRequest>,
+    write_requests: impl Iterator<Item = OverwriteChunkRequest>,
 ) -> Result<usize> {
     // language=sqlite
     let mut q = tx.prepare_cached(
@@ -342,7 +343,7 @@ pub fn overwrite_chunks(
         ON CONFLICT(packed_coordinates) DO UPDATE SET chunk_data=excluded.chunk_data;",
     )?;
     let mut changes = 0;
-    for ChunkWriteRequest { position, data } in write_requests {
+    for OverwriteChunkRequest { position, data } in write_requests {
         changes += q.execute(params!(position, data))?;
     }
     Ok(changes)
@@ -450,7 +451,7 @@ mod test {
         {
             let modified = overwrite_chunks(
                 &mut tx,
-                [ChunkWriteRequest {
+                [OverwriteChunkRequest {
                     position: c0,
                     data: vec![0],
                 }]
@@ -466,7 +467,7 @@ mod test {
                 vec![
                     ReadChunkResult::Present {
                         position: c0,
-                        data: vec![0]
+                        data: vec![0].into()
                     },
                     ReadChunkResult::Missing(c1)
                 ],
@@ -478,11 +479,11 @@ mod test {
             let modified = overwrite_chunks(
                 &mut tx,
                 [
-                    ChunkWriteRequest {
+                    OverwriteChunkRequest {
                         position: c0,
                         data: vec![1],
                     },
-                    ChunkWriteRequest {
+                    OverwriteChunkRequest {
                         position: c1,
                         data: vec![1],
                     },
@@ -499,11 +500,11 @@ mod test {
                 vec![
                     ReadChunkResult::Present {
                         position: c0,
-                        data: vec![1]
+                        data: vec![1].into()
                     },
                     ReadChunkResult::Present {
                         position: c1,
-                        data: vec![1]
+                        data: vec![1].into()
                     }
                 ],
                 result
@@ -514,11 +515,11 @@ mod test {
             let modified = overwrite_chunks(
                 &mut tx,
                 [
-                    ChunkWriteRequest {
+                    OverwriteChunkRequest {
                         position: c0,
                         data: vec![1],
                     },
-                    ChunkWriteRequest {
+                    OverwriteChunkRequest {
                         position: c1,
                         data: vec![2],
                     },
@@ -535,11 +536,11 @@ mod test {
                 vec![
                     ReadChunkResult::Present {
                         position: c0,
-                        data: vec![1]
+                        data: vec![1].into()
                     },
                     ReadChunkResult::Present {
                         position: c1,
-                        data: vec![2]
+                        data: vec![2].into()
                     }
                 ],
                 result
@@ -550,11 +551,11 @@ mod test {
             let modified = overwrite_chunks(
                 &mut tx,
                 [
-                    ChunkWriteRequest {
+                    OverwriteChunkRequest {
                         position: c0,
                         data: vec![3],
                     },
-                    ChunkWriteRequest {
+                    OverwriteChunkRequest {
                         position: c0,
                         data: vec![4],
                     },
@@ -571,11 +572,11 @@ mod test {
                 vec![
                     ReadChunkResult::Present {
                         position: c0,
-                        data: vec![4]
+                        data: vec![4].into()
                     },
                     ReadChunkResult::Present {
                         position: c1,
-                        data: vec![2]
+                        data: vec![2].into()
                     }
                 ],
                 result

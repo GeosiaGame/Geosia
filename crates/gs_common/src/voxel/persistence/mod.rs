@@ -13,6 +13,7 @@ use hashbrown::HashSet;
 pub mod empty;
 pub mod generator;
 pub mod memory;
+pub mod savefile;
 
 /// A single response to a chunk loading request, generated some time after calling [`ChunkPersistenceLayer::request_load`].
 pub type ChunkProviderResult<ExtraData> = (AbsChunkPos, Result<MutWatcher<Chunk<ExtraData>>>);

@@ -34,7 +34,7 @@ use crate::network::server::{NetworkServerPlugin, NetworkThreadServerState};
 use crate::network::thread::NetworkThread;
 use crate::prelude::*;
 use crate::voxel::generator::multi_noise::MultiNoiseGenerator;
-use crate::voxel::persistence::memory::MemoryPersistenceLayer;
+use crate::voxel::persistence::savefile::SavefilePersistenceLayer;
 use crate::voxel::plugin::VoxelUniversePlugin;
 
 // TODO: Populate these from build/git info
@@ -124,10 +124,11 @@ impl GameServer {
 
         let network_thread = NetworkThread::new(GameSide::Server, NetworkThreadServerState::new)?;
 
+        let (engine_init_result, engine_init_tx) = AsyncResult::new_pair();
         let engine_thread = std::thread::Builder::new()
             .name("GS Server Engine Thread".to_owned())
             .stack_size(8 * 1024 * 1024)
-            .spawn(move || GameServer::engine_thread_main(rx, ctrl_rx))
+            .spawn(move || GameServer::engine_thread_main(rx, ctrl_rx, engine_init_tx))
             .expect("Could not create a thread for the engine");
 
         let server = Self {
@@ -142,6 +143,7 @@ impl GameServer {
         let server = Arc::new(server);
         tx.send(Arc::clone(&server))
             .expect("Could not pass initialization data to the server engine thread");
+        engine_init_result.blocking_wait()?;
         let (listen_result, listen_tx) = AsyncResult::new_pair();
         server
             .network_thread
@@ -243,14 +245,14 @@ impl GameServer {
         lc_rx
     }
 
-    fn engine_thread_main(
+    fn init_engine_thread(
         engine: StdUnboundedReceiver<Arc<GameServer>>,
         ctrl_rx: StdUnboundedReceiver<GameServerControlCommand>,
-    ) {
+    ) -> Result<App> {
         let engine = {
             let e = engine
                 .recv()
-                .expect("Could not receive initialization data in the engine thread");
+                .context("Could not receive initialization data in the engine thread")?;
             drop(engine); // force-drop the receiver early to not hold onto its memory
             e
         };
@@ -285,7 +287,7 @@ impl GameServer {
 
         let generator = MultiNoiseGenerator::new(123456789, Arc::clone(&biome_registry), Arc::clone(&block_registry));
         let gen_world = GeneratorPersistenceLayer::new(Arc::new(generator), default());
-        let persistence = MemoryPersistenceLayer::new(Box::new(gen_world));
+        let persistence = SavefilePersistenceLayer::new(engine.savefile.clone(), Arc::new(Mutex::new(gen_world)))?;
 
         fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {
             app.configure_sets(schedule, InGameSystemSet);
@@ -308,6 +310,24 @@ impl GameServer {
             .build();
 
         app.add_systems(FixedPostUpdate, Self::control_command_handler_system);
+        Ok(app)
+    }
+
+    fn engine_thread_main(
+        engine: StdUnboundedReceiver<Arc<GameServer>>,
+        ctrl_rx: StdUnboundedReceiver<GameServerControlCommand>,
+        init_result_sender: AsyncOneshotSender<Result<()>>,
+    ) {
+        let app = Self::init_engine_thread(engine, ctrl_rx);
+        let mut app = match app {
+            Ok(app) => app,
+            Err(err) => {
+                let _ = init_result_sender.send(Err(err));
+                return;
+            }
+        };
+        let _ = init_result_sender.send(Ok(()));
+
         info!("Engine thread starting");
         app.run();
         info!("Engine thread terminating");

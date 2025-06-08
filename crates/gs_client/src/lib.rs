@@ -30,7 +30,6 @@ use bevy_egui::{EguiContextPass, EguiPlugin};
 use gs_common::network::thread::NetworkThread;
 use gs_common::{GAME_BRAND_NAME, GameBevyCommand};
 use gs_schemas::dependencies::smallvec::SmallVec;
-use gs_schemas::registries::GameRegistries;
 use gs_schemas::{GameSide, GsExtraData};
 use network::client_packet_handlers::ClientPacketHandlerPlugin;
 use states::{ClientAppState, InGameSystemSet, LoadingGameSystemSet, MainMenuSystemSet};
