@@ -175,6 +175,7 @@ tokio = { version = "1.45.1", features = [
 ] }
 tokio-util = { version = "0.7.15", features = ["compat", "io-util"] }
 tracing = "0.1.41"
+url = { version = "2.5.4", features = ["std", "serde"] }
 uuid = { version = "1.17.0", features = [
     "fast-rng",
     "serde",
