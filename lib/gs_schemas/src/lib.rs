@@ -19,6 +19,7 @@ pub mod registry;
 pub mod savefile;
 pub mod schemas;
 pub mod voxel;
+pub mod player;
 
 /// A trait implemented by the game server and client, specifying the concrete types to attach as extra metadata for every chunk, chunk group, entity, etc.
 /// Used to inject side-specific data into common data structures.

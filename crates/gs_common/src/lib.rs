@@ -7,6 +7,7 @@ pub mod prelude;
 pub mod promises;
 pub mod raycast;
 pub mod voxel;
+pub mod player;
 
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -32,6 +33,7 @@ use crate::config::{GameConfig, GameConfigHandle};
 use crate::network::SharedRegistryHolder;
 use crate::network::server::{NetworkServerPlugin, NetworkThreadServerState};
 use crate::network::thread::NetworkThread;
+use crate::player::player_data_server_plugin;
 use crate::prelude::*;
 use crate::voxel::generator::multi_noise::MultiNoiseGenerator;
 use crate::voxel::persistence::savefile::SavefilePersistenceLayer;
@@ -279,7 +281,8 @@ impl GameServer {
             .add_plugins(ScheduleRunnerPlugin::run_loop(TICK));
 
         app.add_plugins(VoxelUniversePlugin::<ServerData>::new())
-            .add_plugins(NetworkServerPlugin);
+            .add_plugins(NetworkServerPlugin)
+            .add_plugins(player_data_server_plugin);
 
         app.insert_resource(SharedRegistryHolder(engine.shared_registries.clone()));
         let block_registry = Arc::clone(&engine.shared_registries.block_types);
