@@ -264,10 +264,10 @@ impl MultiNoiseGenerator {
     }
 
     fn add_to_list_if_not_present(v: &mut Vec<usize>, x: Option<usize>) {
-        if let Some(x) = x {
-            if !v.contains(&x) {
-                v.push(x);
-            }
+        if let Some(x) = x
+            && !v.contains(&x)
+        {
+            v.push(x);
         }
     }
 

@@ -7,6 +7,7 @@
 
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, LazyLock};
+
 use kstring::KString;
 use url::Url;
 use uuid::{NonNilUuid, Uuid};
@@ -21,7 +22,8 @@ pub struct CharacterId(pub NonNilUuid);
 /// The special domain host name for unregistered players.
 pub static NONREGISTERED_PLAYER_DOMAIN: KString = KString::from_static("geosia.localhost");
 /// The special domain host for unregistered players.
-pub static NONREGISTERED_PLAYER_URL_BASE: LazyLock<Url> = LazyLock::new(|| Url::parse("https://geosia.localhost").unwrap());
+pub static NONREGISTERED_PLAYER_URL_BASE: LazyLock<Url> =
+    LazyLock::new(|| Url::parse("https://geosia.localhost").unwrap());
 
 /// Computes the registration URL of a nonregistered player with the given [`AccountId`].
 pub fn nonregistered_player_url(id: AccountId) -> Url {
@@ -53,13 +55,9 @@ pub struct PlayerCharacter {
     pub display_name: KString,
 }
 
-impl PlayerAccount {
-    
-}
+impl PlayerAccount {}
 
-impl PlayerCharacter {
-    
-}
+impl PlayerCharacter {}
 
 /// Only compares the `server_url` and `id` fields.
 impl PartialEq for PlayerAccount {

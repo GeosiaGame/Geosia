@@ -3,11 +3,11 @@
 pub mod config;
 pub mod dedicated_server;
 pub mod network;
+pub mod player;
 pub mod prelude;
 pub mod promises;
 pub mod raycast;
 pub mod voxel;
-pub mod player;
 
 use std::thread::JoinHandle;
 use std::time::Duration;
