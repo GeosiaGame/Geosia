@@ -141,10 +141,15 @@ pub fn server_packet_handler_system(
 
                     info!(
                         "Incoming chat message from {} ({}): {}",
-                        player.authenticated_info.username, player.authenticated_info.address, message
+                        player.authenticated_info.player_character.display_name,
+                        player.authenticated_info.address,
+                        message
                     );
 
-                    let formatted_message = format!("[{}] {}", player.authenticated_info.username, message);
+                    let formatted_message = format!(
+                        "[{}] {}",
+                        player.authenticated_info.player_character.display_name, message
+                    );
                     let mut response = new_packet_builder::<capnp::text::Owned>();
                     let mut root = response.init_root();
                     root.set_id(rpc::PacketId::ChatMessage);
@@ -247,7 +252,10 @@ pub fn server_packet_handler_system(
                         let mut root = packet.init_root();
                         root.set_id(PacketId::ChatMessage);
                         root.set_timestamp_ms(response_timestamp);
-                        root.set_payload(format!("{} has joined!", player.authenticated_info.username))?;
+                        root.set_payload(format!(
+                            "{} has joined!",
+                            player.authenticated_info.player_character.display_name
+                        ))?;
                         let mut packet = PacketWrapper::from(packet);
                         for (_, player) in all_players.iter().skip(1) {
                             let _ = player.main_s2c_stream.send_packet(packet.clone_mut());
@@ -280,7 +288,7 @@ pub fn server_packet_handler_system(
             if let Err(e) = result {
                 warn!(
                     "Error occured during packet {} handling from {} ({}): {}",
-                    packet_id, player.authenticated_info.username, player.authenticated_info.address, e
+                    packet_id, player.authenticated_info.player_character, player.authenticated_info.address, e
                 );
             }
         }

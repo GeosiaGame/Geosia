@@ -142,8 +142,6 @@ fn regen_capnproto() {
     build::rerun_if_changed("capnp");
     #[cfg(feature = "regenerate-capnp")]
     {
-        use std::path::Path;
-
         use capnpc::CompilerCommand as Capnp;
 
         let generated = Path::new("capnp-generated/");

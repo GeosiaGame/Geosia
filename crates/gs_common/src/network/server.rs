@@ -7,17 +7,18 @@ use std::time::Instant;
 use bevy::ecs::component::{ComponentHooks, Mutable, StorageType};
 use bevy::ecs::world::DeferredWorld;
 use gs_schemas::GameSide;
-use gs_schemas::dependencies::kstring::KString;
+use gs_schemas::player::{PlayerAccount, PlayerCharacter};
 use gs_schemas::schemas::game_types_capnp::result;
 use gs_schemas::schemas::network_capnp::{
     PacketId, authentication_acknowledgement, authentication_error, authentication_request,
 };
-use gs_schemas::schemas::{network_capnp as rpc, new_packet_builder, new_simple_packet_builder};
+use gs_schemas::schemas::{CapnpExt, network_capnp as rpc, new_packet_builder, new_simple_packet_builder};
 use quinn::{Endpoint, EndpointConfig, VarInt};
 use slotmap::{SlotMap, new_key_type};
 use socket2::{Domain, Socket};
 use tokio::task::{JoinHandle, JoinSet, spawn_local};
 use tracing::Instrument;
+use uuid::Uuid;
 
 use super::server_packet_handler::ServerPacketHandlerPlugin;
 use super::thread::NetworkThreadState;
@@ -82,8 +83,8 @@ pub enum NetworkThreadServerCommand {
 #[derive(Clone)]
 /// Information about a player obtained during the authentication process.
 pub struct AuthenticatedInfo {
-    /// The username that was logged in.
-    pub username: KString,
+    /// The character that was logged in.
+    pub player_character: Arc<PlayerCharacter>,
     /// The original network address the player connected from.
     pub address: PeerAddress,
 }
@@ -145,17 +146,22 @@ impl Component for ConnectedPlayer {
             let mut table = world.resource_mut::<ConnectedPlayersTable>();
             let old = table.players_by_address.insert(addr, entity);
             if let Some(old) = old {
-                let new_nick = &world
+                let new_char = &world
                     .get::<ConnectedPlayer>(entity)
                     .unwrap()
-                    .authenticated_info
-                    .username;
-                let old_nick = world
+                    .authenticated_info.player_character;
+                let old_char = world
                     .get::<ConnectedPlayer>(old)
-                    .map_or("<missing nickname>", |p| &p.authenticated_info.username as &str);
-                panic!(
-                    "Attempting to insert a player `{new_nick}` with a duplicate peer address: {addr} of `{old_nick}`"
-                );
+                    .map(|p| &p.authenticated_info.player_character);
+                if let Some(old_char) = old_char {
+                    panic!(
+                        "Attempting to insert a player `{new_char}` with a duplicate peer address: {addr} of `{old_char}`"
+                    );
+                } else {
+                    panic!(
+                        "Attempting to insert a player `{new_char}` with a duplicate peer address: {addr}"
+                    );
+                }
             }
         });
         hooks.on_remove(|mut world: DeferredWorld, context| {
@@ -322,23 +328,33 @@ impl NetworkThreadServerState {
                     root.set_timestamp_ms(engine.network_thread.packet_timestamp());
                     let result = root.init_payload();
 
-                    let username = payload.get_username()?.to_str()?;
+                    let player_url = payload.get_player_url()?.to_str()?;
+                    let player_display_name = payload.get_player_display_name()?.to_str()?;
+                    let character_id = Uuid::read_from_message(&payload.get_character_id()?)?;
+                    let character_display_name = payload.get_character_display_name()?.to_str()?;
 
-                    if username.is_empty() || !username.is_ascii() {
-                        let mut err = result.init_err();
-                        err.set_kind(authentication_error::Kind::InvalidUsername);
-                        err.set_message("Username must be non-empty and ASCII only");
-                        let _ = c2s_stream.send_packet(response.into());
-                        c2s_stream.close();
-                        connection.close();
-                        return Ok(());
-                    }
+                    let player = PlayerAccount::try_parse(player_url, player_display_name);
+                    let character = match player.and_then(|player| {
+                        PlayerCharacter::try_parse(Arc::new(player), character_id, character_display_name)
+                    }) {
+                        Ok(player) => player,
+                        Err(e) => {
+                            let mut err = result.init_err();
+                            err.set_kind(authentication_error::Kind::InvalidProfile);
+                            err.set_message(e.to_string());
+                            let _ = c2s_stream.send_packet(response.into());
+                            c2s_stream.close();
+                            connection.close();
+                            return Ok(());
+                        }
+                    };
+                    let character = Arc::new(character);
 
                     // TODO: verify identity
 
                     let address = connection.address();
                     let auth_info = AuthenticatedInfo {
-                        username: KString::from_ref(username),
+                        player_character: Arc::clone(&character),
                         address,
                     };
 
@@ -348,7 +364,7 @@ impl NetworkThreadServerState {
 
                     spawn_local(
                         Self::authenticated_connection(engine, connection, auth_info, c2s_stream, s2c_stream)
-                            .instrument(info_span!("connection", address = %address, username = %username)),
+                            .instrument(info_span!("connection", address = %address, character = %character)),
                     );
                     return Ok(());
                 }
