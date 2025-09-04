@@ -10,7 +10,7 @@ use gs_schemas::GameSide;
 use gs_schemas::dependencies::kstring::KString;
 use gs_schemas::schemas::game_types_capnp::result;
 use gs_schemas::schemas::network_capnp::{
-    PacketId, authentication_acknowledgement, authentication_error, authentication_request, game_server_metadata,
+    PacketId, authentication_acknowledgement, authentication_error, authentication_request,
 };
 use gs_schemas::schemas::{network_capnp as rpc, new_packet_builder, new_simple_packet_builder};
 use quinn::{Endpoint, EndpointConfig, VarInt};
@@ -25,12 +25,10 @@ use super::transport::{
     NetworkConnection, PacketStream, PacketWrapper, RPC_SERVER_READER_OPTIONS,
     RPC_SERVER_UNAUTHENTICATED_READER_OPTIONS,
 };
+use crate::GameServer;
 use crate::network::PeerAddress;
 use crate::network::transport::{InProcessDuplex, quinn_server_config};
 use crate::prelude::*;
-use crate::{
-    GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE, GameServer,
-};
 
 new_key_type! {
     /// Slotmap key for identifying unique connections made by clients to the server
@@ -298,24 +296,13 @@ impl NetworkThreadServerState {
                     let reader = packet.parse_simple(RPC_SERVER_UNAUTHENTICATED_READER_OPTIONS)?;
                     let terminate_on_reply = reader.get()?.get_simple_payload() == 1;
 
-                    let mut response = new_packet_builder::<game_server_metadata::Owned>();
-                    let mut root = response.init_root();
-                    root.set_id(rpc::PacketId::GetServerMetadata);
-                    root.set_timestamp_ms(0);
-                    let mut meta = root.init_payload();
-                    let config = engine.config().borrow();
-                    let mut ver = meta.reborrow().init_server_version();
-                    ver.set_major(GAME_VERSION_MAJOR);
-                    ver.set_minor(GAME_VERSION_MINOR);
-                    ver.set_patch(GAME_VERSION_PATCH);
-                    ver.set_build(GAME_VERSION_BUILD);
-                    ver.set_prerelease(GAME_VERSION_PRERELEASE);
-
-                    meta.set_title(&config.server.server_title);
-                    meta.set_subtitle(&config.server.server_subtitle);
-                    meta.set_player_count(0);
-                    meta.set_player_limit(config.server.max_players as i32);
-                    let _ = c2s_stream.send_packet(response.into());
+                    let packet: PacketWrapper = engine
+                        .server_metadata
+                        .lock()
+                        .expect("Poisoned server metadata lock")
+                        .clone()
+                        .into();
+                    let _ = c2s_stream.send_packet(packet);
 
                     if terminate_on_reply {
                         c2s_stream.close();

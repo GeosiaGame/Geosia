@@ -19,9 +19,12 @@ use bevy::log::LogPlugin;
 use bevy::state::app::StatesPlugin;
 use bevy::time::TimePlugin;
 use bevy::utils::synccell::SyncCell;
+use gs_schemas::dependencies::bytes::Bytes;
 use gs_schemas::registries::GameRegistries;
 use gs_schemas::registry::Registry;
 use gs_schemas::savefile::SavefileMetadata;
+use gs_schemas::schemas::network_capnp::game_server_metadata;
+use gs_schemas::schemas::new_packet_builder;
 use gs_schemas::{GameSide, GsExtraData};
 use network::server::NetworkThreadServerCommand;
 use network::transport::NetworkConnection;
@@ -33,6 +36,7 @@ use crate::config::{GameConfig, GameConfigHandle};
 use crate::network::SharedRegistryHolder;
 use crate::network::server::{NetworkServerPlugin, NetworkThreadServerState};
 use crate::network::thread::NetworkThread;
+use crate::network::transport::PacketWrapper;
 use crate::player::player_data_server_plugin;
 use crate::prelude::*;
 use crate::voxel::generator::multi_noise::MultiNoiseGenerator;
@@ -108,6 +112,8 @@ pub struct GameServer {
     network_thread: NetworkThread<NetworkThreadServerState>,
     pause: AtomicBool,
     control_channel: StdUnboundedSender<GameServerControlCommand>,
+    /// Cached response packet to server metadata queries
+    pub server_metadata: Mutex<Bytes>,
 }
 
 /// A handle to a [`GameServer`] accessible from within bevy systems.
@@ -118,6 +124,26 @@ pub struct GameServerResource(Arc<GameServer>);
 struct GameServerControlCommandReceiver(SyncCell<StdUnboundedReceiver<GameServerControlCommand>>);
 
 impl GameServer {
+    fn compute_server_metadata(config: &GameConfig, connected_players: i32) -> Bytes {
+        let mut response = new_packet_builder::<game_server_metadata::Owned>();
+        let mut root = response.init_root();
+        root.set_id(rpc::PacketId::GetServerMetadata);
+        root.set_timestamp_ms(0);
+        let mut meta = root.init_payload();
+        let mut ver = meta.reborrow().init_server_version();
+        ver.set_major(GAME_VERSION_MAJOR);
+        ver.set_minor(GAME_VERSION_MINOR);
+        ver.set_patch(GAME_VERSION_PATCH);
+        ver.set_build(GAME_VERSION_BUILD);
+        ver.set_prerelease(GAME_VERSION_PRERELEASE);
+
+        meta.set_title(&config.server.server_title);
+        meta.set_subtitle(&config.server.server_subtitle);
+        meta.set_player_count(connected_players);
+        meta.set_player_limit(config.server.max_players as i32);
+        PacketWrapper::from(response).as_bytes()
+    }
+
     /// Spawns a new thread that runs the engine in a paused state, and returns a handle to control it.
     #[allow(clippy::new_ret_no_self)]
     pub fn new(config: GameConfigHandle, savefile: SavefileMetadata) -> Result<Arc<GameServer>> {
@@ -133,6 +159,7 @@ impl GameServer {
             .spawn(move || GameServer::engine_thread_main(rx, ctrl_rx, engine_init_tx))
             .expect("Could not create a thread for the engine");
 
+        let initial_metadata = Self::compute_server_metadata(&config.1.borrow(), 0);
         let server = Self {
             config,
             savefile,
@@ -141,6 +168,7 @@ impl GameServer {
             network_thread,
             pause: AtomicBool::new(true),
             control_channel: ctrl_tx,
+            server_metadata: Mutex::new(initial_metadata),
         };
         let server = Arc::new(server);
         tx.send(Arc::clone(&server))

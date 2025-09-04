@@ -165,15 +165,26 @@ impl PacketWrapper {
         }
     }
 
+    /// Serializes the message if needed and returns the [`Bytes`] object corresponding to the message.
+    /// The returned [`Bytes`] can be converted back to a [`PacketWrapper`] at zero cost.
+    pub fn as_bytes(&self) -> Bytes {
+        match self {
+            Self::Serialized(bytes) => bytes.clone(),
+            Self::Capnp(builder) => {
+                let bytes = capnp::serialize::write_message_to_words(builder);
+                Bytes::from_owner(bytes)
+            }
+        }
+    }
+
     /// Clones the packet for broadcast transmission, converts from capnp to serialized form if needed (including `self` for efficient further clones).
     /// Might incur serialization cost once, after which further clones of either copy are cheap refcounted pointer copies.
     #[must_use]
     pub fn clone_mut(&mut self) -> Self {
         match self {
             Self::Serialized(bytes) => Self::Serialized(bytes.clone()),
-            Self::Capnp(builder) => {
-                let bytes = capnp::serialize::write_message_to_words(builder);
-                let bytes = Bytes::from_owner(bytes);
+            Self::Capnp(_) => {
+                let bytes = self.as_bytes();
                 *self = Self::Serialized(bytes.clone());
                 Self::Serialized(bytes)
             }
