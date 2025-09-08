@@ -152,7 +152,7 @@ pub fn server_packet_handler_system(
                     );
                     let mut response = new_packet_builder::<capnp::text::Owned>();
                     let mut root = response.init_root();
-                    root.set_id(rpc::PacketId::ChatMessage);
+                    root.set_id(PacketId::ChatMessage);
                     root.set_timestamp_ms(response_timestamp);
                     root.set_payload(&formatted_message)?;
                     let mut response = PacketWrapper::from(response);

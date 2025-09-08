@@ -34,7 +34,7 @@ use voxel::plugin::VoxelUniverseBuilder;
 
 use crate::config::{GameConfig, GameConfigHandle};
 use crate::network::SharedRegistryHolder;
-use crate::network::server::{NetworkServerPlugin, NetworkThreadServerState};
+use crate::network::server::{ConnectedPlayersTable, NetworkServerPlugin, NetworkThreadServerState};
 use crate::network::thread::NetworkThread;
 use crate::network::transport::PacketWrapper;
 use crate::player::player_data_server_plugin;
@@ -142,6 +142,24 @@ impl GameServer {
         meta.set_player_count(connected_players);
         meta.set_player_limit(config.server.max_players as i32);
         PacketWrapper::from(response).as_bytes()
+    }
+
+    fn update_server_metadata_timer_system(
+        engine: Res<GameServerResource>,
+        time: Res<Time<Fixed>>,
+        players_table: Res<ConnectedPlayersTable>,
+        mut timer: Local<Timer>,
+    ) {
+        if timer.duration().is_zero() {
+            *timer = Timer::new(Duration::from_secs(2), TimerMode::Repeating);
+        }
+        timer.tick(time.delta());
+        if timer.just_finished() {
+            let engine = &*engine.0;
+            let players_table = &*players_table;
+            let new_meta = Self::compute_server_metadata(&engine.config().borrow(), players_table.len() as i32);
+            *engine.server_metadata.lock().expect("Poisoned server metadata mutex") = new_meta;
+        }
     }
 
     /// Spawns a new thread that runs the engine in a paused state, and returns a handle to control it.
@@ -341,6 +359,7 @@ impl GameServer {
             .build();
 
         app.add_systems(FixedPostUpdate, Self::control_command_handler_system);
+        app.add_systems(FixedPostUpdate, Self::update_server_metadata_timer_system);
         Ok(app)
     }
 

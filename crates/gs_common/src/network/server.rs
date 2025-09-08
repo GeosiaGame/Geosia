@@ -132,6 +132,16 @@ impl ConnectedPlayersTable {
     pub fn players_by_address(&self) -> &BTreeMap<PeerAddress, Entity> {
         &self.players_by_address
     }
+
+    /// Returns the number of currently connected players.
+    pub fn len(&self) -> usize {
+        self.players_by_address.len()
+    }
+
+    /// Returns true if there are no players connected.
+    pub fn is_empty(&self) -> bool {
+        self.players_by_address.is_empty()
+    }
 }
 
 impl Component for ConnectedPlayer {
