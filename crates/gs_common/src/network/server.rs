@@ -358,6 +358,42 @@ impl NetworkThreadServerState {
                         address,
                     };
 
+                    let inner_engine = Arc::clone(&engine);
+                    let engine_allows =
+                        engine.schedule_bevy(move |world| -> Result<Option<authentication_error::Kind>> {
+                            let connected_players = world
+                                .get_resource::<ConnectedPlayersTable>()
+                                .context("Getting table of connected players")?;
+                            let currently_connected_players = connected_players.players_by_address.len();
+                            // TODO: harden against a flood of joins
+                            if currently_connected_players >= inner_engine.config().borrow().server.max_players as usize
+                            {
+                                return Ok(Some(authentication_error::Kind::ServerFull));
+                            }
+                            Ok(None)
+                        });
+                    match engine_allows.async_wait().await {
+                        Ok(None) => {}
+                        Ok(Some(e)) => {
+                            let mut err = result.init_err();
+                            err.set_kind(e);
+                            err.set_message("Server rejected player join request");
+                            let _ = c2s_stream.send_packet(response.into());
+                            c2s_stream.close();
+                            connection.close();
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            let mut err = result.init_err();
+                            err.set_kind(authentication_error::Kind::UnspecifiedError);
+                            err.set_message("Internal Server Error");
+                            let _ = c2s_stream.send_packet(response.into());
+                            c2s_stream.close();
+                            connection.close();
+                            return Err(e.context("Could not obtain engine consent for player join"));
+                        }
+                    }
+
                     let _ = result.init_ok();
                     let _ = c2s_stream.send_packet(response.into());
                     let s2c_stream = connection.open_stream().await?;
