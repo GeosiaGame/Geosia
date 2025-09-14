@@ -41,12 +41,12 @@ pub struct DecoratorDefinition {
     /// An offset added to the random placement function.
     pub salt: i32,
     /// The function that dictates if an object should be placed at a given block position
-    /// The parameters are (this definition, weirdness noise, world position, terrain height, elevation, temperature, moisture).
+    /// The parameters are (this definition, weird noise, world position, terrain height, elevation, temperature, moisture).
     #[serde(default = "get_empty_placement_check_fn", skip)]
     pub placement_check: DecoratorPlacementCheck,
     /// The placer for this definition.
     /// MAKE SURE YOU DO **NOT** GO OVER CHUNK BOUNDARIES.
-    /// The parameters are (this definition, the chunk block storage, weirdness noise, chunk-relative block position, the chunk's position, the block registry).
+    /// The parameters are (this definition, the chunk block storage, weird noise, chunk-relative block position, the chunk's position, the block registry).
     #[serde(default = "get_empty_placer", skip)]
     pub placer: DecoratorPlacer,
 }

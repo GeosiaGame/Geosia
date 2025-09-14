@@ -7,20 +7,12 @@ use std::{cell::RefCell, cmp::Ordering, mem::MaybeUninit, ops::Deref, rc::Rc};
 use bevy_math::{DVec2, FloatExt, IVec2, IVec3, Vec3Swizzles};
 use gs_schemas::{
     GsExtraData,
-    coordinates::{AbsChunkPos, CHUNK_DIM, CHUNK_DIM2Z, CHUNK_DIM3IV, CHUNK_DIMD, CHUNK_DIMZ, InChunkPos},
-    dependencies::{
-        itertools::{Itertools, iproduct},
-        smallvec::SmallVec,
-    },
+    dependencies::itertools::{Itertools, iproduct},
     registry::RegistryId,
     voxel::{
-        biome::{
-            BiomeDefinition, BiomeEntry, BiomeRegistry, Noises, VOID_BIOME_NAME,
-            biome_map::{EXPECTED_BIOME_COUNT, GLOBAL_BIOME_SCALE, GLOBAL_SCALE_MOD},
-        },
+        biome::*,
+        biome::biome_map::*,
         chunk::Chunk,
-        chunk_storage::ChunkStorage,
-        generation::{Context, NoiseNDTo2D, fbm_noise::Fbm},
         voxeltypes::{BlockEntry, BlockRegistry, EMPTY_BLOCK_NAME},
     },
 };
@@ -29,19 +21,22 @@ use noise::OpenSimplex;
 use rand::{Rng, SeedableRng};
 use rand_xoshiro::Xoshiro128StarStar;
 use serde::{Deserialize, Serialize};
-use smallvec::smallvec;
+use smallvec::*;
 use spade::handles::FixedVertexHandle;
 use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
-use tracing::{info, warn};
-use gs_schemas::voxel::chunk_storage::PaletteStorage;
+use tracing::warn;
+
+use gs_schemas::coordinates::*;
+use gs_schemas::voxel::chunk_storage::{ChunkStorage, PaletteStorage};
 use gs_schemas::voxel::generation::decorator::DecoratorRegistry;
-use crate::voxel::biomes::{BEACH_BIOME_NAME, OCEAN_BIOME_NAME};
-use gs_schemas::voxel::generation::VoxelGenerator;
+use gs_schemas::voxel::generation::{Context, NoiseNDTo2D, fbm_noise::Fbm, VoxelGenerator};
+
+use crate::voxel::biomes::*;
 
 /// Biome size in chunks
 ///
 /// Warning: decimal values break blending.
-pub const BIOME_SIZE: f64 = 1.0;
+pub const BIOME_SIZE: f64 = 1.5;
 
 const BIOME_BLEND_RADIUS: f64 = 32.0;
 
@@ -236,8 +231,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
         }
 
         // FIXME this is way too slow, make biome noise & placement be precomputed.
-        for (ix, iy, iz) in iproduct!(
-            -CHUNK_DIM..NOISE_TABLE_OFFSET,
+        for (ix, iz) in iproduct!(
             -CHUNK_DIM..NOISE_TABLE_OFFSET,
             -CHUNK_DIM..NOISE_TABLE_OFFSET
         ) {
@@ -245,23 +239,24 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
             let (elevation, temperature, moisture) = noises[index];
             let height = vparams[index];
 
-            Self::place_decorators(
-                &mut chunk.blocks,
-                &mut rand,
-                &blended[index],
-                position,
-                IVec3::new(ix, iy, iz),
-                &self.decorator_registry,
-                &self.block_registry,
-                &self.biome_registry,
-                height,
-                elevation,
-                temperature,
-                moisture,
-            );
+            for iy in -CHUNK_DIM..NOISE_TABLE_OFFSET {
+                Self::place_decorators(
+                    &mut chunk.blocks,
+                    &blended[index],
+                    position,
+                    RelBlockPos::new(ix, iy, iz),
+                    &self.decorator_registry,
+                    &self.block_registry,
+                    &self.biome_registry,
+                    height,
+                    elevation,
+                    temperature,
+                    moisture,
+                    &self.noises.weird_noise,
+                );
+            }
         }
 
-        info!("generated chunk at {position}");
         chunk
     }
 }
@@ -299,8 +294,10 @@ impl MultiNoiseGenerator {
                     .set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
                 temperature_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(2349))
                     .set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
-                moisture_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(3243))
+                moisture_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_shl(3243))
                     .set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
+                weird_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_shr(9357))
+                    .set_octaves(vec![-1.0, 1.5, 0.0, 4.0]),
             },
             point_offset_noise: OpenSimplex::new(seed_int.wrapping_mul(5463)),
         }
@@ -308,11 +305,10 @@ impl MultiNoiseGenerator {
 
     fn place_decorators(
         chunk: &mut PaletteStorage<BlockEntry>,
-        random: &mut Xoshiro128StarStar,
         biomes: &SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>,
 
         chunk_pos: AbsChunkPos,
-        in_chunk_pos: IVec3,
+        in_chunk_pos: RelBlockPos,
 
         decorator_registry: &DecoratorRegistry,
         block_registry: &BlockRegistry,
@@ -322,18 +318,15 @@ impl MultiNoiseGenerator {
         elevation: f64,
         temperature: f64,
         moisture: f64,
+        weird_noise: &Fbm<OpenSimplex>,
     ) {
-        let g_pos = in_chunk_pos + *chunk_pos * CHUNK_DIM;
         for (_, _, decorator) in decorator_registry.iter() {
             if !biomes.iter().any(|b| decorator.biomes.contains_value(b.lookup(biome_registry).unwrap(), biome_registry)) {
                 continue;
             }
-            if let Some(placement_check_fn) = decorator.placement_check_fn {
-                if placement_check_fn(decorator, random, g_pos, height, elevation, temperature, moisture) {
-                    if let Some(placer_fn) = decorator.placer_fn {
-                        placer_fn(decorator, chunk, random, g_pos, chunk_pos, block_registry);
-                    }
-                }
+            let g_pos = in_chunk_pos + chunk_pos.block_pos(InChunkPos::ZERO);
+            if (decorator.placement_check)(decorator, weird_noise, g_pos, height, elevation, temperature, moisture) {
+                (decorator.placer)(decorator, chunk, weird_noise, in_chunk_pos, chunk_pos, block_registry);
             }
         }
     }
@@ -667,12 +660,13 @@ impl MultiNoiseGenerator {
         }
 
         let mut to_blend = SmallVec::<[BiomeEntry; EXPECTED_BIOME_COUNT]>::new();
-        let (mut point_elevation, mut point_temperature, mut point_moisture) = (0.0, 0.0, 0.0);
+        let mut point_elevation = 0.0;
+        let mut point_temperature = 0.0;
+        let mut point_moisture = 0.0;
 
         for node in nearby {
             let node = node.borrow();
-            let (center, weight) = node.deref();
-            let weight = *weight;
+            let &(ref center, weight) = node.deref();
 
             point_elevation += center.noise.elevation * weight;
             point_temperature += center.noise.temperature * weight;

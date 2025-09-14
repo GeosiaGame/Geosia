@@ -119,7 +119,7 @@ pub struct Noises {
     pub temperature_noise: Fbm<OpenSimplex>,
     /// Moisture noise (0~5)
     pub moisture_noise: Fbm<OpenSimplex>,
-    /// "Weird" noise (-1~1)
+    /// "Weird" noise (-1.5~1.5)
     /// use for seemingly random values that need to be deterministic, e.g. decorators
     pub weird_noise: Fbm<OpenSimplex>,
 }
