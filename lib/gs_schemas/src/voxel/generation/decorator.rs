@@ -3,36 +3,36 @@
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 
-use bevy_math::IVec3;
+use noise::OpenSimplex;
+use serde::{Deserialize, Serialize};
 
-use crate::coordinates::AbsChunkPos;
+use crate::coordinates::{AbsBlockPos, AbsChunkPos, RelBlockPos};
 use crate::registry::{Registry, RegistryDataSet, RegistryName, RegistryObject};
 use crate::voxel::biome::BiomeDefinition;
 use crate::voxel::chunk_storage::PaletteStorage;
+use crate::voxel::generation::fbm_noise::Fbm;
 use crate::voxel::voxeltypes::{BlockEntry, BlockRegistry};
 
 /// A placer function.
-/// Return (true, false) if you did NOT place all blocks, but DID place some.
-/// Return (false, false) if you placed NO blocks.
-/// return (true, true) if you placed all blocks.
-pub type PlacerFunction = fn(
+/// You can only mutate the current chunk in this!
+pub type DecoratorPlacer = fn(
     &DecoratorDefinition,
     &mut PaletteStorage<BlockEntry>,
-    &mut rand_xoshiro::Xoshiro128StarStar,
-    IVec3,
+    &Fbm<OpenSimplex>,
+    RelBlockPos,
     AbsChunkPos,
     &BlockRegistry,
 );
 /// A count function.
-/// returns the amount of this decorator in the area based on the input parameters.
-pub type PlacementCheckFunction =
-    fn(&DecoratorDefinition, &mut rand_xoshiro::Xoshiro128StarStar, IVec3, i32, f64, f64, f64) -> bool;
+/// return `true` if a decorator should be placed at this position.
+pub type DecoratorPlacementCheck =
+    fn(&DecoratorDefinition, &Fbm<OpenSimplex>, AbsBlockPos, i32, f64, f64, f64) -> bool;
 
 /// A named registry of biome definitions.
 pub type DecoratorRegistry = Registry<DecoratorDefinition>;
 
 /// A definition of a decorator type, specifying properties such as registry name, shape, placement.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DecoratorDefinition {
     /// The unique registry name
     pub name: RegistryName,
@@ -42,10 +42,12 @@ pub struct DecoratorDefinition {
     pub salt: i32,
     /// The function that dictates how many objects to place at a given noise map position.
     /// params are (self, elevation, temperature, moisture).
-    pub placement_check_fn: Option<PlacementCheckFunction>,
+    #[serde(default = "get_empty_placement_check_fn", skip)]
+    pub placement_check: DecoratorPlacementCheck,
     /// The placer for this definition.
     /// MAKE SURE YOU DO **NOT** GO OVER CHUNK BOUNDARIES.
-    pub placer_fn: Option<PlacerFunction>,
+    #[serde(default = "get_empty_placer", skip)]
+    pub placer: DecoratorPlacer,
 }
 
 impl PartialEq for DecoratorDefinition {
@@ -64,4 +66,16 @@ impl RegistryObject for DecoratorDefinition {
     fn registry_name(&self) -> crate::registry::RegistryNameRef {
         self.name.as_ref()
     }
+}
+
+/// A placement check function that always fails
+pub const EMPTY_PLACEMENT_CHECK: DecoratorPlacementCheck = |_def, _noise, _pos, _h, _e, _t, _m| false;
+/// A decorator placer that does nothing
+pub const EMPTY_PLACER: DecoratorPlacer = |_def, _chk, _noise, _pos, _cpos, _block_reg| {};
+
+const fn get_empty_placement_check_fn() -> DecoratorPlacementCheck {
+    EMPTY_PLACEMENT_CHECK
+}
+const fn get_empty_placer() -> DecoratorPlacer {
+    EMPTY_PLACER
 }

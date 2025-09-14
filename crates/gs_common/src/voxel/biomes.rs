@@ -40,7 +40,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(-1.0..-1.0),
             temperature: range(-1.0..-1.0),
             moisture: range(-1.0..-1.0),
-            rule_source: |_pos: &bevy_math::IVec3, _ctx: &Context, _reg: &BlockRegistry| None,
+            rule_source: |_pos, _ctx, _block_reg| None,
             surface_noise: |_point, _noise| 0.0,
             blend_influence: 0.0,
             block_influence: 0.0,

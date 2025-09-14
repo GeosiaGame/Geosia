@@ -42,12 +42,17 @@ impl BiomeEntry {
     }
 }
 
+/// A block placement function.
+pub type BlockRuleSourceFunction = fn(pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>;
+/// A surface noise function.
+/// Return
+pub type SurfaceNoiseFunction = fn(pos: DVec2, noise: &Fbm<OpenSimplex>) -> f64;
+
 /// A named registry of biome definitions.
 pub type BiomeRegistry = Registry<BiomeDefinition>;
 
 /// A definition of a biome type, specifying properties such as registry name, shape, textures.
-// TODO fix serialization of `BiomeDefinition`
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BiomeDefinition {
     /// The unique registry name
     pub name: RegistryName,
@@ -62,9 +67,11 @@ pub struct BiomeDefinition {
     /// Moisture of this biome.
     pub moisture: Range<f64>,
     /// The block placement rule source for this biome.
-    pub rule_source: fn(pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>,
+    #[serde(default = "get_empty_rule_source", skip)]
+    pub rule_source: BlockRuleSourceFunction,
     /// The noise function for this biome.
-    pub surface_noise: fn(pos: DVec2, noise: &Fbm<OpenSimplex>) -> f64,
+    #[serde(default = "get_empty_surface_noise", skip)]
+    pub surface_noise: SurfaceNoiseFunction,
     /// The strength of this biome in the blending step.
     pub blend_influence: f64,
     /// The strength of this biome in the block placement step.
@@ -112,7 +119,22 @@ pub struct Noises {
     pub temperature_noise: Fbm<OpenSimplex>,
     /// Moisture noise (0~5)
     pub moisture_noise: Fbm<OpenSimplex>,
+    /// "Weird" noise (-1~1)
+    /// use for seemingly random values that need to be deterministic, e.g. decorators
+    pub weird_noise: Fbm<OpenSimplex>,
 }
 
 /// Name of the default void biome.
 pub const VOID_BIOME_NAME: RegistryName = RegistryName::gs_const("void");
+/// No-op rule source
+pub const EMPTY_RULE_SOURCE: BlockRuleSourceFunction = |_pos, _ctx, _reg| None;
+/// Empty surface noise function
+pub const EMPTY_SURFACE_NOISE: SurfaceNoiseFunction = |_pos, _noise| 0.0;
+
+const fn get_empty_rule_source() -> BlockRuleSourceFunction {
+    EMPTY_RULE_SOURCE
+}
+
+const fn get_empty_surface_noise() -> SurfaceNoiseFunction {
+    EMPTY_SURFACE_NOISE
+}

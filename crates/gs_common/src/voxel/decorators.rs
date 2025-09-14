@@ -3,14 +3,15 @@
 //! The builtin biome decorator types.
 //! Most of this will be moved to a "base" mod at some point in the future.
 
-use bevy_math::IVec3;
-use gs_schemas::coordinates::{InChunkPos, CHUNK_DIM};
+use bevy::prelude::FloatExt;
+use noise::NoiseFn;
+
+use gs_schemas::coordinates::{InChunkPos, RelBlockPos, CHUNK_DIM};
 use gs_schemas::dependencies::itertools::iproduct;
 use gs_schemas::registry::{RegistryDataSet, RegistryName};
 use gs_schemas::voxel::chunk_storage::ChunkStorage;
 use gs_schemas::voxel::generation::decorator::{DecoratorDefinition, DecoratorRegistry};
 use gs_schemas::voxel::voxeltypes::{BlockEntry, EMPTY_BLOCK_NAME};
-use rand::{distr::Uniform, Rng};
 
 use crate::voxel::biomes::PLAINS_BIOME_NAME;
 use crate::voxel::blocks::{LEAVES_BLOCK_NAME, LOG_BLOCK_NAME};
@@ -25,10 +26,11 @@ pub fn setup_basic_decorators(registry: &mut DecoratorRegistry) {
             name: TREE_DECORATOR_NAME,
             biomes: RegistryDataSet::new([PLAINS_BIOME_NAME].into_iter().collect()),
             salt: 124567,
-            placement_check_fn: Some(|_def, rand, pos, height, elevation, _temperature, moisture| {
-                pos.y == height && elevation <= 4.0 && moisture > 1.0 && rand.random::<f64>() > 0.99
-            }),
-            placer_fn: Some(|_def, chunk, rand, pos, chunk_pos, block_registry| {
+            placement_check: |_def, noise, pos, height, elevation, _temperature, moisture| {
+                let noise_valid = noise.get([pos.x as f64 / 128.0 * 46.84, pos.z as f64 / 128.0 * 231.7]) > 0.0;
+                noise_valid && pos.y == height && elevation <= 4.0 && moisture > 1.0
+            },
+            placer: |_def, chunk, noise, in_chunk_pos, chunk_pos, block_registry| {
                 let log_id = block_registry.lookup_name_to_object(LOG_BLOCK_NAME.as_ref()).unwrap().0;
                 let leaves_id = block_registry
                     .lookup_name_to_object(LEAVES_BLOCK_NAME.as_ref())
@@ -39,11 +41,12 @@ pub fn setup_basic_decorators(registry: &mut DecoratorRegistry) {
                     .unwrap()
                     .0;
 
-                let distribution = Uniform::new(4, 6).expect("low is higher than high!?");
-                let tree_height = rand.sample(distribution);
+                let g_pos = in_chunk_pos + chunk_pos.block_pos(InChunkPos::ZERO);
+                let tree_height = noise.get([g_pos.x as f64 / 128.0 * 83.557, g_pos.z as f64 / 128.0 * 17.67]);
+                let tree_height = tree_height.remap(-1.0, 1.0, 4.0, 6.0).round() as i32;
 
                 for y in 0..tree_height {
-                    let new_pos = pos - *chunk_pos * CHUNK_DIM + IVec3::new(0, y, 0);
+                    let new_pos = in_chunk_pos + RelBlockPos::new(0, y, 0);
                     if new_pos.x < 0
                         || new_pos.x >= CHUNK_DIM
                         || new_pos.y < 0
@@ -54,7 +57,7 @@ pub fn setup_basic_decorators(registry: &mut DecoratorRegistry) {
                         continue;
                     }
                     chunk.put(
-                        InChunkPos::try_from_ivec3(new_pos).expect("modulo failed???"),
+                        InChunkPos::try_from_ivec3(*new_pos).expect("modulo failed???"),
                         BlockEntry::new(log_id, 0),
                     );
                 }
@@ -63,7 +66,7 @@ pub fn setup_basic_decorators(registry: &mut DecoratorRegistry) {
                     if x * x + y * y + z * z > 3 * 3 {
                         continue;
                     }
-                    let new_pos = pos - *chunk_pos * CHUNK_DIM + IVec3::new(x, y + tree_height - 2, z);
+                    let new_pos = in_chunk_pos + RelBlockPos::new(x, y + tree_height - 2, z);
                     if new_pos.x < 0
                         || new_pos.x >= CHUNK_DIM
                         || new_pos.y < 0
@@ -73,13 +76,13 @@ pub fn setup_basic_decorators(registry: &mut DecoratorRegistry) {
                     {
                         continue;
                     }
-                    let new_pos = InChunkPos::try_from_ivec3(new_pos).expect("modulo failed???");
+                    let new_pos = InChunkPos::try_from_ivec3(*new_pos).expect("modulo failed???");
                     if chunk.get(new_pos).id != empty_id {
                         continue;
                     }
                     chunk.put(new_pos, BlockEntry::new(leaves_id, 0));
                 }
-            }),
+            },
         })
         .unwrap();
 }

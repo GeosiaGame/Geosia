@@ -23,6 +23,5 @@ pub struct BiomeMap {
     /// Map of Chunk position to biome definition.
     pub noise_map: HashMap<[i32; 2], (f64, f64, f64)>,
     /// Generatable Biomes, with set seeds
-    #[serde(skip)] // TODO fix serialization of `BiomeDefinition`
     pub generatable_biomes: Vec<(RegistryId, BiomeDefinition)>,
 }
