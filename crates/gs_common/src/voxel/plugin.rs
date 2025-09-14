@@ -26,6 +26,8 @@ use crate::{InGameSystemSet, ServerData};
 /// The maximum number of stored chunk packets before applying stream backpressure.
 pub const CHUNK_PACKET_QUEUE_LENGTH: usize = 20;
 
+const CHUNK_LOAD_RADIUS: i32 = 6;
+
 /// Initializes the settings related to the voxel universe.
 #[derive(Default)]
 pub struct VoxelUniversePlugin<ExtraData: GsExtraData> {
@@ -155,7 +157,7 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
     pub fn with_persistent_storage(mut self, persistence_layer: Box<dyn ChunkPersistenceLayer<ED>>) -> Result<Self> {
         // TODO: make the player load the chunks
         self.bundle.world_scope(|w| {
-            w.spawn((VoxelPosition(AbsBlockPos::ZERO), ChunkLoader { radius: 4 }));
+            w.spawn((VoxelPosition(AbsBlockPos::ZERO), ChunkLoader { radius: CHUNK_LOAD_RADIUS }));
         });
 
         self.bundle.insert(PersistentVoxelStorage::<ED> {
