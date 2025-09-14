@@ -113,10 +113,11 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
         let mut points = Vec::new();
         for (x, z) in iproduct!(-2..=2, -2..=2) {
             let mut position: DVec2 = (point.xz() + IVec2::new(x * CHUNK_DIM, z * CHUNK_DIM)).into();
+            position *= BIOME_SIZE;
             let noise = CHUNK_DIMD
                 * 0.75
-                * <OpenSimplex as NoiseNDTo2D<4>>::get_2d(&self.point_offset_noise, (position * BIOME_SIZE).to_array());
-            position = DVec2::new(BIOME_SIZE * position.x + noise, BIOME_SIZE * position.y + noise);
+                * <OpenSimplex as NoiseNDTo2D<NOISE_DIMS>>::get_2d(&self.point_offset_noise, position.to_array());
+            position = DVec2::new(position.x + noise, position.y + noise);
             let point = delaunay
                 .insert(DelaunayVertex(position))
                 .unwrap_or_else(|_| panic!("failed to insert point {position:?} into delaunay triangulation"));
@@ -543,13 +544,13 @@ impl MultiNoiseGenerator {
     fn make_noise(noises: &Noises, point: DVec2) -> NoiseValues {
         let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
         let point = [point.x / scale_factor, point.y / scale_factor];
-        let elevation = <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(&noises.elevation_noise, point)
+        let elevation = <Fbm<OpenSimplex> as NoiseNDTo2D<NOISE_DIMS>>::get_2d(&noises.elevation_noise, point)
             .remap(-1.5, 1.5, 0.0, 5.0)
             .clamp(0.0, 5.0);
-        let temperature = <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(&noises.temperature_noise, point)
+        let temperature = <Fbm<OpenSimplex> as NoiseNDTo2D<NOISE_DIMS>>::get_2d(&noises.temperature_noise, point)
             .remap(-1.5, 1.5, 0.0, 5.0)
             .clamp(0.0, 5.0);
-        let moisture: f64 = <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(&noises.moisture_noise, point)
+        let moisture: f64 = <Fbm<OpenSimplex> as NoiseNDTo2D<NOISE_DIMS>>::get_2d(&noises.moisture_noise, point)
             .remap(-1.5, 1.5, 0.0, 5.0)
             .clamp(0.0, 5.0);
 
