@@ -26,24 +26,18 @@ pub fn setup_basic_decorators(registry: &mut DecoratorRegistry) {
             name: TREE_DECORATOR_NAME,
             biomes: RegistryDataSet::new([PLAINS_BIOME_NAME].into_iter().collect()),
             salt: 124567,
-            placement_check: |_def, noise, pos, height, elevation, _temperature, moisture| {
-                let noise_valid = noise.get([pos.x as f64 / 128.0 * 46.84, pos.z as f64 / 128.0 * 231.7]) > 0.0;
+            placement_check: |_def, weird_noise, pos, height, elevation, _temperature, moisture| {
+                let noise_valid = weird_noise.get([pos.x as f64 / 128.0 * 4684.26, pos.z as f64 / 128.0 * 2317.15]) > 8.0;
                 noise_valid && pos.y == height && elevation <= 4.0 && moisture > 1.0
             },
-            placer: |_def, chunk, noise, in_chunk_pos, chunk_pos, block_registry| {
-                let log_id = block_registry.lookup_name_to_object(LOG_BLOCK_NAME.as_ref()).unwrap().0;
-                let leaves_id = block_registry
-                    .lookup_name_to_object(LEAVES_BLOCK_NAME.as_ref())
-                    .unwrap()
-                    .0;
-                let empty_id = block_registry
-                    .lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref())
-                    .unwrap()
-                    .0;
+            placer: |_def, chunk, weird_noise, in_chunk_pos, chunk_pos, block_registry| {
+                let (i_log, _) = block_registry.lookup_name_to_object(LOG_BLOCK_NAME.as_ref()).unwrap();
+                let (i_leaves, _) = block_registry.lookup_name_to_object(LEAVES_BLOCK_NAME.as_ref()).unwrap();
+                let (i_empty, _) = block_registry.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap();
 
                 let g_pos = in_chunk_pos + chunk_pos.block_pos(InChunkPos::ZERO);
-                let tree_height = noise.get([g_pos.x as f64 / 128.0 * 83.557, g_pos.z as f64 / 128.0 * 17.67]);
-                let tree_height = tree_height.remap(-1.0, 1.0, 4.0, 6.0).round() as i32;
+                let tree_height = weird_noise.get([g_pos.x as f64 / 128.0 * 8357.71, g_pos.z as f64 / 128.0 * 1767.14]);
+                let tree_height = tree_height.remap(-4.0, 4.0, 7.0, 10.0).round() as i32;
 
                 for y in 0..tree_height {
                     let new_pos = in_chunk_pos + RelBlockPos::new(0, y, 0);
@@ -58,15 +52,15 @@ pub fn setup_basic_decorators(registry: &mut DecoratorRegistry) {
                     }
                     chunk.put(
                         InChunkPos::try_from_ivec3(*new_pos).expect("modulo failed???"),
-                        BlockEntry::new(log_id, 0),
+                        BlockEntry::new(i_log, 0),
                     );
                 }
-                for (x, y, z) in iproduct!(-3..=3, 0..=3, -3..=3) {
+                for (x, y, z) in iproduct!(-4..=4, -1..=4, -4..=4) {
                     // check if it's outside a sphere
-                    if x * x + y * y + z * z > 3 * 3 {
+                    if x * x + y * y + z * z > 5 * 5 {
                         continue;
                     }
-                    let new_pos = in_chunk_pos + RelBlockPos::new(x, y + tree_height - 2, z);
+                    let new_pos = in_chunk_pos + RelBlockPos::new(x, y + tree_height - 3, z);
                     if new_pos.x < 0
                         || new_pos.x >= CHUNK_DIM
                         || new_pos.y < 0
@@ -77,10 +71,10 @@ pub fn setup_basic_decorators(registry: &mut DecoratorRegistry) {
                         continue;
                     }
                     let new_pos = InChunkPos::try_from_ivec3(*new_pos).expect("modulo failed???");
-                    if chunk.get(new_pos).id != empty_id {
+                    if chunk.get(new_pos).id != i_empty {
                         continue;
                     }
-                    chunk.put(new_pos, BlockEntry::new(leaves_id, 0));
+                    chunk.put(new_pos, BlockEntry::new(i_leaves, 0));
                 }
             },
         })

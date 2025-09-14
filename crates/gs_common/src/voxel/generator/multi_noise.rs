@@ -17,7 +17,7 @@ use gs_schemas::{
     },
 };
 use hashbrown::HashMap;
-use noise::OpenSimplex;
+use noise::{OpenSimplex, Value};
 use rand::{Rng, SeedableRng};
 use rand_xoshiro::Xoshiro128StarStar;
 use serde::{Deserialize, Serialize};
@@ -35,8 +35,8 @@ use crate::voxel::biomes::*;
 
 /// Biome size in chunks
 ///
-/// Warning: decimal values break blending.
-pub const BIOME_SIZE: f64 = 1.5;
+/// (untrue) Warning: decimal values break blending.
+pub const BIOME_SIZE: f64 = 1.0;
 
 const BIOME_BLEND_RADIUS: f64 = 32.0;
 
@@ -294,8 +294,8 @@ impl MultiNoiseGenerator {
                     .set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
                 moisture_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_shl(3243))
                     .set_octaves(vec![1.0, 2.0, 2.0, 1.0]),
-                weird_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_shr(9357))
-                    .set_octaves(vec![-1.0, 1.5, 0.0, 4.0]),
+                weird_noise: Fbm::<Value>::new(seed_int.wrapping_shr(9357))
+                    .set_octaves(vec![4.0, 2.0, 0.0, 4.0, -25.0]),
             },
             point_offset_noise: OpenSimplex::new(seed_int.wrapping_mul(5463)),
         }
@@ -316,7 +316,7 @@ impl MultiNoiseGenerator {
         elevation: f64,
         temperature: f64,
         moisture: f64,
-        weird_noise: &Fbm<OpenSimplex>,
+        weird_noise: &Fbm<Value>,
     ) {
         for (_, _, decorator) in decorator_registry.iter() {
             if !biomes.iter().any(|b| decorator.biomes.contains_value(b.lookup(biome_registry).unwrap(), biome_registry)) {

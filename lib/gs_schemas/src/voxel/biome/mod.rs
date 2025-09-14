@@ -5,7 +5,7 @@ use std::hash::{Hash, Hasher};
 
 use bevy_color::Srgba;
 use bevy_math::DVec2;
-use noise::OpenSimplex;
+use noise::{OpenSimplex, Value};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -119,9 +119,9 @@ pub struct Noises {
     pub temperature_noise: Fbm<OpenSimplex>,
     /// Moisture noise (0~5)
     pub moisture_noise: Fbm<OpenSimplex>,
-    /// "Weird" noise (-1.5~1.5)
+    /// Weird noise (-4~4)
     /// use for seemingly random values that need to be deterministic, e.g. decorators
-    pub weird_noise: Fbm<OpenSimplex>,
+    pub weird_noise: Fbm<Value>,
 }
 
 /// Name of the default void biome.

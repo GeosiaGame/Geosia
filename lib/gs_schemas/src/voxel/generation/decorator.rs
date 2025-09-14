@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 
-use noise::OpenSimplex;
+use noise::Value;
 use serde::{Deserialize, Serialize};
 
 use crate::coordinates::{AbsBlockPos, AbsChunkPos, RelBlockPos};
@@ -18,7 +18,7 @@ use crate::voxel::voxeltypes::{BlockEntry, BlockRegistry};
 pub type DecoratorPlacer = fn(
     &DecoratorDefinition,
     &mut PaletteStorage<BlockEntry>,
-    &Fbm<OpenSimplex>,
+    &Fbm<Value>,
     RelBlockPos,
     AbsChunkPos,
     &BlockRegistry,
@@ -26,7 +26,7 @@ pub type DecoratorPlacer = fn(
 /// A count function.
 /// return `true` if a decorator should be placed at this position.
 pub type DecoratorPlacementCheck =
-    fn(&DecoratorDefinition, &Fbm<OpenSimplex>, AbsBlockPos, i32, f64, f64, f64) -> bool;
+    fn(&DecoratorDefinition, &Fbm<Value>, AbsBlockPos, i32, f64, f64, f64) -> bool;
 
 /// A named registry of biome definitions.
 pub type DecoratorRegistry = Registry<DecoratorDefinition>;

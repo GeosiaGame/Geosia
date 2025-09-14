@@ -289,14 +289,14 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 let (i_water, _) = block_registry.lookup_name_to_object(WATER_BLOCK_NAME.as_ref()).unwrap();
 
                 if context.sea_level > pos.y {
-                    return if context.ground_y > pos.y - 2 {
-                        Some(BlockEntry::new(i_stone, 0))
-                    } else if context.ground_y == pos.y && context.ground_y > context.sea_level - 5 {
+                    return if pos.y == context.ground_y && pos.y > context.sea_level - 5 {
                         Some(BlockEntry::new(i_sand, 0))
-                    } else if context.ground_y > pos.y - 1 {
+                    } else if pos.y <= context.ground_y && pos.y > context.ground_y - 5 {
                         Some(BlockEntry::new(i_dirt, 0))
-                    } else {
+                    } else if pos.y > context.ground_y {
                         Some(BlockEntry::new(i_water, 0))
+                    } else {
+                        Some(BlockEntry::new(i_stone, 0))
                     }
                 }
                 None
