@@ -162,8 +162,10 @@ fn player_move(
         for text in &set.p1() {
             *text_writer.text(text, 1) = camera_pos.to_string();
             let euler = camera_angle.to_euler(EulerRot::XYZ);
-            let euler = (euler.0 * 1.0, euler.1 * 1.0, euler.2 * 1.0);
-            *text_writer.text(text, 3) = format!("{:?}", euler);
+            *text_writer.text(text, 3) = format!(
+                "yaw: {:?} pitch: {:?}",
+                euler.2.to_degrees(),
+                euler.0.to_degrees());
         }
     } else {
         warn!("Primary window not found for `player_move`!");
@@ -421,10 +423,9 @@ fn spawn_debug_text(asset_server: Res<AssetServer>, mut commands: Commands) {
         ));
     commands
         .spawn((
-            Text::new("\nCurrent Position:"),
+            Text::new("\nCurrent Position: "),
             TextFont::from(font.clone()).with_font_size(15.0),
             TextColor(Color::srgb(0.9, 0.9, 0.9)),
-            BiomeText,
             PositionText,
         ))
         .with_children(|b| {
@@ -434,7 +435,7 @@ fn spawn_debug_text(asset_server: Res<AssetServer>, mut commands: Commands) {
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
             ));
             b.spawn((
-                TextSpan::new("\nCurrent Rotation:"),
+                TextSpan::new("\nCurrent Rotation: "),
                 TextFont::from(font.clone()).with_font_size(15.0),
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
             ));
