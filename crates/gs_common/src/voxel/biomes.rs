@@ -30,6 +30,8 @@ pub const MOUNTAINS_BIOME_NAME: RegistryName = RegistryName::gs_const("mountains
 pub const BEACH_BIOME_NAME: RegistryName = RegistryName::gs_const("beach");
 /// Registry name for river.
 pub const RIVER_BIOME_NAME: RegistryName = RegistryName::gs_const("river");
+/// Registry name for lake.
+pub const LAKE_BIOME_NAME: RegistryName = RegistryName::gs_const("lake");
 
 /// Installs the base set of biomes into the given block registry.
 pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
@@ -268,6 +270,41 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             blend_influence: 1.0,
             block_influence: 1.0,
             can_generate: false,
+        })
+        .unwrap();
+
+    biome_registry
+        .push_object(BiomeDefinition {
+            name: LAKE_BIOME_NAME,
+            representative_color: Srgba::rgba_u8(100, 170, 220, 255),
+            elevation: range(1.0..),
+            temperature: range(..),
+            moisture: range(2.5..),
+            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+                let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
+                let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
+                let (i_sand, _) = block_registry.lookup_name_to_object(SAND_BLOCK_NAME.as_ref()).unwrap();
+                let (i_water, _) = block_registry.lookup_name_to_object(WATER_BLOCK_NAME.as_ref()).unwrap();
+
+                if context.sea_level > pos.y {
+                    return if context.ground_y > pos.y - 2 {
+                        Some(BlockEntry::new(i_stone, 0))
+                    } else if context.ground_y == pos.y && context.ground_y > context.sea_level - 5 {
+                        Some(BlockEntry::new(i_sand, 0))
+                    } else if context.ground_y > pos.y - 1 {
+                        Some(BlockEntry::new(i_dirt, 0))
+                    } else {
+                        Some(BlockEntry::new(i_water, 0))
+                    }
+                }
+                None
+            },
+            surface_noise: |point, noise| {
+                <Fbm<OpenSimplex> as NoiseNDTo2D<4>>::get_2d(noise, (point / 12.5).to_array()) * -4.5 + 1.0
+            },
+            blend_influence: 1.0,
+            block_influence: 1.0,
+            can_generate: true,
         })
         .unwrap();
 }

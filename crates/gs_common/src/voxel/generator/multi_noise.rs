@@ -575,10 +575,9 @@ impl MultiNoiseGenerator {
             );
             return;
         } else if center.water {
-            // TODO make lake biome(s)
             center.biome = Some(
                 self.biome_registry
-                    .lookup_name_to_object(OCEAN_BIOME_NAME.as_ref())
+                    .lookup_name_to_object(LAKE_BIOME_NAME.as_ref())
                     .unwrap()
                     .0,
             );
