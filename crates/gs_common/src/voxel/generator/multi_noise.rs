@@ -99,6 +99,10 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
             seed[i] = x[i].wrapping_mul(seed_bytes_be[i]);
             seed[i + 8] = y[i].wrapping_mul(seed_bytes_le[i]);
         }
+        // This Rand is not safe to use in world gen as it's not replicable in neighboring chunks.
+        // do not use if at all possible, and if you must, send a log message first
+        // to warn of incoming breakage.
+        // The biome logic really ought to use some default value instead... later.
         let mut rand = Xoshiro128StarStar::from_seed(seed);
 
         let mut centers: Vec<Center> = Vec::new();
@@ -231,7 +235,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
             }
         }
 
-
+        // FIXME this is way too slow, make biome noise & placement be precomputed.
         for (ix, iy, iz) in iproduct!(
             -CHUNK_DIM..NOISE_TABLE_OFFSET,
             -CHUNK_DIM..NOISE_TABLE_OFFSET,
