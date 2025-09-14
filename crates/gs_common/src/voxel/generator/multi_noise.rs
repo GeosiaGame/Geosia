@@ -52,16 +52,14 @@ pub const GROUP_SIZEIV: IVec2 = IVec2::splat(GROUP_SIZE);
 const THREE_CHUNK_DIMZ: usize = CHUNK_DIMZ * 3;
 /// offset for noise value lists so that they can contain values `-1..1` chunks around the current chunk.
 const NOISE_TABLE_OFFSET: i32 = CHUNK_DIM * 2;
-/// offset for noise value lists so that they can contain values `-1..1` chunks around the current chunk.
-const NOISE_TABLE_OFFSETZ: usize = CHUNK_DIMZ * 2;
-/// size of list 3x3 chunk area-sized list offset by [NOISE_TABLE_OFFSETZ] so that no values are negative.
-const NOISE_TABLE_SIZE: usize = CHUNK_DIM2Z * 9 + NOISE_TABLE_OFFSETZ;
+/// size of list 3x3 chunk area-sized list offset by [NOISE_TABLE_OFFSET] so that no values are negative.
+const NOISE_TABLE_SIZE: usize = (CHUNK_DIM2 * 9 + NOISE_TABLE_OFFSET) as usize;
 
-const fn table_index(x: i32, y: i32) -> usize {
+const fn table_index(x: i32, z: i32) -> usize {
     assert!(x < NOISE_TABLE_OFFSET && x >= -CHUNK_DIM);
-    assert!(y < NOISE_TABLE_OFFSET && y >= -CHUNK_DIM);
+    assert!(z < NOISE_TABLE_OFFSET && z >= -CHUNK_DIM);
     let x = x as usize + CHUNK_DIMZ;
-    let y = y as usize + CHUNK_DIMZ;
+    let y = z as usize + CHUNK_DIMZ;
     x + y * THREE_CHUNK_DIMZ
 }
 
@@ -168,8 +166,8 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
                     void_id,
                     &centers,
                 );
-                biomes.clone_into(&mut blended[table_index(ix, iz)]);
-                noise.clone_into(&mut noises[table_index(ix, iz)]);
+                blended[i] = biomes;
+                noises[i] = noise;
 
                 let p = Self::elevation_noise(
                     IVec2::new(ix, iz),
