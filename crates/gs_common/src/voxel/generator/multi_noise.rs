@@ -88,7 +88,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
     /// Generate a single chunk's blocks for the world.
     fn generate_chunk(&self, position: AbsChunkPos, extra_data: <ED as GsExtraData>::ChunkData) -> Chunk<ED> {
         let point: IVec3 = <IVec3>::from(position) * CHUNK_DIM3IV;
-        let offset_point = DVec2Wrapper::new((point.x + CHUNK_DIM / 2) as f64, (point.z + CHUNK_DIM / 2) as f64);
+        let offset_point = DelaunayVertex::new((point.x + CHUNK_DIM / 2) as f64, (point.z + CHUNK_DIM / 2) as f64);
 
         let seed_bytes_be = self.seed.to_be_bytes();
         let seed_bytes_le = self.seed.to_le_bytes();
@@ -118,7 +118,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
                 * <OpenSimplex as NoiseNDTo2D<4>>::get_2d(&self.point_offset_noise, (position * BIOME_SIZE).to_array());
             position = DVec2::new(BIOME_SIZE * position.x + noise, BIOME_SIZE * position.y + noise);
             let point = delaunay
-                .insert(DVec2Wrapper(position))
+                .insert(DelaunayVertex(position))
                 .unwrap_or_else(|_| panic!("failed to insert point {position:?} into delaunay triangulation"));
             if x == 0 && z == 0 {
                 vertex_point = Some(point);
@@ -457,7 +457,7 @@ impl MultiNoiseGenerator {
     fn make_edge_center_corner(
         &self,
         handle: FixedVertexHandle,
-        delaunay: &DelaunayTriangulation<DVec2Wrapper>,
+        delaunay: &DelaunayTriangulation<DelaunayVertex>,
         centers: &mut Vec<Center>,
         center_lookup: &mut HashMap<[i32; 2], usize>,
         corners: &mut Vec<Corner>,
@@ -465,7 +465,7 @@ impl MultiNoiseGenerator {
         edges: &mut Vec<Edge>,
     ) -> usize {
         let point = delaunay.vertex(handle);
-        let point: DVec2 = *<DVec2Wrapper>::from(point.position());
+        let point: DVec2 = *<DelaunayVertex>::from(point.position());
         let center_lookup_pos = [point.x.round() as i32, point.y.round() as i32];
         let center = if center_lookup.contains_key(&center_lookup_pos) {
             return *center_lookup.get(&center_lookup_pos).unwrap();
@@ -515,22 +515,22 @@ impl MultiNoiseGenerator {
 
     /// returns: \[(delaunay edges, voronoi edges)\]
     fn make_edges(
-        delaunay_triangulation: &DelaunayTriangulation<DVec2Wrapper>,
+        delaunay_triangulation: &DelaunayTriangulation<DelaunayVertex>,
         handle: FixedVertexHandle,
     ) -> Vec<(PointEdge, PointEdge)> {
         let mut list_of_delaunay_edges = Vec::new();
         let vertex = delaunay_triangulation.vertex(handle);
         let edges = vertex.out_edges().collect_vec();
         for edge in edges.iter() {
-            let vertex_1 = *edge.from().data();
-            let vertex_2 = *edge.to().data();
-            list_of_delaunay_edges.push(PointEdge(*vertex_1, *vertex_2));
+            let v1 = **edge.from().data();
+            let v2 = **edge.to().data();
+            list_of_delaunay_edges.push(PointEdge(v1, v2));
         }
 
         let mut list_of_voronoi_edges = Vec::new();
         for edge in vertex.as_voronoi_face().adjacent_edges() {
             if let (Some(from), Some(to)) = (edge.from().position(), edge.to().position()) {
-                list_of_voronoi_edges.push(PointEdge(*(<DVec2Wrapper>::from(from)), *(<DVec2Wrapper>::from(to))));
+                list_of_voronoi_edges.push(PointEdge(*(<DelaunayVertex>::from(from)), *(<DelaunayVertex>::from(to))));
             }
         }
 
@@ -803,71 +803,71 @@ impl Corner {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Debug)]
-struct DVec2Wrapper(DVec2);
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
+struct DelaunayVertex(DVec2);
 
-impl DVec2Wrapper {
-    fn new(x: f64, y: f64) -> DVec2Wrapper {
-        DVec2Wrapper(DVec2::new(x, y))
+impl DelaunayVertex {
+    fn new(x: f64, y: f64) -> DelaunayVertex {
+        DelaunayVertex(DVec2::new(x, y))
     }
 }
 
-impl Add<DVec2Wrapper> for DVec2Wrapper {
+impl Add<DelaunayVertex> for DelaunayVertex {
     type Output = Self;
     #[inline]
     fn add(self, rhs: Self) -> Self {
-        DVec2Wrapper(self.0.add(rhs.0))
+        DelaunayVertex(self.0.add(rhs.0))
     }
 }
-impl AddAssign<DVec2Wrapper> for DVec2Wrapper {
+impl AddAssign<DelaunayVertex> for DelaunayVertex {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
         self.0.add_assign(rhs.0);
     }
 }
-impl Sub<DVec2Wrapper> for DVec2Wrapper {
+impl Sub<DelaunayVertex> for DelaunayVertex {
     type Output = Self;
     #[inline]
     fn sub(self, rhs: Self) -> Self {
-        DVec2Wrapper(self.0.sub(rhs.0))
+        DelaunayVertex(self.0.sub(rhs.0))
     }
 }
-impl SubAssign<DVec2Wrapper> for DVec2Wrapper {
+impl SubAssign<DelaunayVertex> for DelaunayVertex {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
         self.0.sub_assign(rhs.0);
     }
 }
-impl Deref for DVec2Wrapper {
+impl Deref for DelaunayVertex {
     type Target = DVec2;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-impl HasPosition for DVec2Wrapper {
+impl HasPosition for DelaunayVertex {
     type Scalar = f64;
     fn position(&self) -> Point2<Self::Scalar> {
         Point2::new(self.x, self.y)
     }
 }
-impl From<DVec2> for DVec2Wrapper {
+impl From<DVec2> for DelaunayVertex {
     fn from(value: DVec2) -> Self {
-        DVec2Wrapper(value)
+        DelaunayVertex(value)
     }
 }
-impl From<Point2<f64>> for DVec2Wrapper {
+impl From<Point2<f64>> for DelaunayVertex {
     fn from(value: Point2<f64>) -> Self {
-        DVec2Wrapper::new(value.x, value.y)
+        DelaunayVertex::new(value.x, value.y)
     }
 }
-impl From<DVec2Wrapper> for Point2<f64> {
-    fn from(value: DVec2Wrapper) -> Self {
+impl From<DelaunayVertex> for Point2<f64> {
+    fn from(value: DelaunayVertex) -> Self {
         Point2::new(value.x, value.y)
     }
 }
-impl From<DVec2Wrapper> for DVec2 {
-    fn from(value: DVec2Wrapper) -> Self {
+impl From<DelaunayVertex> for DVec2 {
+    fn from(value: DelaunayVertex) -> Self {
         value.0
     }
 }
