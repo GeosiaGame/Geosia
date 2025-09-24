@@ -6,6 +6,7 @@ use std::hash::{Hash, Hasher};
 use bevy_color::Srgba;
 use bevy_math::DVec2;
 use noise::{OpenSimplex, Value};
+use noisy_float::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -13,10 +14,8 @@ use super::{
     voxeltypes::{BlockEntry, BlockRegistry},
 };
 use crate::voxel::generation::fbm_noise::Fbm;
-use crate::{
-    range::Range,
-    registry::{Registry, RegistryId, RegistryName, RegistryObject},
-};
+use crate::registry::{Registry, RegistryId, RegistryName, RegistryObject};
+use crate::range::Range;
 
 pub mod biome_map;
 
@@ -124,8 +123,23 @@ pub struct Noises {
     pub weird_noise: Fbm<Value>,
 }
 
-/// Name of the default void biome.
+/// The registry name of [`VOID_BIOME`]
 pub const VOID_BIOME_NAME: RegistryName = RegistryName::gs_const("void");
+
+/// The void biome definition, used when no biomes have been generated
+pub static VOID_BIOME: BiomeDefinition = BiomeDefinition {
+    name: VOID_BIOME_NAME,
+    representative_color: Srgba::NONE,
+    elevation: Range::None,
+    temperature: Range::None,
+    moisture: Range::None,
+    rule_source: |_pos, _ctx, _block_reg| None,
+    surface_noise: |_point, _noise| 0.0,
+    blend_influence: 0.0,
+    block_influence: 0.0,
+    can_generate: false,
+};
+
 /// No-op rule source
 pub const EMPTY_RULE_SOURCE: BlockRuleSourceFunction = |_pos, _ctx, _reg| None;
 /// Empty surface noise function

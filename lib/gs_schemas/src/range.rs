@@ -18,6 +18,8 @@ pub enum Range<Idx> {
     RightInclusive(Idx),
     /// ..
     Full,
+    /// -
+    None,
 }
 
 impl<Idx> Range<Idx>
@@ -28,11 +30,12 @@ where
     pub fn contains(&self, x: Idx) -> bool {
         match self {
             Range::Closed(s, e) => *s <= x && *e > x,
+            Range::ClosedInclusive(s, e) => *s <= x && *e >= x,
             Range::Left(s) => x >= *s,
             Range::Right(e) => x < *e,
             Range::RightInclusive(e) => x <= *e,
             Range::Full => true,
-            Range::ClosedInclusive(s, e) => *s <= x && *e >= x,
+            Range::None => false
         }
     }
 }
@@ -44,11 +47,12 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Range::Closed(start, end) => write!(f, "{}..{}", start, end),
+            Range::ClosedInclusive(start, end) => write!(f, "{}..={}", start, end),
             Range::Left(start) => write!(f, "{}..", start),
             Range::Right(end) => write!(f, "..{}", end),
             Range::RightInclusive(end) => write!(f, "..={}", end),
             Range::Full => write!(f, ".."),
-            Range::ClosedInclusive(start, end) => write!(f, "{}..={}", start, end),
+            Range::None => write!(f, "-"),
         }
     }
 }

@@ -7,13 +7,13 @@ use gs_schemas::{
     range::range,
     registry::RegistryName,
     voxel::{
-        biome::{BiomeDefinition, BiomeRegistry, VOID_BIOME_NAME},
+        biome::{BiomeDefinition, BiomeRegistry},
         generation::{Context, NoiseNDTo2D},
         voxeltypes::{BlockEntry, BlockRegistry},
     },
 };
 use noise::OpenSimplex;
-
+use gs_schemas::voxel::biome::VOID_BIOME;
 use super::blocks::{
     DIRT_BLOCK_NAME, GRASS_BLOCK_NAME, SAND_BLOCK_NAME, SNOWY_GRASS_BLOCK_NAME, STONE_BLOCK_NAME, WATER_BLOCK_NAME,
 };
@@ -37,20 +37,7 @@ pub(crate) const NOISE_DIMS: usize = 2; //4;
 
 /// Installs the base set of biomes into the given block registry.
 pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
-    biome_registry
-        .push_object(BiomeDefinition {
-            name: VOID_BIOME_NAME,
-            representative_color: Srgba::rgba_u8(0, 0, 0, 0),
-            elevation: range(-1.0..-1.0),
-            temperature: range(-1.0..-1.0),
-            moisture: range(-1.0..-1.0),
-            rule_source: |_pos, _ctx, _block_reg| None,
-            surface_noise: |_point, _noise| 0.0,
-            blend_influence: 0.0,
-            block_influence: 0.0,
-            can_generate: false,
-        })
-        .unwrap();
+    biome_registry.push_object(VOID_BIOME.clone()).unwrap();
 
     biome_registry
         .push_object(BiomeDefinition {
