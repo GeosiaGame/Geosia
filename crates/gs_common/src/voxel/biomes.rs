@@ -279,17 +279,20 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: LAKE_BIOME_NAME,
             representative_color: Srgba::rgba_u8(100, 170, 220, 255),
-            elevation: range(1.0..),
+            elevation: range(1.0..2.0),
             temperature: range(..),
             moisture: range(2.5..),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
                 let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
                 let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
+                let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
                 let (i_sand, _) = block_registry.lookup_name_to_object(SAND_BLOCK_NAME.as_ref()).unwrap();
                 let (i_water, _) = block_registry.lookup_name_to_object(WATER_BLOCK_NAME.as_ref()).unwrap();
 
                 if context.sea_level > pos.y {
-                    return if pos.y == context.ground_y && pos.y > context.sea_level - 5 {
+                    return if pos.y == context.ground_y && pos.y == context.sea_level - 1 {
+                        Some(BlockEntry::new(i_grass, 0))
+                    } else if pos.y == context.ground_y && pos.y > context.sea_level - 5 {
                         Some(BlockEntry::new(i_sand, 0))
                     } else if pos.y <= context.ground_y && pos.y > context.ground_y - 5 {
                         Some(BlockEntry::new(i_dirt, 0))
