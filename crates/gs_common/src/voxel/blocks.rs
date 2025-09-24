@@ -80,7 +80,7 @@ pub fn setup_basic_blocks(registry: &mut BlockRegistry) {
         .push_object(BlockDefinition {
             name: SAND_BLOCK_NAME,
             shape_set: StandardShapedMaterial,
-            representative_color: Srgba::rgba_u8(224, 200, 130, 255),
+            representative_color: Srgba::rgba_u8(250, 200, 90, 255),
             has_collision_box: true,
             has_selection_box: true,
             has_drawable_mesh: true,
