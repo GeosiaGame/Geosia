@@ -46,6 +46,7 @@ tokio-util.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+noisy_float.workspace = true
 
 [features]
 trace_tracy = ["bevy/trace_tracy"]

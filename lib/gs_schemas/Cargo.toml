@@ -48,6 +48,7 @@ url.workspace = true
 uuid.workspace = true
 zorder.workspace = true
 zstd.workspace = true
+noisy_float.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
