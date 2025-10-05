@@ -321,7 +321,8 @@ impl NetworkThreadServerState {
                     let _ = c2s_stream.send_packet(packet);
 
                     if terminate_on_reply {
-                        c2s_stream.close();
+                        let mut signal = c2s_stream.close();
+                        let _ = signal.wait_for(|v| *v).await;
                         connection.close();
                         return Ok(());
                     }
@@ -353,7 +354,8 @@ impl NetworkThreadServerState {
                             err.set_kind(authentication_error::Kind::InvalidProfile);
                             err.set_message(e.to_string());
                             let _ = c2s_stream.send_packet(response.into());
-                            c2s_stream.close();
+                            let mut signal = c2s_stream.close();
+                            let _ = signal.wait_for(|v| *v).await;
                             connection.close();
                             return Ok(());
                         }
@@ -389,7 +391,8 @@ impl NetworkThreadServerState {
                             err.set_kind(e);
                             err.set_message("Server rejected player join request");
                             let _ = c2s_stream.send_packet(response.into());
-                            c2s_stream.close();
+                            let mut signal = c2s_stream.close();
+                            let _ = signal.wait_for(|v| *v).await;
                             connection.close();
                             return Ok(());
                         }
@@ -398,7 +401,8 @@ impl NetworkThreadServerState {
                             err.set_kind(authentication_error::Kind::UnspecifiedError);
                             err.set_message("Internal Server Error");
                             let _ = c2s_stream.send_packet(response.into());
-                            c2s_stream.close();
+                            let mut signal = c2s_stream.close();
+                            let _ = signal.wait_for(|v| *v).await;
                             connection.close();
                             return Err(e.context("Could not obtain engine consent for player join"));
                         }
