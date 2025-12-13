@@ -104,7 +104,7 @@ pub fn quinn_client_config() -> quinn::ClientConfig {
 /// Makes a simple QUINN endpoint server config object.
 pub fn quinn_server_config() -> quinn::ServerConfig {
     let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
-    let key = PrivateKeyDer::Pkcs8(cert.key_pair.serialize_der().into());
+    let key = PrivateKeyDer::Pkcs8(cert.signing_key.serialize_der().into());
     let cert = cert.cert.into();
 
     let mut crypto = rustls::ServerConfig::builder_with_protocol_versions(TLS_PROTO_VERSIONS)
