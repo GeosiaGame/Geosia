@@ -323,7 +323,7 @@ impl NetworkThreadServerState {
                     if terminate_on_reply {
                         let mut signal = c2s_stream.close();
                         let _ = signal.wait_for(|v| *v).await;
-                        connection.close();
+                        connection.close().await;
                         return Ok(());
                     }
                 }
@@ -356,7 +356,7 @@ impl NetworkThreadServerState {
                             let _ = c2s_stream.send_packet(response.into());
                             let mut signal = c2s_stream.close();
                             let _ = signal.wait_for(|v| *v).await;
-                            connection.close();
+                            connection.close().await;
                             return Ok(());
                         }
                     };
@@ -393,7 +393,7 @@ impl NetworkThreadServerState {
                             let _ = c2s_stream.send_packet(response.into());
                             let mut signal = c2s_stream.close();
                             let _ = signal.wait_for(|v| *v).await;
-                            connection.close();
+                            connection.close().await;
                             return Ok(());
                         }
                         Err(e) => {
@@ -403,7 +403,7 @@ impl NetworkThreadServerState {
                             let _ = c2s_stream.send_packet(response.into());
                             let mut signal = c2s_stream.close();
                             let _ = signal.wait_for(|v| *v).await;
-                            connection.close();
+                            connection.close().await;
                             return Err(e.context("Could not obtain engine consent for player join"));
                         }
                     }
@@ -670,6 +670,7 @@ impl NetworkThreadServerState {
                 local: server_addr,
                 remote: conn_addr,
             };
+            let inner_endpoint = endpoint.clone();
             spawn_local(async move {
                 let conn = match conn.await {
                     Ok(conn) => conn,
@@ -679,7 +680,7 @@ impl NetworkThreadServerState {
                     }
                 };
                 info!(address = %conn_addr, "Accepting remote connection");
-                let netconn = NetworkConnection::wrap_remote(GameSide::Server, peer_addr, conn);
+                let netconn = NetworkConnection::wrap_remote(GameSide::Server, peer_addr, inner_endpoint, conn);
                 Self::accept_connection(local_engine, netconn).await;
             });
         }

@@ -179,7 +179,7 @@ async fn server_query_task(ip: String) -> Result<String> {
         local: local_addr.as_socket().context("Obtaining local socket address")?,
         remote: quic_connection.remote_address(),
     };
-    let net_conn = NetworkConnection::wrap_remote(GameSide::Client, address, quic_connection);
+    let net_conn = NetworkConnection::wrap_remote(GameSide::Client, address, endpoint, quic_connection);
     let stream = net_conn.open_stream().await?;
     let mut pkt = new_simple_packet_builder();
     {
@@ -195,6 +195,7 @@ async fn server_query_task(ip: String) -> Result<String> {
     let recv_time = Instant::now();
     stream.close();
     drop(stream);
+    tokio::task::spawn_local(async move { net_conn.close().await });
     let response = response.parse_typed::<gs_schemas::schemas::network_capnp::game_server_metadata::Owned>(
         RPC_SERVER_UNAUTHENTICATED_READER_OPTIONS,
     )?;

@@ -11,7 +11,7 @@ use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::schemas::network_capnp::{PacketId, network_packet};
 use gs_schemas::schemas::{AlignedBytesMut, CapnpBuilder, read_leb128, read_packet_id, write_leb128};
 use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
-use quinn::{Connection, RecvStream, SendStream, VarInt};
+use quinn::{Connection, Endpoint, RecvStream, SendStream, VarInt};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 use rustls::version::TLS13;
@@ -347,28 +347,33 @@ impl PacketStream {
 
     /// Reads a single packet from the stream.
     pub async fn recv_packet(&self) -> Result<PacketWrapper, PacketSendRecvError> {
-        if *self.closed.borrow() {
+        let mut rx = self.rx.lock().await;
+        let no_queued_packets = rx.is_empty();
+        if no_queued_packets && *self.closed.borrow() {
             return Err(PacketSendRecvError::StreamClosed);
         }
         let mut closed = self.closed.clone();
-        let mut rx = self.rx.lock().await;
         tokio::select! {
-            _ = closed.wait_for(|&v| v) => {
-                Err(PacketSendRecvError::StreamClosed)
-            }
+            biased;
             packet = rx.recv() => {
                 match packet {
                     Some(PacketStreamSendCmd::Packet(packet)) => Ok(packet),
                     Some(PacketStreamSendCmd::GracefulStop {done }) => {
+                eprintln!("graceful stop");
                         self.close_request.send_replace(true);
                         let _ = done.send(());
                         Err(PacketSendRecvError::StreamClosed)
                     }
                     None => {
+                        eprintln!("closed None");
                         self.close_request.send_replace(true);
                         Err(PacketSendRecvError::StreamClosed)
                     }
                 }
+            }
+            _ = closed.wait_for(|&v| v), if no_queued_packets => {
+                eprintln!("closed signal");
+                Err(PacketSendRecvError::StreamClosed)
             }
         }
     }
@@ -527,7 +532,7 @@ impl InProcessDuplex {
 
 enum NetworkConnectionSide {
     Local { duplex: InProcessDuplex },
-    Remote { connection: Connection },
+    Remote { endpoint: Endpoint, connection: Connection },
 }
 
 /// Abstraction over local and remote Connections
@@ -548,11 +553,11 @@ impl NetworkConnection {
     }
 
     /// Constructs a [`NetworkConnection`] object by wrapping a socket connection.
-    pub fn wrap_remote(game_side: GameSide, address: PeerAddress, connection: Connection) -> Self {
+    pub fn wrap_remote(game_side: GameSide, address: PeerAddress, endpoint: Endpoint, connection: Connection) -> Self {
         Self {
             game_side,
             address,
-            side: NetworkConnectionSide::Remote { connection },
+            side: NetworkConnectionSide::Remote { endpoint, connection },
         }
     }
 
@@ -578,11 +583,14 @@ impl NetworkConnection {
     }
 
     /// Closes the connection.
-    pub fn close(&self) {
+    pub async fn close(&self) {
         match &self.side {
             NetworkConnectionSide::Local { duplex: _ } => {}
-            NetworkConnectionSide::Remote { connection } => {
+            NetworkConnectionSide::Remote { endpoint, connection } => {
                 connection.close(VarInt::default(), &[]);
+                if self.game_side == GameSide::Client {
+                    endpoint.wait_idle().await;
+                }
             }
         }
     }
@@ -591,7 +599,7 @@ impl NetworkConnection {
     pub async fn open_stream(&self) -> Result<PacketStream> {
         match &self.side {
             NetworkConnectionSide::Local { duplex } => PacketStream::open_internal(duplex, self.game_side).await,
-            NetworkConnectionSide::Remote { connection } => {
+            NetworkConnectionSide::Remote { connection, .. } => {
                 PacketStream::open_quic(connection.clone(), self.game_side).await
             }
         }
@@ -601,7 +609,7 @@ impl NetworkConnection {
     pub async fn accept_stream(&self) -> Result<PacketStream> {
         match &self.side {
             NetworkConnectionSide::Local { duplex } => PacketStream::accept_internal(duplex).await,
-            NetworkConnectionSide::Remote { connection } => {
+            NetworkConnectionSide::Remote { connection, .. } => {
                 PacketStream::accept_quic(connection.clone(), self.game_side.opposite()).await
             }
         }

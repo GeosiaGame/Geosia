@@ -360,7 +360,7 @@ impl NetworkThreadClientState {
         };
         self.variant = NetworkThreadClientStateVariant::Connecting(address);
 
-        let net_conn = NetworkConnection::wrap_remote(GameSide::Client, address, quic_connection);
+        let net_conn = NetworkConnection::wrap_remote(GameSide::Client, address, endpoint, quic_connection);
 
         self.authenticate(net_thread, game_channel, net_conn).await
     }

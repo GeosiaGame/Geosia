@@ -18,8 +18,9 @@ pub fn run_dedicated_server() -> Result<()> {
     let _cli = CliOptions::parse();
 
     let save_name = "Dedicated Server";
-    let save_path = saves_directory().join(save_name);
-    let savefile = get_save_metadata(&save_path).or_else(|_| -> Result<_> { Ok(new_save(&save_path, save_name)?) })?;
+    let saves_path = saves_directory();
+    let save_path = saves_path.join(save_name);
+    let savefile = get_save_metadata(&save_path).or_else(|_| -> Result<_> { Ok(new_save(&saves_path, save_name)?) })?;
 
     let game_config = GameConfig {
         server: ServerConfig {
