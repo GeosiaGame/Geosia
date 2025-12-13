@@ -55,7 +55,6 @@ features = [
     "x11",                # Linux: Support X11 windowing system
 
     "ktx2",   # Preferred format for GPU textures
-    "zstd",   # ZSTD compression support in KTX2 files
     "vorbis", # Audio: OGG Vorbis
 
     # Extra Bevy functionality:

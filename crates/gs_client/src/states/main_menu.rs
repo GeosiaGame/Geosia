@@ -4,9 +4,8 @@ use std::fmt::Write;
 use std::net::{Ipv6Addr, SocketAddrV6};
 use std::time::Instant;
 
-use bevy_egui::EguiContextPass;
-use bevy_egui::EguiContexts;
 use bevy_egui::egui;
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
 use gs_common::GAME_BRAND_NAME;
 use gs_common::network::PeerAddress;
 use gs_common::network::transport::{
@@ -29,7 +28,7 @@ pub struct MainMenuPlugin;
 
 impl Plugin for MainMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(EguiContextPass, (main_menu_ui,).in_set(MainMenuSystemSet));
+        app.add_systems(EguiPrimaryContextPass, (main_menu_ui,).in_set(MainMenuSystemSet));
     }
 }
 
@@ -54,13 +53,13 @@ impl Default for MenuInputs {
 
 fn main_menu_ui(
     mut contexts: EguiContexts,
-    mut quit: EventWriter<AppExit>,
+    mut quit: MessageWriter<AppExit>,
     mut loading_data: ResMut<LoadingTransitionParams>,
     mut state_switch: ResMut<NextState<ClientAppState>>,
     mut menu_inputs: Local<MenuInputs>,
     mut saves: Local<Option<Vec<SavefileMetadata>>>,
 ) {
-    let Some(ctx) = contexts.try_ctx_mut() else {
+    let Ok(ctx) = contexts.ctx_mut() else {
         return;
     };
     let metadata = saves.get_or_insert_with(|| {

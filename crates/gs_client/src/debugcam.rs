@@ -6,10 +6,10 @@
 
 use bevy::color::palettes::tailwind;
 use bevy::input::mouse::AccumulatedMouseMotion;
-use bevy::window::{CursorGrabMode, PrimaryWindow};
+use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use bevy_egui::egui::Align2;
 use bevy_egui::input::egui_wants_any_input;
-use bevy_egui::{EguiContextPass, EguiContexts};
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
 use gs_common::raycast::{RaycastContext, raycast};
 use gs_common::voxel::plugin::BlockRegistryHolder;
 use gs_schemas::actions::{BlockAction, PositionData};
@@ -90,7 +90,7 @@ fn initial_grab_cursor(state: Res<IsCursorGrabbed>, mut commands: Commands) {
 }
 
 /// Spawns the `Camera3dBundle` to be controlled
-fn setup_player(mut commands: Commands) {
+fn setup_camera(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.0, 6.0, 12.0).looking_at(Vec3::ZERO, Vec3::Y),
@@ -102,14 +102,14 @@ fn setup_player(mut commands: Commands) {
 fn player_move(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
-    primary_window: Query<&Window, With<PrimaryWindow>>,
+    primary_window: Query<&CursorOptions, With<PrimaryWindow>>,
     settings: Res<MovementSettings>,
     key_bindings: Res<KeyBindings>,
     mut camera_query: Query<(&FlyCam, &mut Transform)>, //    mut query: Query<&mut Transform, With<FlyCam>>,
     mut text_writer: TextUiWriter,
     mut set: ParamSet<(Query<Entity, With<BiomeText>>, Query<Entity, With<PositionText>>)>,
 ) {
-    if let Ok(window) = primary_window.single() {
+    if let Ok(cursor_options) = primary_window.single() {
         let mut camera_pos = Vec3::ZERO;
         let mut camera_angle = Quat::IDENTITY;
         for (_camera, mut transform) in camera_query.iter_mut() {
@@ -119,7 +119,7 @@ fn player_move(
             let right = Vec3::new(local_z.z, 0., -local_z.x);
 
             for key in keys.get_pressed() {
-                match window.cursor_options.grab_mode {
+                match cursor_options.grab_mode {
                     CursorGrabMode::None => (),
                     _ => {
                         let key = *key;
@@ -173,14 +173,14 @@ fn player_move(
 /// Handles looking around if cursor is locked
 fn player_look(
     settings: Res<MovementSettings>,
-    primary_window: Query<&Window, With<PrimaryWindow>>,
+    primary_window: Query<(&Window, &CursorOptions), With<PrimaryWindow>>,
     motion: Res<AccumulatedMouseMotion>,
     mut camera_query: Query<&mut Transform, With<FlyCam>>,
 ) {
-    if let Ok(window) = primary_window.single() {
+    if let Ok((window, cursor_options)) = primary_window.single() {
         for mut transform in camera_query.iter_mut() {
             let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
-            match window.cursor_options.grab_mode {
+            match cursor_options.grab_mode {
                 CursorGrabMode::None => (),
                 _ => {
                     // Using smallest of height or width ensures equal vertical and horizontal sensitivity
@@ -207,14 +207,14 @@ fn player_action(
     block_reg: Res<BlockRegistryHolder>,
     _: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
-    primary_window: Query<&Window, With<PrimaryWindow>>,
+    primary_window: Query<&CursorOptions, With<PrimaryWindow>>,
     key_bindings: Res<KeyBindings>,
     mut camera_query: Query<(&FlyCam, &mut Transform)>, //    mut query: Query<&mut Transform, With<FlyCam>>,
 ) {
-    if let Ok(window) = primary_window.single() {
+    if let Ok(cursor_options) = primary_window.single() {
         for (_camera, transform) in camera_query.iter_mut() {
             for &button in mouse.get_just_pressed() {
-                match window.cursor_options.grab_mode {
+                match cursor_options.grab_mode {
                     CursorGrabMode::None => (),
                     _ => {
                         if button == key_bindings.place_block {
@@ -278,7 +278,7 @@ fn gizmo_toggles(
     if camera_query.is_empty() {
         return;
     }
-    let Some(ctx) = ui.try_ctx_mut() else { return };
+    let Ok(ctx) = ui.ctx_mut() else { return };
 
     let toggles = &mut *toggles;
     egui::Window::new("Debug gizmos")
@@ -410,19 +410,19 @@ fn spawn_debug_text(asset_server: Res<AssetServer>, mut commands: Commands) {
     commands
         .spawn((
             Text::new("Current Biome:"),
-            TextFont::from_font(font.clone()).with_font_size(15.0),
+            TextFont::from(font.clone()).with_font_size(15.0),
             TextColor(Color::srgb(0.9, 0.9, 0.9)),
             BiomeText,
         ))
         .with_child((
             TextSpan::new(""),
-            TextFont::from_font(font.clone()).with_font_size(15.0),
+            TextFont::from(font.clone()).with_font_size(15.0),
             TextColor(Color::srgb(0.9, 0.9, 0.9)),
         ));
     commands
         .spawn((
             Text::new("\nCurrent Position:"),
-            TextFont::from_font(font.clone()).with_font_size(15.0),
+            TextFont::from(font.clone()).with_font_size(15.0),
             TextColor(Color::srgb(0.9, 0.9, 0.9)),
             BiomeText,
             PositionText,
@@ -430,17 +430,17 @@ fn spawn_debug_text(asset_server: Res<AssetServer>, mut commands: Commands) {
         .with_children(|b| {
             b.spawn((
                 TextSpan::new(""),
-                TextFont::from_font(font.clone()).with_font_size(15.0),
+                TextFont::from(font.clone()).with_font_size(15.0),
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
             ));
             b.spawn((
                 TextSpan::new("\nCurrent Rotation:"),
-                TextFont::from_font(font.clone()).with_font_size(15.0),
+                TextFont::from(font.clone()).with_font_size(15.0),
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
             ));
             b.spawn((
                 TextSpan::new(""),
-                TextFont::from_font(font.clone()).with_font_size(15.0),
+                TextFont::from(font.clone()).with_font_size(15.0),
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
             ));
         });
@@ -453,7 +453,7 @@ impl Plugin for PlayerPlugin {
         app.init_resource::<MovementSettings>()
             .init_resource::<KeyBindings>()
             .init_resource::<DebugGizmoToggles>()
-            .add_systems(OnEnter(ClientAppState::InGame), setup_player)
+            .add_systems(Startup, setup_camera)
             .add_systems(OnEnter(ClientAppState::InGame), initial_grab_cursor)
             .add_systems(OnEnter(ClientAppState::InGame), spawn_debug_text)
             .add_systems(
@@ -468,7 +468,7 @@ impl Plugin for PlayerPlugin {
                 Update,
                 player_action.run_if(not(egui_wants_any_input)).in_set(InGameSystemSet),
             )
-            .add_systems(EguiContextPass, gizmo_toggles.in_set(InGameSystemSet))
+            .add_systems(EguiPrimaryContextPass, gizmo_toggles.in_set(InGameSystemSet))
             .add_systems(
                 Update,
                 (xyz_gizmo, cur_chunk_gizmo, lookat_gizmo)

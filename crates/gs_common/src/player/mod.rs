@@ -1,7 +1,8 @@
 //! The server-side model of player data and behaviour.
 //! See [`gs_schemas::player`] for more information.
 
-use bevy::ecs::component::{ComponentHook, HookContext, Immutable, StorageType};
+use bevy::ecs::component::{Immutable, StorageType};
+use bevy::ecs::lifecycle::{ComponentHook, HookContext};
 use bevy::ecs::world::DeferredWorld;
 use gs_schemas::player::{AccountId, CharacterId, PlayerAccount, PlayerCharacter};
 
@@ -21,7 +22,9 @@ pub fn player_data_server_plugin(app: &mut App) {
 /// Caches [`PlayerAccount`]s and [`PlayerCharacter`]s.
 #[derive(Resource, Default, Debug)]
 pub struct PlayerCache {
+    #[allow(dead_code)]
     accounts_by_uuid: HashMap<AccountId, Arc<PlayerAccount>>,
+    #[allow(dead_code)]
     characters_by_uuid: HashMap<CharacterId, Arc<PlayerCharacter>>,
     avatars_by_character: HashMap<CharacterId, Entity>,
 }
@@ -30,6 +33,7 @@ pub struct PlayerCache {
 /// The entity persists even if the character is disconnected, laying dormant until it reconnects.
 #[derive(Debug)]
 pub struct PlayerCharacterComponent {
+    #[allow(dead_code)]
     account: AccountId,
     character: CharacterId,
 }

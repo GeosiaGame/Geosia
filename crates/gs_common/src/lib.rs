@@ -16,9 +16,9 @@ use bevy::app::ScheduleRunnerPlugin;
 use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::log::LogPlugin;
+use bevy::platform::cell::SyncCell;
 use bevy::state::app::StatesPlugin;
 use bevy::time::TimePlugin;
-use bevy::utils::synccell::SyncCell;
 use gs_schemas::dependencies::bytes::Bytes;
 use gs_schemas::registries::GameRegistries;
 use gs_schemas::registry::Registry;
@@ -395,7 +395,7 @@ impl GameServer {
                     let engine: &GameServerResource = world.resource();
                     let engine = &engine.0;
                     engine.network_thread.sync_shutdown();
-                    world.send_event(AppExit::Success);
+                    world.write_message(AppExit::Success);
                     let _ = notif.send(Ok(()));
                 }
                 GameServerControlCommand::Invoke(cmd) => {

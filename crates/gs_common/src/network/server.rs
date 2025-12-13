@@ -4,7 +4,8 @@ use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::time::Instant;
 
-use bevy::ecs::component::{ComponentHooks, Mutable, StorageType};
+use bevy::ecs::component::{Mutable, StorageType};
+use bevy::ecs::lifecycle::ComponentHook;
 use bevy::ecs::world::DeferredWorld;
 use gs_schemas::GameSide;
 use gs_schemas::player::{PlayerAccount, PlayerCharacter};
@@ -148,8 +149,8 @@ impl Component for ConnectedPlayer {
     const STORAGE_TYPE: StorageType = StorageType::Table;
     type Mutability = Mutable;
 
-    fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_insert(|mut world: DeferredWorld, context| {
+    fn on_insert() -> Option<ComponentHook> {
+        Some(|mut world: DeferredWorld, context| {
             let entity = context.entity;
             let player = world.get::<ConnectedPlayer>(entity).unwrap();
             let addr = player.authenticated_info.address;
@@ -159,7 +160,8 @@ impl Component for ConnectedPlayer {
                 let new_char = &world
                     .get::<ConnectedPlayer>(entity)
                     .unwrap()
-                    .authenticated_info.player_character;
+                    .authenticated_info
+                    .player_character;
                 let old_char = world
                     .get::<ConnectedPlayer>(old)
                     .map(|p| &p.authenticated_info.player_character);
@@ -168,19 +170,20 @@ impl Component for ConnectedPlayer {
                         "Attempting to insert a player `{new_char}` with a duplicate peer address: {addr} of `{old_char}`"
                     );
                 } else {
-                    panic!(
-                        "Attempting to insert a player `{new_char}` with a duplicate peer address: {addr}"
-                    );
+                    panic!("Attempting to insert a player `{new_char}` with a duplicate peer address: {addr}");
                 }
             }
-        });
-        hooks.on_remove(|mut world: DeferredWorld, context| {
+        })
+    }
+
+    fn on_remove() -> Option<ComponentHook> {
+        Some(|mut world: DeferredWorld, context| {
             let entity = context.entity;
             let player = world.get::<ConnectedPlayer>(entity).unwrap();
             let addr = player.authenticated_info.address;
             let mut table = world.resource_mut::<ConnectedPlayersTable>();
             table.players_by_address.remove(&addr);
-        });
+        })
     }
 }
 

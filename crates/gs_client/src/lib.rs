@@ -6,27 +6,11 @@ pub mod states;
 pub mod ui;
 pub mod voxel;
 
-use bevy::a11y::AccessibilityPlugin;
-use bevy::audio::AudioPlugin;
-use bevy::core_pipeline::CorePipelinePlugin;
-use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
-use bevy::gizmos::GizmoPlugin;
-use bevy::gltf::GltfPlugin;
-use bevy::input::InputPlugin;
-use bevy::pbr::PbrPlugin;
-use bevy::render::RenderPlugin;
-use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
-use bevy::scene::ScenePlugin;
-use bevy::sprite::SpritePlugin;
-use bevy::state::app::StatesPlugin;
-use bevy::text::TextPlugin;
-use bevy::time::TimePlugin;
-use bevy::ui::UiPlugin;
-use bevy::utils::synccell::SyncCell;
-use bevy::window::{ExitCondition, PresentMode};
-use bevy::winit::WinitPlugin;
-use bevy_egui::{EguiContextPass, EguiPlugin};
+use bevy::log::LogPlugin;
+use bevy::platform::cell::SyncCell;
+use bevy::window::{CursorOptions, ExitCondition, PresentMode};
+use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 use gs_common::network::thread::NetworkThread;
 use gs_common::{GAME_BRAND_NAME, GameBevyCommand};
 use gs_schemas::dependencies::smallvec::SmallVec;
@@ -63,54 +47,35 @@ pub fn client_main() {
 
     let mut app = App::new();
     // Bevy Base
-    app.add_plugins(TaskPoolPlugin {
-        task_pool_options: TaskPoolOptions {
-            compute: bevy::app::TaskPoolThreadAssignmentPolicy {
-                min_threads: 1,
-                max_threads: 10,
-                percent: 0.5,
-                on_thread_spawn: None,
-                on_thread_destroy: None,
-            },
-            ..default()
-        },
-    });
-    app.add_plugins(StatesPlugin)
-        .add_plugins(bevy::diagnostic::FrameCountPlugin)
-        .add_plugins(TimePlugin)
-        .add_plugins(TransformPlugin)
-        .add_plugins(DiagnosticsPlugin)
-        .add_plugins(InputPlugin)
-        .add_plugins(WindowPlugin {
-            primary_window: Some(Window {
-                title: GAME_BRAND_NAME.to_string(),
-                present_mode: PresentMode::AutoNoVsync,
-                ..default()
-            }),
-            exit_condition: ExitCondition::OnPrimaryClosed,
-            close_when_requested: true,
-        })
-        .add_plugins(AccessibilityPlugin)
-        .add_plugins(AssetPlugin::default())
-        .add_plugins(ScenePlugin)
-        .add_plugins(WinitPlugin::<bevy::winit::WakeUp>::default())
-        .add_plugins(RenderPlugin::default())
-        .add_plugins(ImagePlugin::default())
-        .add_plugins(PipelinedRenderingPlugin)
-        .add_plugins(CorePipelinePlugin)
-        .add_plugins(SpritePlugin)
-        .add_plugins(TextPlugin)
-        .add_plugins(UiPlugin { enable_rendering: true })
-        .add_plugins(PbrPlugin::default())
-        .add_plugins(AudioPlugin::default())
-        .add_plugins(GilrsPlugin)
-        .add_plugins(GizmoPlugin)
-        .add_plugins(AnimationPlugin)
-        .add_plugins(GltfPlugin::default());
+    app.add_plugins(
+        DefaultPlugins
+            .set(TaskPoolPlugin {
+                task_pool_options: TaskPoolOptions {
+                    compute: bevy::app::TaskPoolThreadAssignmentPolicy {
+                        min_threads: 1,
+                        max_threads: 10,
+                        percent: 0.5,
+                        on_thread_spawn: None,
+                        on_thread_destroy: None,
+                    },
+                    ..default()
+                },
+            })
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: GAME_BRAND_NAME.to_string(),
+                    present_mode: PresentMode::AutoNoVsync,
+                    ..default()
+                }),
+                primary_cursor_options: Some(CursorOptions::default()),
+                exit_condition: ExitCondition::OnPrimaryClosed,
+                close_when_requested: true,
+            })
+            .build()
+            .disable::<LogPlugin>(),
+    );
     // Bevy plugins
-    app.add_plugins(EguiPlugin {
-        enable_multipass_for_primary_context: true,
-    });
+    app.add_plugins(EguiPlugin::default());
 
     app.init_state::<ClientAppState>();
     fn configure_sets(app: &mut App, schedule: impl ScheduleLabel) {
@@ -123,7 +88,7 @@ pub fn client_main() {
             ),
         );
     }
-    configure_sets(&mut app, EguiContextPass);
+    configure_sets(&mut app, EguiPrimaryContextPass);
     configure_sets(&mut app, PreUpdate);
     configure_sets(&mut app, Update);
     configure_sets(&mut app, PostUpdate);

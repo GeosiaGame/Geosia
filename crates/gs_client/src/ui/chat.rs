@@ -2,10 +2,9 @@
 
 use std::collections::VecDeque;
 
-use bevy_egui::EguiContextPass;
-use bevy_egui::EguiContexts;
 use bevy_egui::egui;
 use bevy_egui::input::egui_wants_any_keyboard_input;
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
 use gs_common::InGameSystemSet;
 use gs_common::network::transport::PacketWrapper;
 use gs_schemas::dependencies::kstring::KString;
@@ -30,7 +29,7 @@ pub fn chat_plugin(app: &mut App) {
     app.add_observer(chat_message_observer);
 
     app.add_systems(
-        EguiContextPass,
+        EguiPrimaryContextPass,
         (open_chat.run_if(not(egui_wants_any_keyboard_input)), chat_ui)
             .chain()
             .in_set(InGameSystemSet)
@@ -49,7 +48,7 @@ struct ChatState {
 
 const MAX_MESSAGES: usize = 256;
 
-fn chat_message_observer(trigger: Trigger<ChatMessage>, mut state: ResMut<ChatState>) {
+fn chat_message_observer(trigger: On<ChatMessage>, mut state: ResMut<ChatState>) {
     let state = &mut *state;
     // reuse the buffer of the predicted message
     if trigger.is_echo {
@@ -76,10 +75,10 @@ fn chat_ui(
     mut commands: Commands,
 ) {
     let state = &mut *state;
-    let Some(ctx) = ui.try_ctx_mut() else {
+    let Ok(ctx) = ui.ctx_mut() else {
         return;
     };
-    let screen = ctx.screen_rect();
+    let screen = ctx.content_rect();
     let client = &*client;
     let chat_bounds = egui::Rect::from_min_size(
         screen.left_center() + egui::vec2(8.0, 0.0),
@@ -106,7 +105,6 @@ fn chat_ui(
                 );
                 if state.request_edit_focus {
                     state.request_edit_focus = false;
-                    state.text_was_focused = true;
                     edit_resp.request_focus();
                     commands.trigger(SetGrabMode(false));
                 }

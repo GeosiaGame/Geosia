@@ -20,7 +20,7 @@ pub fn run_dedicated_server() -> Result<()> {
     let save_name = "Dedicated Server";
     let saves_path = saves_directory();
     let save_path = saves_path.join(save_name);
-    let savefile = get_save_metadata(&save_path).or_else(|_| -> Result<_> { Ok(new_save(&saves_path, save_name)?) })?;
+    let savefile = get_save_metadata(&save_path).or_else(|_| -> Result<_> { Ok(new_save(saves_path, save_name)?) })?;
 
     let game_config = GameConfig {
         server: ServerConfig {

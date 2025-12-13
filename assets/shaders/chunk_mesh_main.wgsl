@@ -7,7 +7,6 @@
 #ifdef PREPASS_PIPELINE
 #import bevy_pbr::{
     prepass_io::{Vertex, VertexOutput, FragmentOutput},
-    prepass::vertex,
     pbr_deferred_functions::deferred_output,
 }
 #else
@@ -132,9 +131,9 @@ fn vertex(vertex: ChunkVertex) -> ChunkVertexOutput {
         vertex.instance_index, mesh_world_from_local[3]);
 #endif
 
-    var index = vertex.block_index_with_flags;
-    var baryx = f32((index & (1u << 17u)) > 0u);
-    var baryy = f32((index & (1u << 18u)) > 0u);
+    let index = vertex.block_index_with_flags;
+    let baryx = f32((index & (1u << 17u)) > 0u);
+    let baryy = f32((index & (1u << 18u)) > 0u);
     out.barycentric_coords = vec2<f32>(baryx, baryy);
     out.barycentric_color_offset = vertex.barycentric_color_offset;
     out.block_index = vertex.block_index_with_flags & ((1u << 17u) - 1u);

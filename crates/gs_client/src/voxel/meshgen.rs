@@ -1,12 +1,15 @@
 //! Mesh generators taking in voxel data and producing vertex data.
 
+use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::tailwind;
-use bevy::pbr::{ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline};
-use bevy::render::mesh::{Indices, MeshVertexAttribute, MeshVertexBufferLayoutRef, PrimitiveTopology};
-use bevy::render::render_asset::RenderAssetUsages;
-use bevy::render::render_resource::{
-    AsBindGroup, RenderPipelineDescriptor, ShaderRef, SpecializedMeshPipelineError, VertexFormat,
+use bevy::mesh::{Indices, MeshVertexAttribute, MeshVertexBufferLayoutRef, PrimitiveTopology};
+use bevy::pbr::{
+    ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline, OpaqueRendererMethod,
 };
+use bevy::render::render_resource::{
+    AsBindGroup, RenderPipelineDescriptor, SpecializedMeshPipelineError, VertexFormat,
+};
+use bevy::shader::ShaderRef;
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, CHUNK_DIM, RelBlockPos};
 use gs_schemas::dependencies::itertools::iproduct;
 use gs_schemas::direction::ALL_DIRECTIONS;
@@ -57,6 +60,7 @@ pub fn default_chunk_material() -> ChunkMeshMaterial {
     ChunkMeshMaterial {
         base: StandardMaterial {
             base_color: tailwind::GRAY_100.into(),
+            opaque_render_method: OpaqueRendererMethod::Auto,
             perceptual_roughness: 1.0,
             ..default()
         },
@@ -71,11 +75,11 @@ impl MaterialExtension for ChunkMeshMaterialExtension {
         SHADER_ASSET_PATH.into()
     }
 
-    fn deferred_vertex_shader() -> ShaderRef {
+    fn fragment_shader() -> ShaderRef {
         SHADER_ASSET_PATH.into()
     }
 
-    fn fragment_shader() -> ShaderRef {
+    fn deferred_vertex_shader() -> ShaderRef {
         SHADER_ASSET_PATH.into()
     }
 
@@ -92,6 +96,9 @@ impl MaterialExtension for ChunkMeshMaterialExtension {
         let vertex_layout = layout.0.get_layout(&[
             Mesh::ATTRIBUTE_POSITION.at_shader_location(0),
             Mesh::ATTRIBUTE_NORMAL.at_shader_location(1),
+            //Mesh::ATTRIBUTE_UV_0.at_shader_location(2),
+            //Mesh::ATTRIBUTE_UV_1.at_shader_location(3),
+            //Mesh::ATTRIBUTE_TANGENT.at_shader_location(4),
             Mesh::ATTRIBUTE_COLOR.at_shader_location(5),
             VERTEX_ATTRIBUTE_BARYCENTRIC_COLOR_OFFSET.at_shader_location(6),
             VERTEX_ATTRIBUTE_BLOCK_INDEX_WITH_FLAGS.at_shader_location(7),

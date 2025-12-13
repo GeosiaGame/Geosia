@@ -36,7 +36,7 @@ fn regen_sql() -> Result<()> {
     // Used for intellisense
     let new_game_template_path_uncompressed = Path::new("src/savefile/sql/0000_new_game.sqlite");
     let new_game_template_path = Path::new("src/savefile/sql/0000_new_game.sqlite.zst");
-    build::rerun_if_changed(sql_dir);
+    build_rs::output::rerun_if_changed(sql_dir);
 
     let mut sql_rs =
         String::from("//! Auto-generated module including all the SQL sources as static string literals.\n");
@@ -139,7 +139,7 @@ fn regen_sql() -> Result<()> {
 }
 
 fn regen_capnproto() {
-    build::rerun_if_changed("capnp");
+    build_rs::output::rerun_if_changed("capnp");
     #[cfg(feature = "regenerate-capnp")]
     {
         use capnpc::CompilerCommand as Capnp;
