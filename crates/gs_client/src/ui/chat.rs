@@ -105,7 +105,6 @@ fn chat_ui(
                 );
                 if state.request_edit_focus {
                     state.request_edit_focus = false;
-                    state.text_was_focused = true;
                     edit_resp.request_focus();
                     commands.trigger(SetGrabMode(false));
                 }
