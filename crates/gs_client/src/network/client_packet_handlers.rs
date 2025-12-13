@@ -41,7 +41,7 @@ impl Plugin for ClientPacketHandlerPlugin {
                 .before(InGameSystemSet)
                 .before(LoadingGameSystemSet)
                 .run_if(
-                    Condition::or(in_state(ClientAppState::LoadingGame), in_state(ClientAppState::InGame))
+                    SystemCondition::or(in_state(ClientAppState::LoadingGame), in_state(ClientAppState::InGame))
                         .and(resource_exists::<AuthenticatedNetworkClient>)
                         .and(resource_exists::<ClientNetworkThreadHolder>),
                 ),

@@ -2,7 +2,7 @@
 
 use std::net::SocketAddr;
 
-use bevy::utils::synccell::SyncCell;
+use bevy::platform::cell::SyncCell;
 use gs_common::GameServer;
 use gs_common::config::{GameConfig, ServerConfig};
 use gs_common::network::thread::NetworkThread;

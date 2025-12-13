@@ -1,12 +1,13 @@
 //! Mesh generators taking in voxel data and producing vertex data.
 
+use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::tailwind;
+use bevy::mesh::{Indices, MeshVertexAttribute, MeshVertexBufferLayoutRef, PrimitiveTopology};
 use bevy::pbr::{ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline};
-use bevy::render::mesh::{Indices, MeshVertexAttribute, MeshVertexBufferLayoutRef, PrimitiveTopology};
-use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{
-    AsBindGroup, RenderPipelineDescriptor, ShaderRef, SpecializedMeshPipelineError, VertexFormat,
+    AsBindGroup, RenderPipelineDescriptor, SpecializedMeshPipelineError, VertexFormat,
 };
+use bevy::shader::ShaderRef;
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, CHUNK_DIM, RelBlockPos};
 use gs_schemas::dependencies::itertools::iproduct;
 use gs_schemas::direction::ALL_DIRECTIONS;

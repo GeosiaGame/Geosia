@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use bevy::window::{CursorGrabMode, PrimaryWindow};
+use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use bevy_egui::{
     EguiContext, EguiGlobalSettings, EguiStartupSet, egui,
     input::{EguiContextPointerPosition, EguiInputEvent},
@@ -56,28 +56,28 @@ fn setup_egui_theme(egui_contexts: Query<&mut EguiContext>) {
 }
 
 fn update_grab_mode(
-    trigger: Trigger<SetGrabMode>,
-    mut window_q: Query<&mut Window, With<PrimaryWindow>>,
+    trigger: On<SetGrabMode>,
+    mut window_q: Query<&mut CursorOptions, With<PrimaryWindow>>,
     mut state: ResMut<IsCursorGrabbed>,
     existing_delay: Query<Entity, With<CenterCursorDelay>>,
     mut egui_settings: ResMut<EguiGlobalSettings>,
     mut egui_contexts: Query<(Entity, &mut EguiContextPointerPosition), (With<EguiContext>, With<Window>)>,
-    mut egui_input_event_writer: EventWriter<EguiInputEvent>,
+    mut egui_input_event_writer: MessageWriter<EguiInputEvent>,
     mut commands: Commands,
 ) {
     let Ok(mut window) = window_q.single_mut() else {
         return;
     };
-    let window = &mut *window;
-    let old_grabbed = window.cursor_options.grab_mode != CursorGrabMode::None;
+    let cursor_options = &mut *window;
+    let old_grabbed = cursor_options.grab_mode != CursorGrabMode::None;
     let new_grabbed = **trigger;
     if old_grabbed == new_grabbed {
         return;
     }
     existing_delay.iter().for_each(|e| commands.entity(e).despawn());
     if new_grabbed {
-        window.cursor_options.grab_mode = CursorGrabMode::Locked;
-        window.cursor_options.visible = false;
+        cursor_options.grab_mode = CursorGrabMode::Locked;
+        cursor_options.visible = false;
         commands.spawn(CenterCursorDelay(2));
         state.0 = true;
 
@@ -90,27 +90,31 @@ fn update_grab_mode(
             });
         }
     } else {
-        window.cursor_options.grab_mode = CursorGrabMode::None;
-        window.cursor_options.visible = true;
+        cursor_options.grab_mode = CursorGrabMode::None;
+        cursor_options.visible = true;
         state.0 = false;
     }
     egui_settings
         .input_system_settings
-        .run_write_keyboard_input_events_system = !new_grabbed;
-    egui_settings.input_system_settings.run_write_mouse_wheel_events_system = !new_grabbed;
-    egui_settings.input_system_settings.run_write_ime_events_system = !new_grabbed;
+        .run_write_keyboard_input_messages_system = !new_grabbed;
     egui_settings
         .input_system_settings
-        .run_write_window_pointer_moved_events_system = !new_grabbed;
-    egui_settings.input_system_settings.run_write_window_touch_events_system = !new_grabbed;
+        .run_write_mouse_wheel_messages_system = !new_grabbed;
+    egui_settings.input_system_settings.run_write_ime_messages_system = !new_grabbed;
+    egui_settings
+        .input_system_settings
+        .run_write_window_pointer_moved_messages_system = !new_grabbed;
+    egui_settings
+        .input_system_settings
+        .run_write_window_touch_messages_system = !new_grabbed;
 }
 
 fn center_cursor_delay(
-    mut window_q: Query<&mut Window, With<PrimaryWindow>>,
+    mut window_q: Query<(&mut Window, &mut CursorOptions), With<PrimaryWindow>>,
     mut delay_q: Populated<(Entity, &mut CenterCursorDelay)>,
     mut commands: Commands,
 ) {
-    let Ok(mut window) = window_q.single_mut() else {
+    let Ok((mut window, mut cursor_options)) = window_q.single_mut() else {
         return;
     };
     let mut do_center = false;
@@ -124,7 +128,8 @@ fn center_cursor_delay(
         return;
     }
     let window = &mut *window;
-    let grabbed = window.cursor_options.grab_mode != CursorGrabMode::None;
+    let cursor_options = &mut *cursor_options;
+    let grabbed = cursor_options.grab_mode != CursorGrabMode::None;
     if grabbed {
         window.set_physical_cursor_position(Some(window.physical_size().as_dvec2() / 2.0));
     }

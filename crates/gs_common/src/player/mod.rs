@@ -1,7 +1,8 @@
 //! The server-side model of player data and behaviour.
 //! See [`gs_schemas::player`] for more information.
 
-use bevy::ecs::component::{ComponentHook, HookContext, Immutable, StorageType};
+use bevy::ecs::component::{Immutable, StorageType};
+use bevy::ecs::lifecycle::{ComponentHook, HookContext};
 use bevy::ecs::world::DeferredWorld;
 use gs_schemas::player::{AccountId, CharacterId, PlayerAccount, PlayerCharacter};
 
