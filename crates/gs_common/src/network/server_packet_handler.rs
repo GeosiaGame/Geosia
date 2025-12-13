@@ -7,7 +7,7 @@ use gs_schemas::{
     schemas::{
         CapnpExt,
         game_types_capnp::{SimpleResult, block_action, game_bootstrap_data},
-        network_capnp::{PacketId, block_action_request, game_server_metadata},
+        network_capnp::{PacketId, block_action_request},
         new_packet_builder, new_simple_packet_builder,
     },
     voxel::{
@@ -25,7 +25,6 @@ use super::{
 };
 use crate::voxel::plugin::PersistentVoxelStorage;
 use crate::{
-    GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE,
     GameServerResource, InGameSystemSet, ServerData,
     network::transport::RPC_SERVER_READER_OPTIONS,
     prelude::*,
@@ -124,24 +123,13 @@ pub fn server_packet_handler_system(
             match incoming.id {
                 PacketId::Echo | PacketId::Authenticate => unreachable!(),
                 PacketId::GetServerMetadata => {
-                    let mut response = new_packet_builder::<game_server_metadata::Owned>();
-                    let mut root = response.init_root();
-                    root.set_id(rpc::PacketId::GetServerMetadata);
-                    root.set_timestamp_ms(0);
-                    let mut meta = root.init_payload();
-                    let config = engine.config().borrow();
-                    let mut ver = meta.reborrow().init_server_version();
-                    ver.set_major(GAME_VERSION_MAJOR);
-                    ver.set_minor(GAME_VERSION_MINOR);
-                    ver.set_patch(GAME_VERSION_PATCH);
-                    ver.set_build(GAME_VERSION_BUILD);
-                    ver.set_prerelease(GAME_VERSION_PRERELEASE);
-
-                    meta.set_title(&config.server.server_title);
-                    meta.set_subtitle(&config.server.server_subtitle);
-                    meta.set_player_count(0);
-                    meta.set_player_limit(config.server.max_players as i32);
-                    let _ = incoming.stream.send_packet(response.into());
+                    let packet: PacketWrapper = engine
+                        .server_metadata
+                        .lock()
+                        .expect("Poisoned server metadata mutex")
+                        .clone()
+                        .into();
+                    let _ = incoming.stream.send_packet(packet);
                 }
                 PacketId::BootstrapGameData => {
                     // no-op
@@ -153,13 +141,18 @@ pub fn server_packet_handler_system(
 
                     info!(
                         "Incoming chat message from {} ({}): {}",
-                        player.authenticated_info.username, player.authenticated_info.address, message
+                        player.authenticated_info.player_character.display_name,
+                        player.authenticated_info.address,
+                        message
                     );
 
-                    let formatted_message = format!("[{}] {}", player.authenticated_info.username, message);
+                    let formatted_message = format!(
+                        "[{}] {}",
+                        player.authenticated_info.player_character.display_name, message
+                    );
                     let mut response = new_packet_builder::<capnp::text::Owned>();
                     let mut root = response.init_root();
-                    root.set_id(rpc::PacketId::ChatMessage);
+                    root.set_id(PacketId::ChatMessage);
                     root.set_timestamp_ms(response_timestamp);
                     root.set_payload(&formatted_message)?;
                     let mut response = PacketWrapper::from(response);
@@ -259,7 +252,10 @@ pub fn server_packet_handler_system(
                         let mut root = packet.init_root();
                         root.set_id(PacketId::ChatMessage);
                         root.set_timestamp_ms(response_timestamp);
-                        root.set_payload(format!("{} has joined!", player.authenticated_info.username))?;
+                        root.set_payload(format!(
+                            "{} has joined!",
+                            player.authenticated_info.player_character.display_name
+                        ))?;
                         let mut packet = PacketWrapper::from(packet);
                         for (_, player) in all_players.iter().skip(1) {
                             let _ = player.main_s2c_stream.send_packet(packet.clone_mut());
@@ -292,7 +288,7 @@ pub fn server_packet_handler_system(
             if let Err(e) = result {
                 warn!(
                     "Error occured during packet {} handling from {} ({}): {}",
-                    packet_id, player.authenticated_info.username, player.authenticated_info.address, e
+                    packet_id, player.authenticated_info.player_character, player.authenticated_info.address, e
                 );
             }
         }

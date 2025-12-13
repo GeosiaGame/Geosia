@@ -14,7 +14,13 @@ use gs_common::network::transport::{
 };
 use gs_common::prelude::rpc::{PacketId, authentication_acknowledgement, authentication_error, authentication_request};
 use gs_schemas::GameSide;
-use gs_schemas::schemas::{game_types_capnp, network_capnp as rpc, new_packet_builder, new_simple_packet_builder};
+use gs_schemas::player::{
+    TEST_ALICE_CHARACTER_UUID, TEST_ALICE_PLAYER_UUID, TEST_BOB_CHARACTER_UUID, TEST_BOB_PLAYER_UUID,
+    nonregistered_player_url,
+};
+use gs_schemas::schemas::{
+    CapnpExt, game_types_capnp, network_capnp as rpc, new_packet_builder, new_simple_packet_builder,
+};
 use quinn::{Endpoint, EndpointConfig};
 use slotmap::SlotMap;
 use socket2::{Domain, Socket};
@@ -244,9 +250,21 @@ impl NetworkThreadClientState {
             builder.set_timestamp_ms(net_thread.packet_timestamp());
             let mut payload = builder.init_payload();
             if next_state.server_connection.is_local() {
-                payload.set_username("LocalPlayer");
+                payload.set_player_url(nonregistered_player_url(TEST_ALICE_PLAYER_UUID));
+                payload.set_player_display_name("Alice");
+                TEST_ALICE_CHARACTER_UUID
+                    .0
+                    .get()
+                    .write_to_message(&mut payload.reborrow().init_character_id());
+                payload.set_character_display_name("Alice Zero");
             } else {
-                payload.set_username("InternetPlayer");
+                payload.set_player_url(nonregistered_player_url(TEST_BOB_PLAYER_UUID));
+                payload.set_player_display_name("Bob");
+                TEST_BOB_CHARACTER_UUID
+                    .0
+                    .get()
+                    .write_to_message(&mut payload.reborrow().init_character_id());
+                payload.set_character_display_name("Bob One");
             }
         }
         let auth_request = PacketWrapper::from(auth_request);
@@ -342,7 +360,7 @@ impl NetworkThreadClientState {
         };
         self.variant = NetworkThreadClientStateVariant::Connecting(address);
 
-        let net_conn = NetworkConnection::wrap_remote(GameSide::Client, address, quic_connection);
+        let net_conn = NetworkConnection::wrap_remote(GameSide::Client, address, endpoint, quic_connection);
 
         self.authenticate(net_thread, game_channel, net_conn).await
     }

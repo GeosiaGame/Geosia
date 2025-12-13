@@ -7,17 +7,18 @@ use std::time::Instant;
 use bevy::ecs::component::{ComponentHooks, Mutable, StorageType};
 use bevy::ecs::world::DeferredWorld;
 use gs_schemas::GameSide;
-use gs_schemas::dependencies::kstring::KString;
+use gs_schemas::player::{PlayerAccount, PlayerCharacter};
 use gs_schemas::schemas::game_types_capnp::result;
 use gs_schemas::schemas::network_capnp::{
-    PacketId, authentication_acknowledgement, authentication_error, authentication_request, game_server_metadata,
+    PacketId, authentication_acknowledgement, authentication_error, authentication_request,
 };
-use gs_schemas::schemas::{network_capnp as rpc, new_packet_builder, new_simple_packet_builder};
+use gs_schemas::schemas::{CapnpExt, network_capnp as rpc, new_packet_builder, new_simple_packet_builder};
 use quinn::{Endpoint, EndpointConfig, VarInt};
 use slotmap::{SlotMap, new_key_type};
 use socket2::{Domain, Socket};
 use tokio::task::{JoinHandle, JoinSet, spawn_local};
 use tracing::Instrument;
+use uuid::Uuid;
 
 use super::server_packet_handler::ServerPacketHandlerPlugin;
 use super::thread::NetworkThreadState;
@@ -25,12 +26,10 @@ use super::transport::{
     NetworkConnection, PacketStream, PacketWrapper, RPC_SERVER_READER_OPTIONS,
     RPC_SERVER_UNAUTHENTICATED_READER_OPTIONS,
 };
+use crate::GameServer;
 use crate::network::PeerAddress;
 use crate::network::transport::{InProcessDuplex, quinn_server_config};
 use crate::prelude::*;
-use crate::{
-    GAME_VERSION_BUILD, GAME_VERSION_MAJOR, GAME_VERSION_MINOR, GAME_VERSION_PATCH, GAME_VERSION_PRERELEASE, GameServer,
-};
 
 new_key_type! {
     /// Slotmap key for identifying unique connections made by clients to the server
@@ -84,8 +83,8 @@ pub enum NetworkThreadServerCommand {
 #[derive(Clone)]
 /// Information about a player obtained during the authentication process.
 pub struct AuthenticatedInfo {
-    /// The username that was logged in.
-    pub username: KString,
+    /// The character that was logged in.
+    pub player_character: Arc<PlayerCharacter>,
     /// The original network address the player connected from.
     pub address: PeerAddress,
 }
@@ -133,6 +132,16 @@ impl ConnectedPlayersTable {
     pub fn players_by_address(&self) -> &BTreeMap<PeerAddress, Entity> {
         &self.players_by_address
     }
+
+    /// Returns the number of currently connected players.
+    pub fn len(&self) -> usize {
+        self.players_by_address.len()
+    }
+
+    /// Returns true if there are no players connected.
+    pub fn is_empty(&self) -> bool {
+        self.players_by_address.is_empty()
+    }
 }
 
 impl Component for ConnectedPlayer {
@@ -147,17 +156,22 @@ impl Component for ConnectedPlayer {
             let mut table = world.resource_mut::<ConnectedPlayersTable>();
             let old = table.players_by_address.insert(addr, entity);
             if let Some(old) = old {
-                let new_nick = &world
+                let new_char = &world
                     .get::<ConnectedPlayer>(entity)
                     .unwrap()
-                    .authenticated_info
-                    .username;
-                let old_nick = world
+                    .authenticated_info.player_character;
+                let old_char = world
                     .get::<ConnectedPlayer>(old)
-                    .map_or("<missing nickname>", |p| &p.authenticated_info.username as &str);
-                panic!(
-                    "Attempting to insert a player `{new_nick}` with a duplicate peer address: {addr} of `{old_nick}`"
-                );
+                    .map(|p| &p.authenticated_info.player_character);
+                if let Some(old_char) = old_char {
+                    panic!(
+                        "Attempting to insert a player `{new_char}` with a duplicate peer address: {addr} of `{old_char}`"
+                    );
+                } else {
+                    panic!(
+                        "Attempting to insert a player `{new_char}` with a duplicate peer address: {addr}"
+                    );
+                }
             }
         });
         hooks.on_remove(|mut world: DeferredWorld, context| {
@@ -298,28 +312,18 @@ impl NetworkThreadServerState {
                     let reader = packet.parse_simple(RPC_SERVER_UNAUTHENTICATED_READER_OPTIONS)?;
                     let terminate_on_reply = reader.get()?.get_simple_payload() == 1;
 
-                    let mut response = new_packet_builder::<game_server_metadata::Owned>();
-                    let mut root = response.init_root();
-                    root.set_id(rpc::PacketId::GetServerMetadata);
-                    root.set_timestamp_ms(0);
-                    let mut meta = root.init_payload();
-                    let config = engine.config().borrow();
-                    let mut ver = meta.reborrow().init_server_version();
-                    ver.set_major(GAME_VERSION_MAJOR);
-                    ver.set_minor(GAME_VERSION_MINOR);
-                    ver.set_patch(GAME_VERSION_PATCH);
-                    ver.set_build(GAME_VERSION_BUILD);
-                    ver.set_prerelease(GAME_VERSION_PRERELEASE);
-
-                    meta.set_title(&config.server.server_title);
-                    meta.set_subtitle(&config.server.server_subtitle);
-                    meta.set_player_count(0);
-                    meta.set_player_limit(config.server.max_players as i32);
-                    let _ = c2s_stream.send_packet(response.into());
+                    let packet: PacketWrapper = engine
+                        .server_metadata
+                        .lock()
+                        .expect("Poisoned server metadata lock")
+                        .clone()
+                        .into();
+                    let _ = c2s_stream.send_packet(packet);
 
                     if terminate_on_reply {
-                        c2s_stream.close();
-                        connection.close();
+                        let mut signal = c2s_stream.close();
+                        let _ = signal.wait_for(|v| *v).await;
+                        connection.close().await;
                         return Ok(());
                     }
                 }
@@ -335,25 +339,74 @@ impl NetworkThreadServerState {
                     root.set_timestamp_ms(engine.network_thread.packet_timestamp());
                     let result = root.init_payload();
 
-                    let username = payload.get_username()?.to_str()?;
+                    let player_url = payload.get_player_url()?.to_str()?;
+                    let player_display_name = payload.get_player_display_name()?.to_str()?;
+                    let character_id = Uuid::read_from_message(&payload.get_character_id()?)?;
+                    let character_display_name = payload.get_character_display_name()?.to_str()?;
 
-                    if username.is_empty() || !username.is_ascii() {
-                        let mut err = result.init_err();
-                        err.set_kind(authentication_error::Kind::InvalidUsername);
-                        err.set_message("Username must be non-empty and ASCII only");
-                        let _ = c2s_stream.send_packet(response.into());
-                        c2s_stream.close();
-                        connection.close();
-                        return Ok(());
-                    }
+                    let player = PlayerAccount::try_parse(player_url, player_display_name);
+                    let character = match player.and_then(|player| {
+                        PlayerCharacter::try_parse(Arc::new(player), character_id, character_display_name)
+                    }) {
+                        Ok(player) => player,
+                        Err(e) => {
+                            let mut err = result.init_err();
+                            err.set_kind(authentication_error::Kind::InvalidProfile);
+                            err.set_message(e.to_string());
+                            let _ = c2s_stream.send_packet(response.into());
+                            let mut signal = c2s_stream.close();
+                            let _ = signal.wait_for(|v| *v).await;
+                            connection.close().await;
+                            return Ok(());
+                        }
+                    };
+                    let character = Arc::new(character);
 
                     // TODO: verify identity
 
                     let address = connection.address();
                     let auth_info = AuthenticatedInfo {
-                        username: KString::from_ref(username),
+                        player_character: Arc::clone(&character),
                         address,
                     };
+
+                    let inner_engine = Arc::clone(&engine);
+                    let engine_allows =
+                        engine.schedule_bevy(move |world| -> Result<Option<authentication_error::Kind>> {
+                            let connected_players = world
+                                .get_resource::<ConnectedPlayersTable>()
+                                .context("Getting table of connected players")?;
+                            let currently_connected_players = connected_players.players_by_address.len();
+                            // TODO: harden against a flood of joins
+                            if currently_connected_players >= inner_engine.config().borrow().server.max_players as usize
+                            {
+                                return Ok(Some(authentication_error::Kind::ServerFull));
+                            }
+                            Ok(None)
+                        });
+                    match engine_allows.async_wait().await {
+                        Ok(None) => {}
+                        Ok(Some(e)) => {
+                            let mut err = result.init_err();
+                            err.set_kind(e);
+                            err.set_message("Server rejected player join request");
+                            let _ = c2s_stream.send_packet(response.into());
+                            let mut signal = c2s_stream.close();
+                            let _ = signal.wait_for(|v| *v).await;
+                            connection.close().await;
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            let mut err = result.init_err();
+                            err.set_kind(authentication_error::Kind::UnspecifiedError);
+                            err.set_message("Internal Server Error");
+                            let _ = c2s_stream.send_packet(response.into());
+                            let mut signal = c2s_stream.close();
+                            let _ = signal.wait_for(|v| *v).await;
+                            connection.close().await;
+                            return Err(e.context("Could not obtain engine consent for player join"));
+                        }
+                    }
 
                     let _ = result.init_ok();
                     let _ = c2s_stream.send_packet(response.into());
@@ -361,7 +414,7 @@ impl NetworkThreadServerState {
 
                     spawn_local(
                         Self::authenticated_connection(engine, connection, auth_info, c2s_stream, s2c_stream)
-                            .instrument(info_span!("connection", address = %address, username = %username)),
+                            .instrument(info_span!("connection", address = %address, character = %character)),
                     );
                     return Ok(());
                 }
@@ -617,6 +670,7 @@ impl NetworkThreadServerState {
                 local: server_addr,
                 remote: conn_addr,
             };
+            let inner_endpoint = endpoint.clone();
             spawn_local(async move {
                 let conn = match conn.await {
                     Ok(conn) => conn,
@@ -626,7 +680,7 @@ impl NetworkThreadServerState {
                     }
                 };
                 info!(address = %conn_addr, "Accepting remote connection");
-                let netconn = NetworkConnection::wrap_remote(GameSide::Server, peer_addr, conn);
+                let netconn = NetworkConnection::wrap_remote(GameSide::Server, peer_addr, inner_endpoint, conn);
                 Self::accept_connection(local_engine, netconn).await;
             });
         }

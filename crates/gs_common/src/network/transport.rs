@@ -1,5 +1,7 @@
 //! Network transport implementations - local message passing for singleplayer&unit tests and QUIC for multiplayer
 
+use std::time::Duration;
+
 use capnp::Word;
 use capnp::message::{HeapAllocator, ReaderOptions, ReaderSegments, TypedReader};
 use capnp::serialize::BufferSegments;
@@ -9,7 +11,7 @@ use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::schemas::network_capnp::{PacketId, network_packet};
 use gs_schemas::schemas::{AlignedBytesMut, CapnpBuilder, read_leb128, read_packet_id, write_leb128};
 use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
-use quinn::{Connection, RecvStream, SendStream, VarInt};
+use quinn::{Connection, Endpoint, RecvStream, SendStream, VarInt};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 use rustls::version::TLS13;
@@ -165,15 +167,26 @@ impl PacketWrapper {
         }
     }
 
+    /// Serializes the message if needed and returns the [`Bytes`] object corresponding to the message.
+    /// The returned [`Bytes`] can be converted back to a [`PacketWrapper`] at zero cost.
+    pub fn as_bytes(&self) -> Bytes {
+        match self {
+            Self::Serialized(bytes) => bytes.clone(),
+            Self::Capnp(builder) => {
+                let bytes = capnp::serialize::write_message_to_words(builder);
+                Bytes::from_owner(bytes)
+            }
+        }
+    }
+
     /// Clones the packet for broadcast transmission, converts from capnp to serialized form if needed (including `self` for efficient further clones).
     /// Might incur serialization cost once, after which further clones of either copy are cheap refcounted pointer copies.
     #[must_use]
     pub fn clone_mut(&mut self) -> Self {
         match self {
             Self::Serialized(bytes) => Self::Serialized(bytes.clone()),
-            Self::Capnp(builder) => {
-                let bytes = capnp::serialize::write_message_to_words(builder);
-                let bytes = Bytes::from_owner(bytes);
+            Self::Capnp(_) => {
+                let bytes = self.as_bytes();
                 *self = Self::Serialized(bytes.clone());
                 Self::Serialized(bytes)
             }
@@ -256,13 +269,21 @@ impl<O: Owned> From<capnp::message::TypedBuilder<O, HeapAllocator>> for PacketWr
     }
 }
 
+enum PacketStreamSendCmd {
+    Packet(PacketWrapper),
+    GracefulStop { done: AsyncOneshotSender<()> },
+}
+
 /// An independent asynchronous packet stream.
 pub struct PacketStream {
+    #[allow(dead_code)] // field available for debugger inspection
+    is_quic: bool,
     initiating_side: GameSide,
     close_request: AsyncWatchSender<bool>,
     closed: AsyncWatchReceiver<bool>,
-    tx: AsyncUnboundedSender<PacketWrapper>,
-    rx: AsyncMutex<AsyncUnboundedReceiver<PacketWrapper>>,
+    fully_closed: AsyncWatchReceiver<bool>,
+    tx: AsyncUnboundedSender<PacketStreamSendCmd>,
+    rx: AsyncMutex<AsyncUnboundedReceiver<PacketStreamSendCmd>>,
 }
 
 #[derive(Clone, Debug, Error)]
@@ -280,16 +301,20 @@ impl PacketStream {
         let (a_tx, a_rx) = async_unbounded_channel();
         let (b_tx, b_rx) = async_unbounded_channel();
         let stream_a = Self {
+            is_quic: false,
             initiating_side,
             close_request: close_channel_tx.clone(),
             closed: close_channel_rx.clone(),
+            fully_closed: close_channel_rx.clone(),
             tx: a_tx,
             rx: AsyncMutex::new(b_rx),
         };
         let stream_b = Self {
+            is_quic: false,
             initiating_side,
             close_request: close_channel_tx,
-            closed: close_channel_rx,
+            closed: close_channel_rx.clone(),
+            fully_closed: close_channel_rx,
             tx: b_tx,
             rx: AsyncMutex::new(a_rx),
         };
@@ -322,23 +347,33 @@ impl PacketStream {
 
     /// Reads a single packet from the stream.
     pub async fn recv_packet(&self) -> Result<PacketWrapper, PacketSendRecvError> {
-        if *self.closed.borrow() {
+        let mut rx = self.rx.lock().await;
+        let no_queued_packets = rx.is_empty();
+        if no_queued_packets && *self.closed.borrow() {
             return Err(PacketSendRecvError::StreamClosed);
         }
         let mut closed = self.closed.clone();
-        let mut rx = self.rx.lock().await;
         tokio::select! {
-            _ = closed.wait_for(|&v| v) => {
-                Err(PacketSendRecvError::StreamClosed)
-            }
+            biased;
             packet = rx.recv() => {
                 match packet {
-                    Some(packet) => Ok(packet),
+                    Some(PacketStreamSendCmd::Packet(packet)) => Ok(packet),
+                    Some(PacketStreamSendCmd::GracefulStop {done }) => {
+                eprintln!("graceful stop");
+                        self.close_request.send_replace(true);
+                        let _ = done.send(());
+                        Err(PacketSendRecvError::StreamClosed)
+                    }
                     None => {
+                        eprintln!("closed None");
                         self.close_request.send_replace(true);
                         Err(PacketSendRecvError::StreamClosed)
                     }
                 }
+            }
+            _ = closed.wait_for(|&v| v), if no_queued_packets => {
+                eprintln!("closed signal");
+                Err(PacketSendRecvError::StreamClosed)
             }
         }
     }
@@ -349,7 +384,12 @@ impl PacketStream {
             return Err(PacketSendRecvError::StreamClosed);
         }
         match self.rx.get_mut().try_recv() {
-            Ok(packet) => Ok(Some(packet)),
+            Ok(PacketStreamSendCmd::Packet(packet)) => Ok(Some(packet)),
+            Ok(PacketStreamSendCmd::GracefulStop { done }) => {
+                self.close_request.send_replace(true);
+                let _ = done.send(());
+                Err(PacketSendRecvError::StreamClosed)
+            }
             Err(tokio::sync::mpsc::error::TryRecvError::Empty) => Ok(None),
             Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
                 self.close_request.send_replace(true);
@@ -363,7 +403,7 @@ impl PacketStream {
         if *self.closed.borrow() {
             return Err(PacketSendRecvError::StreamClosed);
         }
-        if self.tx.send(packet).is_err() {
+        if self.tx.send(PacketStreamSendCmd::Packet(packet)).is_err() {
             self.close_request.send_replace(true);
             return Err(PacketSendRecvError::StreamClosed);
         }
@@ -376,15 +416,18 @@ impl PacketStream {
     }
 
     /// Requests this stream to be gracefully closed, also happens automatically when dropped.
-    pub fn close(&self) {
+    /// Returns a watch channel that will report `true` when the stream has been fully closed.
+    pub fn close(&self) -> AsyncWatchReceiver<bool> {
         self.close_request.send_replace(true);
+        self.fully_closed.clone()
     }
 
     #[allow(clippy::redundant_closure_call)] // needed for return type annotations
     async fn handle_quic(mut raw_tx: SendStream, mut raw_rx: RecvStream, initiating_side: GameSide) -> Result<Self> {
         let (close_channel_tx, mut close_channel_rx) = async_watch_channel(false);
+        let (full_close_channel_tx, full_close_channel_rx) = async_watch_channel(false);
         let close_channel_rx2 = close_channel_rx.clone();
-        let (tx_incoming, rx_incoming) = async_unbounded_channel::<PacketWrapper>();
+        let (tx_incoming, rx_incoming) = async_unbounded_channel::<PacketStreamSendCmd>();
         let close_from_incoming = close_channel_tx.clone();
         let incoming_handler = spawn_local(async move {
             let _ = async move || -> Result<()> {
@@ -393,21 +436,30 @@ impl PacketStream {
                     let mut buf = AlignedBytesMut::new(len);
                     raw_rx.read_exact(&mut buf).await?;
                     assert_eq!(len, buf.len());
-                    tx_incoming.send(PacketWrapper::from(buf))?;
+                    tx_incoming.send(PacketStreamSendCmd::Packet(PacketWrapper::from(buf)))?;
                 }
             }()
             .await;
             let _ = close_from_incoming.send(true);
         });
-        let (tx_outgoing, mut rx_outgoing) = async_unbounded_channel::<PacketWrapper>();
+        let (tx_outgoing, mut rx_outgoing) = async_unbounded_channel::<PacketStreamSendCmd>();
         let close_from_outgoing = close_channel_tx.clone();
 
         let outgoing_handler = spawn_local(async move {
             let _ = async move || -> Result<()> {
-                while let Some(mut packet) = rx_outgoing.recv().await {
-                    let len_bytes = write_leb128(packet.len() as u64);
-                    raw_tx.write_all(&len_bytes).await?;
-                    packet.write_all_quic_bytes(&mut raw_tx).await?;
+                while let Some(cmd) = rx_outgoing.recv().await {
+                    match cmd {
+                        PacketStreamSendCmd::Packet(mut packet) => {
+                            let len_bytes = write_leb128(packet.len() as u64);
+                            raw_tx.write_all(&len_bytes).await?;
+                            packet.write_all_quic_bytes(&mut raw_tx).await?;
+                        }
+                        PacketStreamSendCmd::GracefulStop { done } => {
+                            let _ = raw_tx.finish();
+                            let _ = raw_tx.stopped().await;
+                            let _ = done.send(());
+                        }
+                    }
                 }
                 Ok(())
             }()
@@ -415,17 +467,30 @@ impl PacketStream {
             let _ = close_from_outgoing.send(true);
         });
         // cancellation handler
+        let cancel_tx_outgoing = tx_outgoing.clone();
         spawn_local(async move {
             let _ = close_channel_rx.wait_for(|&v| v).await;
+
+            let (done_tx, done_rx) = async_oneshot_channel::<()>();
+            if cancel_tx_outgoing
+                .send(PacketStreamSendCmd::GracefulStop { done: done_tx })
+                .is_ok()
+            {
+                let _ = tokio::time::timeout(Duration::from_secs(5), done_rx).await;
+            }
+
             incoming_handler.abort();
             outgoing_handler.abort();
             let _ = tokio::join!(incoming_handler, outgoing_handler);
+            full_close_channel_tx.send_replace(true);
         });
 
         Ok(Self {
+            is_quic: true,
             initiating_side,
             close_request: close_channel_tx,
             closed: close_channel_rx2,
+            fully_closed: full_close_channel_rx,
             tx: tx_outgoing,
             rx: AsyncMutex::new(rx_incoming),
         })
@@ -467,7 +532,7 @@ impl InProcessDuplex {
 
 enum NetworkConnectionSide {
     Local { duplex: InProcessDuplex },
-    Remote { connection: Connection },
+    Remote { endpoint: Endpoint, connection: Connection },
 }
 
 /// Abstraction over local and remote Connections
@@ -488,11 +553,11 @@ impl NetworkConnection {
     }
 
     /// Constructs a [`NetworkConnection`] object by wrapping a socket connection.
-    pub fn wrap_remote(game_side: GameSide, address: PeerAddress, connection: Connection) -> Self {
+    pub fn wrap_remote(game_side: GameSide, address: PeerAddress, endpoint: Endpoint, connection: Connection) -> Self {
         Self {
             game_side,
             address,
-            side: NetworkConnectionSide::Remote { connection },
+            side: NetworkConnectionSide::Remote { endpoint, connection },
         }
     }
 
@@ -518,11 +583,14 @@ impl NetworkConnection {
     }
 
     /// Closes the connection.
-    pub fn close(&self) {
+    pub async fn close(&self) {
         match &self.side {
             NetworkConnectionSide::Local { duplex: _ } => {}
-            NetworkConnectionSide::Remote { connection } => {
+            NetworkConnectionSide::Remote { endpoint, connection } => {
                 connection.close(VarInt::default(), &[]);
+                if self.game_side == GameSide::Client {
+                    endpoint.wait_idle().await;
+                }
             }
         }
     }
@@ -531,7 +599,7 @@ impl NetworkConnection {
     pub async fn open_stream(&self) -> Result<PacketStream> {
         match &self.side {
             NetworkConnectionSide::Local { duplex } => PacketStream::open_internal(duplex, self.game_side).await,
-            NetworkConnectionSide::Remote { connection } => {
+            NetworkConnectionSide::Remote { connection, .. } => {
                 PacketStream::open_quic(connection.clone(), self.game_side).await
             }
         }
@@ -541,7 +609,7 @@ impl NetworkConnection {
     pub async fn accept_stream(&self) -> Result<PacketStream> {
         match &self.side {
             NetworkConnectionSide::Local { duplex } => PacketStream::accept_internal(duplex).await,
-            NetworkConnectionSide::Remote { connection } => {
+            NetworkConnectionSide::Remote { connection, .. } => {
                 PacketStream::accept_quic(connection.clone(), self.game_side.opposite()).await
             }
         }

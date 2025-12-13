@@ -12,6 +12,7 @@ pub mod coordinates;
 pub mod direction;
 pub mod math;
 pub mod mutwatcher;
+pub mod player;
 pub mod range;
 pub mod raycast;
 pub mod registries;

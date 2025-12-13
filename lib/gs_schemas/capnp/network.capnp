@@ -74,7 +74,11 @@ struct GameServerMetadata @0xe9422344c157116e {
 }
 
 struct AuthenticationRequest @0xc139dbbb639799f2 {
-    username @0 :Text;
+    playerUrl @0 :Text;
+    playerDisplayName @1 :Text;
+    characterId @2 :GameTypes.Uuid;
+    characterDisplayName @3 :Text;
+    token @4 :Text;
 }
 
 struct AuthenticationAcknowledgement @0xb0d8fc5025c40234 {
@@ -83,7 +87,7 @@ struct AuthenticationAcknowledgement @0xb0d8fc5025c40234 {
 struct AuthenticationError @0x9ed4d9765d345c1e {
     enum Kind @0x8a27ac929250061a {
         unspecifiedError @0;
-        invalidUsername @1;
+        invalidProfile @1;
         serverFull @2;
         banned @3;
         alreadyAuthenticated @4;

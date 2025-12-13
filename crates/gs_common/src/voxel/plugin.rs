@@ -312,7 +312,7 @@ fn server_system_open_chunk_stream(
                 Some(Err(e)) => {
                     error_once!(
                         "Player {} ({}) could not get a chunk stream: {}",
-                        player.authenticated_info.username,
+                        player.authenticated_info.player_character,
                         player.authenticated_info.address,
                         e
                     );
