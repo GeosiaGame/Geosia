@@ -3,7 +3,7 @@ members = ["lib/*", "crates/*"]
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.89"
+rust-version = "1.92"
 edition = "2024"
 license = "LGPL-3.0-only"
 authors = ["Geosia team"]
@@ -188,7 +188,7 @@ zorder = "0.2.2"
 zstd = "0.13.3"
 
 # Remote, bevy plugins
-bevy_egui = { version = "0.34.1", default-features = false, features = [
+bevy_egui = { version = "0.38.0", default-features = false, features = [
     "manage_clipboard",
     "open_url",
     "default_fonts",
@@ -202,7 +202,7 @@ quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
 [workspace.dependencies.bevy]
-version = "=0.16.0"
+version = "0.17.3"
 default-features = false
 # Extra features are used in gs_client on top of these common ones
 features = [
@@ -227,7 +227,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_math]
-version = "=0.16.0"
+version = "0.17.3"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -235,7 +235,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_color]
-version = "=0.16.1"
+version = "0.17.3"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -243,7 +243,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_reflect]
-version = "=0.16.0"
+version = "0.17.3"
 features = ["smallvec", "glam", "uuid", "std"]
 
 [profile.dev]
