@@ -341,7 +341,7 @@ fn cur_chunk_gizmo(
                 continue;
             }
             let apos = curcpos.block_pos(pos).block_center().as_vec3();
-            gizmos.cuboid(Transform::from_translation(apos), block.representative_color);
+            gizmos.cube(Transform::from_translation(apos), block.representative_color);
         }
     }
 }
@@ -386,7 +386,7 @@ fn lookat_gizmo(
     };
     let zero_cube = rc.position.as_vec3();
     let mid_cube = rc.position.block_center().as_vec3();
-    gizmos.cuboid(
+    gizmos.cube(
         Transform::from_translation(mid_cube).with_scale(Vec3::splat(1.1)),
         tailwind::AMBER_500,
     );

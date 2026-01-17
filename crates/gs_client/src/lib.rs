@@ -173,7 +173,7 @@ mod debug_window {
                 scale: Vec3::ONE,
             },
         ));
-        commands.insert_resource(AmbientLight {
+        commands.insert_resource(GlobalAmbientLight {
             color: tailwind::GRAY_50.into(),
             brightness: 10.0,
             affects_lightmapped_meshes: true,

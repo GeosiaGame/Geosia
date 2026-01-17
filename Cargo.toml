@@ -117,7 +117,7 @@ chrono = "0.4.41"
 clap = { version = "4.5.39", features = ["derive"] }
 either = "1.15.0"
 futures = "0.3.31"
-glam = { version = "0.30.1", features = [
+glam = { version = "0.30.7", features = [
     "bytemuck",
     "serde",
 ] } # Keep in sync with bevy
@@ -188,7 +188,7 @@ zorder = "0.2.2"
 zstd = "0.13.3"
 
 # Remote, bevy plugins
-bevy_egui = { version = "0.38.0", default-features = false, features = [
+bevy_egui = { version = "0.39.0", default-features = false, features = [
     "manage_clipboard",
     "open_url",
     "default_fonts",
@@ -202,20 +202,13 @@ quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
 [workspace.dependencies.bevy]
-version = "0.17.3"
+version = "0.18.0"
 default-features = false
 # Extra features are used in gs_client on top of these common ones
 features = [
     "std",
-    # Default Bevy functionality:
-    "bevy_asset",            # Assets management
-    "animation",             # Animation support
-    "android_shared_stdcxx", # For Android builds, use shared C++ library
+    "default_app",
     "multi_threaded",
-    "bevy_state",
-    "bevy_log",
-
-    # Extra Bevy functionality:
     "serialize", # Support for `serde` Serialize/Deserialize
 
     # Development/Debug features:
@@ -227,7 +220,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_math]
-version = "0.17.3"
+version = "0.18.0"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -235,7 +228,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_color]
-version = "0.17.3"
+version = "0.18.0"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -243,7 +236,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_reflect]
-version = "0.17.3"
+version = "0.18.0"
 features = ["smallvec", "glam", "uuid", "std"]
 
 [profile.dev]
