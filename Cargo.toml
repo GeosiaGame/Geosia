@@ -207,7 +207,12 @@ default-features = false
 # Extra features are used in gs_client on top of these common ones
 features = [
     "std",
-    "default_app",
+    "async_executor",
+    "bevy_asset",
+    "bevy_color",
+    "bevy_log",
+    "bevy_state",
+    "reflect_auto_register",
     "multi_threaded",
     "serialize", # Support for `serde` Serialize/Deserialize
 

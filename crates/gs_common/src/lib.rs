@@ -323,7 +323,6 @@ impl GameServer {
             .add_plugins(TransformPlugin)
             .add_plugins(DiagnosticsPlugin)
             .add_plugins(AssetPlugin::default())
-            .add_plugins(AnimationPlugin)
             .add_plugins(ScheduleRunnerPlugin::run_loop(TICK));
 
         app.add_plugins(VoxelUniversePlugin::<ServerData>::new())
