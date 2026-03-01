@@ -102,6 +102,10 @@ pub struct BlockRegistryHolder(pub Arc<BlockRegistry>);
 #[derive(Resource, Clone, Deref)]
 pub struct BiomeRegistryHolder(pub Arc<BiomeRegistry>);
 
+/// The bevy [`Resource`] for shared decorator registry access from systems.
+#[derive(Resource, Clone, Deref)]
+pub struct DecoratorRegistryHolder(pub Arc<DecoratorRegistry>);
+
 /// Component for entities anchored in the voxel grid.
 #[derive(Component, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Deref, DerefMut)]
 pub struct VoxelPosition(pub AbsBlockPos);
