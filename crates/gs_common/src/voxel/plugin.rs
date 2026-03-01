@@ -27,7 +27,7 @@ use crate::{InGameSystemSet, ServerData};
 /// The maximum number of stored chunk packets before applying stream backpressure.
 pub const CHUNK_PACKET_QUEUE_LENGTH: usize = 20;
 
-pub(crate) const CHUNK_LOAD_RADIUS: i32 = 16;
+pub(crate) const CHUNK_LOAD_RADIUS: i32 = 6;
 
 /// Initializes the settings related to the voxel universe.
 #[derive(Default)]

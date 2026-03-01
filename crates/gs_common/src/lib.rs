@@ -339,6 +339,14 @@ impl GameServer {
             Arc::clone(&biome_registry),
             Arc::clone(&block_registry),
             Arc::clone(&decorator_registry));
+        /*
+        let generator = FlatGenerator::new(5, [
+            FlatLayer { block_type: BlockEntry::new(block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap().0, 0), thickness: 10 },
+            FlatLayer { block_type: BlockEntry::new(block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap().0, 0), thickness: 3 },
+            FlatLayer { block_type: BlockEntry::new(block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap().0, 0), thickness: 1 },
+            FlatLayer { block_type: BlockEntry::new(block_registry.lookup_name_to_object(EMPTY_BLOCK_NAME.as_ref()).unwrap().0, 0), thickness: 1 },
+        ].into()).unwrap();
+        */
         let gen_world = GeneratorPersistenceLayer::new(Arc::new(generator), default());
         let persistence = SavefilePersistenceLayer::new(engine.savefile.clone(), Arc::new(Mutex::new(gen_world)))?;
 

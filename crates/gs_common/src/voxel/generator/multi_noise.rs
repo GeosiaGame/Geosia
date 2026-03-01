@@ -101,7 +101,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
         let mut points = Vec::new();
         for (x, z) in iproduct!(-2..=2, -2..=2) {
             let mut position: DVec2 = (point.xz() + IVec2::new(x * CHUNK_DIM, z * CHUNK_DIM)).into();
-            position *= BIOME_SIZE;
+            position *= BIOME_SIZE * (GLOBAL_SCALE_MOD / CHUNK_DIMD);
             let noise = CHUNK_DIMD
                 * 0.75
                 * <OpenSimplex as NoiseNDTo2D<NOISE_DIMS>>::get_2d(&self.point_offset_noise, position.to_array());
@@ -315,7 +315,7 @@ impl MultiNoiseGenerator {
         noises: &Noises,
     ) -> i32 {
         let nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)(p, &noises.base_terrain_noise) + 1.0) / 2.0;
-        let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
+        let scale_factor = GLOBAL_SCALE_MOD;
         let global_pos = DVec2::new(
             (in_chunk_pos.x + (chunk_pos.x * CHUNK_DIM)) as f64,
             (in_chunk_pos.y + (chunk_pos.y * CHUNK_DIM)) as f64,
@@ -514,7 +514,7 @@ impl MultiNoiseGenerator {
     }
 
     fn make_noise(noises: &Noises, point: DVec2) -> NoiseValues {
-        let scale_factor = GLOBAL_BIOME_SCALE * GLOBAL_SCALE_MOD;
+        let scale_factor = GLOBAL_SCALE_MOD;
         let point = [point.x / scale_factor, point.y / scale_factor];
         let elevation = <Fbm<OpenSimplex> as NoiseNDTo2D<NOISE_DIMS>>::get_2d(&noises.elevation_noise, point)
             .remap(-1.5, 1.5, 0.0, 5.0)
