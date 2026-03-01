@@ -16,7 +16,7 @@ pub struct GameRegistries {
     /// Biome type definitions.
     pub biome_types: Arc<BiomeRegistry>,
     /// Decorator type definitions.
-    pub decor_types: Arc<DecoratorRegistry>,
+    pub decorator_types: Arc<DecoratorRegistry>,
 }
 
 impl GameRegistries {
@@ -26,7 +26,7 @@ impl GameRegistries {
             .serialize_ids(&mut builder.reborrow().init_block_registry());
         self.biome_types
             .serialize_ids(&mut builder.reborrow().init_biome_registry());
-        self.decor_types
+        self.decorator_types
             .serialize_ids(&mut builder.reborrow().init_decorator_registry());
     }
 
@@ -42,12 +42,12 @@ impl GameRegistries {
             .biome_types
             .clone_with_serialized_ids(&bundle.get_biome_registry()?)?;
         let decorator_types = self
-            .decor_types
+            .decorator_types
             .clone_with_serialized_ids(&bundle.get_decorator_registry()?)?;
         Ok(Self {
             block_types: Arc::new(block_types),
             biome_types: Arc::new(biome_types),
-            decor_types: Arc::new(decorator_types),
+            decorator_types: Arc::new(decorator_types),
         })
     }
 }

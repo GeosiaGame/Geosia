@@ -11,6 +11,7 @@ use gs_schemas::schemas::new_packet_builder;
 use gs_schemas::voxel::biome::BiomeRegistry;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
+use gs_schemas::voxel::generation::decorator::DecoratorRegistry;
 use gs_schemas::voxel::voxeltypes::BlockRegistry;
 use gs_schemas::{GameSide, GsExtraData};
 use smallvec::SmallVec;
@@ -26,7 +27,7 @@ use crate::{InGameSystemSet, ServerData};
 /// The maximum number of stored chunk packets before applying stream backpressure.
 pub const CHUNK_PACKET_QUEUE_LENGTH: usize = 20;
 
-const CHUNK_LOAD_RADIUS: i32 = 6;
+pub(crate) const CHUNK_LOAD_RADIUS: i32 = 16;
 
 /// Initializes the settings related to the voxel universe.
 #[derive(Default)]
@@ -124,6 +125,7 @@ pub struct ChunkLoader {
 pub struct VoxelUniverseBuilder<'world, ExtraData: GsExtraData> {
     _block_registry: Arc<BlockRegistry>,
     _biome_registry: Arc<BiomeRegistry>,
+    _decorator_registry: Arc<DecoratorRegistry>,
     /// The bundle being spawned
     pub bundle: EntityWorldMut<'world>,
     _extra_data: PhantomData<ExtraData>,
@@ -135,6 +137,7 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
         world: &'world mut World,
         block_registry: Arc<BlockRegistry>,
         biome_registry: Arc<BiomeRegistry>,
+        decorator_registry: Arc<DecoratorRegistry>,
     ) -> Result<Self> {
         let mut old_worlds = world.query::<&VoxelUniverseTag>();
         if old_worlds.iter(world).next().is_some() {
@@ -143,11 +146,13 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
 
         world.insert_resource(BlockRegistryHolder(Arc::clone(&block_registry)));
         world.insert_resource(BiomeRegistryHolder(Arc::clone(&biome_registry)));
+        world.insert_resource(DecoratorRegistryHolder(Arc::clone(&decorator_registry)));
         let bundle = world.spawn((VoxelUniverseTag, VoxelUniverse::<ED>::new(default())));
 
         Ok(Self {
             _block_registry: block_registry,
             _biome_registry: biome_registry,
+            _decorator_registry: decorator_registry,
             bundle,
             _extra_data: default(),
         })
