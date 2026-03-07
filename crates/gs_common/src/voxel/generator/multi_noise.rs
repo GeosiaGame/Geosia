@@ -43,7 +43,7 @@ const BIOME_BLEND_RADIUS: f64 = 32.0;
 const THREE_CHUNK_DIMZ: usize = CHUNK_DIMZ * 3;
 /// offset for noise value lists so that they can contain values `-1..1` chunks around the current chunk.
 const NOISE_TABLE_OFFSET: i32 = CHUNK_DIM * 2;
-/// size of list 3x3 chunk area-sized list offset by [NOISE_TABLE_OFFSET] so that no values are negative.
+/// size of list 3x3 chunk area-sized list offset by [`NOISE_TABLE_OFFSET`] so that no values are negative.
 const NOISE_TABLE_SIZE: usize = (CHUNK_DIM2 * 9 + NOISE_TABLE_OFFSET) as usize;
 
 const fn table_index(x: i32, z: i32) -> usize {

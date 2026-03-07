@@ -599,7 +599,7 @@ pub struct RegistryDataSet<Object: RegistryObject> {
 }
 
 impl<Object: RegistryObject> RegistryDataSet<Object> {
-    /// Utility to create a new RegistyDataSet.
+    /// Utility to create a new [`RegistryDataSet`].
     pub fn new(names: HashSet<RegistryName>) -> Self {
         Self {
             names,
@@ -607,7 +607,7 @@ impl<Object: RegistryObject> RegistryDataSet<Object> {
         }
     }
 
-    /// Get the values of this RegistryDataSet, or an error if it isn't loaded yet.
+    /// Get the values of this [`RegistryDataSet`], or an error if it isn't loaded yet.
     pub fn values<'a>(&'a self, registry: &'a Registry<Object>) -> Vec<(RegistryId, &'a Object)> {
         self.names
             .iter()
@@ -619,19 +619,19 @@ impl<Object: RegistryObject> RegistryDataSet<Object> {
             .collect_vec()
     }
 
-    /// Does this RegistryDataSet contain the given key?
+    /// Does this [`RegistryDataSet`] contain the given key?
     /// NOTE: only returns true if the set is filled.
     pub fn contains_key(&self, obj: &RegistryName) -> bool {
         self.names.iter().any(|name| name == obj)
     }
 
-    /// Does this RegistryDataSet contain the given key?
+    /// Does this [`RegistryDataSet`] contain the given key?
     /// NOTE: only returns true if the set is filled.
     pub fn contains_key_ref(&self, obj: RegistryNameRef<'_>) -> bool {
         self.names.iter().any(|name| *name == obj.to_owned())
     }
 
-    /// Does this RegistryDataSet contain the given value?
+    /// Does this [`RegistryDataSet`] contain the given value?
     /// NOTE: only returns true if the set is filled.
     pub fn contains_value(&self, obj: &Object, registry: &Registry<Object>) -> bool {
         self.values(registry).iter().any(|(_, value)| *value == obj)

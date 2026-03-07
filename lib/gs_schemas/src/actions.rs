@@ -4,6 +4,7 @@ use bevy_math::Vec3;
 
 use crate::actions::BlockAction::{BreakBlock, PlaceBlock};
 use crate::coordinates::AbsBlockPos;
+use crate::schemas::CapnpExt;
 use crate::schemas::game_types_capnp::{block_action, position_data};
 
 /// Position data
@@ -20,24 +21,9 @@ pub struct PositionData {
 impl PositionData {
     /// writes this position data to the given builder
     pub fn to_builder(self, builder: &mut position_data::Builder<'_>) {
-        {
-            let mut pos = builder.reborrow().init_position();
-            pos.set_x(self.position.x);
-            pos.set_y(self.position.y);
-            pos.set_z(self.position.z);
-        }
-        {
-            let mut offset = builder.reborrow().init_offset();
-            offset.set_x(self.offset.x);
-            offset.set_y(self.offset.y);
-            offset.set_z(self.offset.z);
-        }
-        {
-            let mut look = builder.reborrow().init_look();
-            look.set_x(self.look.x);
-            look.set_y(self.look.y);
-            look.set_z(self.look.z);
-        }
+        self.position.write_to_message(&mut builder.reborrow().init_position());
+        self.offset.write_to_message(&mut builder.reborrow().init_offset());
+        self.look.write_to_message(&mut builder.reborrow().init_look());
     }
 }
 
