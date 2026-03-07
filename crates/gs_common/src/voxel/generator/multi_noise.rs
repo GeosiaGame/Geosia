@@ -49,9 +49,9 @@ const NOISE_TABLE_SIZE: usize = (CHUNK_DIM2 * 9 + NOISE_TABLE_OFFSET) as usize;
 const fn table_index(x: i32, z: i32) -> usize {
     assert!(x < NOISE_TABLE_OFFSET && x >= -CHUNK_DIM);
     assert!(z < NOISE_TABLE_OFFSET && z >= -CHUNK_DIM);
-    let x = x as usize + CHUNK_DIMZ;
-    let y = z as usize + CHUNK_DIMZ;
-    x + y * THREE_CHUNK_DIMZ
+    let x = (x + CHUNK_DIM) as usize;
+    let z = (z + CHUNK_DIM) as usize;
+    x + z * THREE_CHUNK_DIMZ
 }
 
 /// Standard world generator implementation
@@ -69,7 +69,6 @@ pub struct MultiNoiseGenerator {
 }
 
 impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
-    /// Generate a single chunk's blocks for the world.
     fn generate_chunk(&self, position: AbsChunkPos, extra_data: <ED as GsExtraData>::ChunkData) -> Chunk<ED> {
         let point: IVec3 = <IVec3>::from(position) * CHUNK_DIM3IV;
         let offset_point = DelaunayVertex::new((point.x + CHUNK_DIM / 2) as f64, (point.z + CHUNK_DIM / 2) as f64);
