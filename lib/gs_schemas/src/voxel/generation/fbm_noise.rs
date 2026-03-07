@@ -3,6 +3,7 @@
 use bevy_math::{DVec2, DVec3, DVec4};
 use noise::{NoiseFn, Seedable};
 use serde::{Deserialize, Serialize};
+use smallvec::{SmallVec, ToSmallVec};
 
 /// Noise function that outputs fBm (fractal Brownian motion) noise.
 ///
@@ -27,7 +28,7 @@ pub struct Fbm<T> {
     /// The number of octaves control the _amount of detail_ in the noise
     /// function. Adding more octaves increases the detail, with the drawback
     /// of increasing the calculation time.
-    pub octaves: Vec<f64>,
+    pub octaves: SmallVec<[f64; 6]>,
 
     /// The number of cycles per unit length that the noise function outputs.
     pub frequency: f64,
@@ -84,7 +85,7 @@ where
 
     /// Creates a new instance of FBM noise.
     pub fn new(seed: u32) -> Self {
-        let octaves = Self::DEFAULT_OCTAVES.to_vec();
+        let octaves = Self::DEFAULT_OCTAVES.to_smallvec();
         Self {
             seed,
             frequency: Self::DEFAULT_FREQUENCY,
@@ -98,7 +99,7 @@ where
 
     /// Sets the octave list and returns a new fBm noise generator.
     #[must_use]
-    pub fn set_octaves(&self, octaves: Vec<f64>) -> Self {
+    pub fn set_octaves(&self, octaves: SmallVec<[f64; 6]>) -> Self {
         Self {
             sources: super::build_sources(self.seed, &octaves),
             scale_factor: calc_scale_factor(&octaves),
