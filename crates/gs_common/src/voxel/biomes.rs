@@ -2,18 +2,19 @@
 //! Most of this will be moved to a "base" mod at some point in the future.
 
 use bevy::color::Srgba;
-use gs_schemas::voxel::generation::fbm_noise::Fbm;
 use gs_schemas::{
     range::range,
     registry::RegistryName,
     voxel::{
         biome::{BiomeDefinition, BiomeRegistry},
-        generation::{Context, NoiseNDTo2D},
+        generation::Context,
         voxeltypes::{BlockEntry, BlockRegistry},
     },
 };
 use noise::OpenSimplex;
 use gs_schemas::voxel::biome::VOID_BIOME;
+use gs_schemas::voxel::generation::noises::*;
+
 use super::blocks::{
     DIRT_BLOCK_NAME, GRASS_BLOCK_NAME, SAND_BLOCK_NAME, SNOWY_GRASS_BLOCK_NAME, STONE_BLOCK_NAME, WATER_BLOCK_NAME,
 };

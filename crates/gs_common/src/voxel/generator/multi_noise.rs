@@ -29,8 +29,8 @@ use noisy_float::prelude::*;
 use gs_schemas::coordinates::*;
 use gs_schemas::voxel::chunk_storage::{ChunkStorage, PaletteStorage};
 use gs_schemas::voxel::generation::decorator::DecoratorRegistry;
-use gs_schemas::voxel::generation::{Context, NoiseNDTo2D, fbm_noise::Fbm, VoxelGenerator};
-
+use gs_schemas::voxel::generation::{Context, VoxelGenerator};
+use gs_schemas::voxel::generation::noises::*;
 use crate::voxel::biomes::*;
 
 /// Biome size in chunks
@@ -265,15 +265,15 @@ impl MultiNoiseGenerator {
 
             noises: Noises {
                 base_terrain_noise: Fbm::<OpenSimplex>::new(seed_int)
-                    .set_octaves(smallvec![-4.0, 1.0, 1.0, 0.0]),
+                    .set_octaves(&[-4.0, 1.0, 1.0, 0.0]),
                 elevation_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(1347))
-                    .set_octaves(smallvec![1.0, 2.0, 2.0, 1.0]),
+                    .set_octaves(&[1.0, 2.0, 2.0, 1.0]),
                 temperature_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(2349))
-                    .set_octaves(smallvec![1.0, 2.0, 2.0, 1.0]),
+                    .set_octaves(&[1.0, 2.0, 2.0, 1.0]),
                 moisture_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_shl(3243))
-                    .set_octaves(smallvec![1.0, 2.0, 2.0, 1.0]),
+                    .set_octaves(&[1.0, 2.0, 2.0, 1.0]),
                 weird_noise: Fbm::<Value>::new(seed_int.wrapping_shr(9357))
-                    .set_octaves(smallvec![4.0, 2.0, 0.0, 4.0, -25.0]),
+                    .set_octaves(&[4.0, 2.0, 0.0, 4.0, -25.0]),
             },
             point_offset_noise: OpenSimplex::new(seed_int.wrapping_mul(5463)),
         }

@@ -12,7 +12,7 @@ use super::{
     generation::Context,
     voxeltypes::{BlockEntry, BlockRegistry},
 };
-use crate::voxel::generation::fbm_noise::Fbm;
+use crate::voxel::generation::noises::Fbm;
 use crate::registry::{Registry, RegistryId, RegistryName, RegistryObject};
 use crate::range::Range;
 

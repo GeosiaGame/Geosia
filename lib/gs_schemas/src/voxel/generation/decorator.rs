@@ -10,7 +10,7 @@ use crate::coordinates::{AbsBlockPos, AbsChunkPos, RelBlockPos};
 use crate::registry::{Registry, RegistryDataSet, RegistryName, RegistryObject};
 use crate::voxel::biome::BiomeDefinition;
 use crate::voxel::chunk_storage::PaletteStorage;
-use crate::voxel::generation::fbm_noise::Fbm;
+use crate::voxel::generation::noises::Fbm;
 use crate::voxel::voxeltypes::{BlockEntry, BlockRegistry};
 
 /// A placer function.
