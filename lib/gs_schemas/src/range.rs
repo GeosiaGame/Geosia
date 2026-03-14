@@ -18,7 +18,7 @@ pub enum Range<Idx> {
     RightInclusive(Idx),
     /// ..
     Full,
-    /// -
+    /// \-
     None,
 }
 

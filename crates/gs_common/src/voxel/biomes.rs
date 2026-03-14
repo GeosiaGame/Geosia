@@ -44,7 +44,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: PLAINS_BIOME_NAME,
             representative_color: Srgba::rgba_u8(20, 180, 10, 255),
-            elevation: range(0.5..1.5),
+            elevation: range(-0.3..0.1),
             temperature: range(..),
             moisture: range(..),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
@@ -87,7 +87,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: HILLS_BIOME_NAME,
             representative_color: Srgba::rgba_u8(15, 110, 10, 255),
-            elevation: range(1.5..3.0),
+            elevation: range(0.1..0.7),
             temperature: range(..),
             moisture: range(..),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
@@ -132,7 +132,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: MOUNTAINS_BIOME_NAME,
             representative_color: Srgba::rgba_u8(220, 220, 220, 255),
-            elevation: range(3.0..),
+            elevation: range(0.7..),
             temperature: range(..),
             moisture: range(..),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
@@ -167,7 +167,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
 
                 (h01 + (h01 / 0.75) * 0.15 * h_n((new_point * 5.0).to_array())
                     + (h01 / 0.75) * 0.05 * h_rn((new_point * 9.0).to_array()))
-                .abs()
+                    .abs()
                     * 100.0
                     + 40.0
             },
@@ -181,9 +181,9 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: OCEAN_BIOME_NAME,
             representative_color: Srgba::rgba_u8(10, 120, 180, 255),
-            elevation: range(..1.0),
+            elevation: range(..-0.1),
             temperature: range(..),
-            moisture: range(2.5..),
+            moisture: range(0.5..),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
                 let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
                 let (i_water, _) = block_registry.lookup_name_to_object(WATER_BLOCK_NAME.as_ref()).unwrap();
@@ -210,9 +210,9 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: BEACH_BIOME_NAME,
             representative_color: Srgba::rgba_u8(224, 200, 130, 255),
-            elevation: range(1.0..),
+            elevation: range(-0.1..),
             temperature: range(..),
-            moisture: range(2.5..),
+            moisture: range(0.5..),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
                 let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
                 let (i_sand, _) = block_registry.lookup_name_to_object(SAND_BLOCK_NAME.as_ref()).unwrap();
@@ -267,9 +267,9 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
         .push_object(BiomeDefinition {
             name: LAKE_BIOME_NAME,
             representative_color: Srgba::rgba_u8(100, 170, 220, 255),
-            elevation: range(1.0..2.0),
+            elevation: range(-0.1..0.3),
             temperature: range(..),
-            moisture: range(2.5..),
+            moisture: range(0.5..),
             rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
                 let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
                 let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();

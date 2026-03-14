@@ -299,7 +299,7 @@ impl MultiNoiseGenerator {
             if !biomes.iter().any(|b| decorator.biomes.contains_value(b.lookup(biome_registry).unwrap(), biome_registry)) {
                 continue;
             }
-            let g_pos = in_chunk_pos + chunk_pos.block_pos(InChunkPos::ZERO);
+            let g_pos = in_chunk_pos + AbsBlockPos::from(chunk_pos);
             if (decorator.placement_check)(decorator, weird_noise, g_pos, height, elevation, temperature, moisture) {
                 (decorator.placer)(decorator, chunk, weird_noise, in_chunk_pos, chunk_pos, block_registry);
             }

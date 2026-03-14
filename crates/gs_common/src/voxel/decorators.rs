@@ -27,7 +27,7 @@ pub fn setup_basic_decorators(registry: &mut DecoratorRegistry) {
             biomes: RegistryDataSet::new([PLAINS_BIOME_NAME].into_iter().collect()),
             salt: 124567,
             placement_check: |_def, weird_noise, pos, height, elevation, _temperature, moisture| {
-                let noise_valid = weird_noise.get([pos.x as f64 / 128.0 * 468.426, pos.z as f64 / 128.0 * 231.715]) > 8.0;
+                let noise_valid = weird_noise.get([pos.x as f64 / 128.0 * 468.426, pos.z as f64 / 128.0 * 231.715]) > 1.1;
                 noise_valid && pos.y == height && elevation <= 4.0 && moisture > 1.0
             },
             placer: |_def, chunk, weird_noise, in_chunk_pos, chunk_pos, block_registry| {
@@ -37,7 +37,7 @@ pub fn setup_basic_decorators(registry: &mut DecoratorRegistry) {
 
                 let g_pos = in_chunk_pos + chunk_pos.block_pos(InChunkPos::ZERO);
                 let tree_height = weird_noise.get([g_pos.x as f64 / 128.0 * 835.771, g_pos.z as f64 / 128.0 * 176.714]);
-                let tree_height = tree_height.remap(-4.0, 4.0, 7.0, 10.0).round() as i32;
+                let tree_height = tree_height.remap(-1.0, 1.0, 7.0, 10.0).round() as i32;
 
                 for y in 0..tree_height {
                     let new_pos = in_chunk_pos + RelBlockPos::new(0, y, 0);
