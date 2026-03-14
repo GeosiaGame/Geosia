@@ -11,10 +11,10 @@ pub mod sparse;
 
 /// Marker trait for all the requirements for a type to be stored as per-block chunk data.
 /// Do not derive yourself, the blanked implementation should cover all types that are valid.
-pub trait ChunkDataType: Clone + PartialEq + Hash + Debug {}
+pub trait ChunkDataType: Clone + PartialEq + Debug {}
 
 /// Blanket implementation for all valid chunk data types.
-impl<T> ChunkDataType for T where T: Clone + PartialEq + Hash + Debug {}
+impl<T> ChunkDataType for T where T: Clone + PartialEq + Debug {}
 
 /// A container for chunk's data, abstracted from the actual in-memory representation for flexibility.
 ///

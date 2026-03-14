@@ -23,39 +23,29 @@ pub const GLOBAL_SCALE_MOD: f64 = 64.0;
 pub const EXPECTED_BIOME_COUNT: usize = 4;
 
 /// A biome entry stored in the per-planet biome map.
-#[derive(Clone, Copy, Debug, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Serialize, Deserialize)]
 #[repr(C)]
 pub struct BiomeEntry {
     /// The biome ID in registry.
     pub id: RegistryId,
     /// Weight map
-    pub weight: R64,
+    pub weight: f64,
 }
 
 impl BiomeEntry {
     /// Helper to construct a new biome entry.
     pub const fn new(id: RegistryId) -> Self {
-        Self::new_with_weight(id, R64::unchecked_new(0.0))
+        Self::new_with_weight(id, 0.0)
     }
 
     /// Helper to construct a new biome entry.
-    pub const fn new_with_weight(id: RegistryId, weight: R64) -> Self {
+    pub const fn new_with_weight(id: RegistryId, weight: f64) -> Self {
         Self { id, weight }
     }
 
     /// Helper to look up the biome definition corresponding to this ID
     pub fn lookup<'r>(&self, registry: &'r BiomeRegistry) -> Option<&'r BiomeDefinition> {
         registry.lookup_id_to_object(self.id)
-    }
-
-    /// Packs the block entry into a single u64 for serialization.
-    pub fn as_packed(self) -> (u32, f64) {
-        (self.id.0.get(), self.weight.raw())
-    }
-
-    /// Unpacks a block entry from a serialized u64. Returns None when the ID is an invalid zero.
-    pub fn from_packed(id: u32, weight: f64) -> Option<Self> {
-        Some(Self::new_with_weight(RegistryId::try_from(id).ok()?, R64::try_from(weight).ok()?))
     }
 }
 

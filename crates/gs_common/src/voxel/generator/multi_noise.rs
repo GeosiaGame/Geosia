@@ -24,7 +24,6 @@ use smallvec::*;
 use spade::handles::FixedVertexHandle;
 use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 use tracing::warn;
-use noisy_float::prelude::*;
 
 use gs_schemas::coordinates::*;
 use gs_schemas::voxel::chunk_storage::{ChunkStorage, PaletteStorage};
@@ -183,14 +182,14 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
             let g_pos = <IVec3>::from(b_pos) + (<IVec3>::from(position) * CHUNK_DIM);
             let (blended_biomes, _, height) = &vparams[index];
 
-            let mut biomes: SmallVec<[(&BiomeDefinition, R64); EXPECTED_BIOME_COUNT]> = SmallVec::new();
+            let mut biomes: SmallVec<[(&BiomeDefinition, f64); EXPECTED_BIOME_COUNT]> = SmallVec::new();
             for b in blended_biomes {
                 let e = b.lookup(&self.biome_registry).unwrap();
-                let w = b.weight * r64(e.block_influence);
+                let w = b.weight * e.block_influence;
                 biomes.push((e, w));
             }
             // sort by block influence, then registry id if influence is same
-            biomes.sort_by(|a, b| a.1.cmp(&b.1));
+            biomes.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
 
             for (biome, _) in biomes {
                 let ctx = Context {
@@ -321,16 +320,16 @@ impl MultiNoiseGenerator {
             (in_chunk_pos.y + (chunk_pos.y * CHUNK_DIM)) as f64,
         );
 
-        let mut heights = r64(0.0);
-        let mut weights = r64(0.0);
+        let mut heights = 0.0;
+        let mut weights = 0.0;
         for entry in blend {
             let biome = entry.lookup(biome_registry).unwrap();
-            let noise = r64(nf(global_pos / scale_factor, biome));
+            let noise = nf(global_pos / scale_factor, biome);
             let strength = entry.weight * biome.blend_influence;
             heights += noise * strength;
             weights += strength;
         }
-        (heights / weights).raw() as i32
+        (heights / weights) as i32
     }
 
     fn add_to_list_if_not_present(v: &mut Vec<usize>, x: Option<usize>) {
@@ -614,7 +613,7 @@ impl MultiNoiseGenerator {
         let mut nearby = Vec::new();
         for center in sorted {
             if center.point.distance(point) <= 4.0 * BIOME_BLEND_RADIUS + closest_distance {
-                nearby.push(Rc::new(RefCell::new((center, r64(1.0)))));
+                nearby.push(Rc::new(RefCell::new((center, 1.0))));
             }
         }
 
@@ -641,9 +640,9 @@ impl MultiNoiseGenerator {
             let node = node.borrow();
             let &(ref center, weight) = node.deref();
 
-            point_elevation += center.noise.elevation * weight.raw();
-            point_temperature += center.noise.temperature * weight.raw();
-            point_moisture += center.noise.moisture * weight.raw();
+            point_elevation += center.noise.elevation * weight;
+            point_temperature += center.noise.temperature * weight;
+            point_moisture += center.noise.moisture * weight;
 
             let blend = to_blend.iter_mut().find(|e| e.id == center.biome.unwrap_or(default));
             if let Some(blend) = blend {
