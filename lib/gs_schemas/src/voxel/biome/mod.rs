@@ -6,7 +6,7 @@ use bevy_color::Srgba;
 use bevy_math::DVec2;
 use noise::NoiseFn;
 use serde::{Deserialize, Serialize};
-
+use crate::coordinates::AbsBlockPos;
 use super::{
     generation::Context,
     voxeltypes::{BlockEntry, BlockRegistry},
@@ -48,7 +48,7 @@ impl BiomeEntry {
 }
 
 /// A block placement function.
-pub type BlockRuleSourceFunction = fn(pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>;
+pub type BlockRuleSourceFunction = fn(pos: AbsBlockPos, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>;
 /// A surface noise function.
 /// Return
 pub type SurfaceNoiseFunction = fn(pos: DVec2, noise: &Box<dyn NoiseFn<f64, 4> + Send + Sync>) -> f64;

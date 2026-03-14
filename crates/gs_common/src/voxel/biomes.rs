@@ -2,16 +2,14 @@
 //! Most of this will be moved to a "base" mod at some point in the future.
 
 use bevy::color::Srgba;
-use gs_schemas::{
-    range::range,
-    registry::RegistryName,
-    voxel::{
-        biome::{BiomeDefinition, BiomeRegistry},
-        generation::Context,
-        voxeltypes::{BlockEntry, BlockRegistry},
-    },
-};
-use gs_schemas::voxel::biome::VOID_BIOME;
+
+use gs_schemas::coordinates::AbsBlockPos;
+use gs_schemas::range::range;
+use gs_schemas::registry::RegistryName;
+use gs_schemas::voxel::biome::*;
+use gs_schemas::voxel::generation::Context;
+use gs_schemas::voxel::voxeltypes::{BlockEntry, BlockRegistry};
+
 use crate::voxel::generator::noises::*;
 
 use super::blocks::{
@@ -46,7 +44,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(-0.3..0.1),
             temperature: range(..),
             moisture: range(..),
-            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+            rule_source: |pos: AbsBlockPos, context: &Context, block_registry: &BlockRegistry| {
                 let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
                 let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
                 let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
@@ -89,7 +87,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(0.1..0.7),
             temperature: range(..),
             moisture: range(..),
-            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+            rule_source: |pos: AbsBlockPos, context: &Context, block_registry: &BlockRegistry| {
                 let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
                 let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
                 let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
@@ -134,7 +132,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(0.7..),
             temperature: range(..),
             moisture: range(..),
-            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+            rule_source: |pos: AbsBlockPos, context: &Context, block_registry: &BlockRegistry| {
                 let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();
                 let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
                 let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
@@ -183,7 +181,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(..-0.1),
             temperature: range(..),
             moisture: range(0.5..),
-            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+            rule_source: |pos: AbsBlockPos, context: &Context, block_registry: &BlockRegistry| {
                 let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
                 let (i_water, _) = block_registry.lookup_name_to_object(WATER_BLOCK_NAME.as_ref()).unwrap();
 
@@ -212,7 +210,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(-0.1..),
             temperature: range(..),
             moisture: range(0.5..),
-            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+            rule_source: |pos: AbsBlockPos, context: &Context, block_registry: &BlockRegistry| {
                 let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
                 let (i_sand, _) = block_registry.lookup_name_to_object(SAND_BLOCK_NAME.as_ref()).unwrap();
 
@@ -239,7 +237,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(..),
             temperature: range(..),
             moisture: range(..),
-            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+            rule_source: |pos: AbsBlockPos, context: &Context, block_registry: &BlockRegistry| {
                 let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
                 let (i_sand, _) = block_registry.lookup_name_to_object(SAND_BLOCK_NAME.as_ref()).unwrap();
                 let (i_water, _) = block_registry.lookup_name_to_object(WATER_BLOCK_NAME.as_ref()).unwrap();
@@ -269,7 +267,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
             elevation: range(-0.1..0.3),
             temperature: range(..),
             moisture: range(0.5..),
-            rule_source: |pos: &bevy_math::IVec3, context: &Context, block_registry: &BlockRegistry| {
+            rule_source: |pos: AbsBlockPos, context: &Context, block_registry: &BlockRegistry| {
                 let (i_stone, _) = block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap();
                 let (i_dirt, _) = block_registry.lookup_name_to_object(DIRT_BLOCK_NAME.as_ref()).unwrap();
                 let (i_grass, _) = block_registry.lookup_name_to_object(GRASS_BLOCK_NAME.as_ref()).unwrap();

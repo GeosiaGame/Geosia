@@ -4,6 +4,7 @@
 //!  - World coordinates - [`WorldPos`] - floating-point coordinates of a point in the universe, used for entity positions, raycast positions etc.
 //!  - Chunk coordinates - [`AbsChunkPos`], [`RelChunkPos`] - integer coordinates of an entire chunk in the voxel world
 //!  - Block coordinates - [`AbsBlockPos`], [`RelBlockPos`] - integer coordinates of a specific block in the voxel world
+//!  - Quart coordinates - [`AbsQuartPos`], [`RelQuartPos`] - integer coordinates of a specific 'quart' in the voxel world. A quart is 2 blocks on a side, e.g. it has an area of 4 blocks.
 //!  - Coordinate indices - [`u128`] - [Z-curve](https://en.wikipedia.org/wiki/Z-order_(curve))-packed block coordinates used for spatially sorting block and chunk coordinates
 //!
 //! Absolute coordinates define a point in space and relative coordinates define a vector difference between two such points.
@@ -13,7 +14,8 @@
 //! A solid cube block at `(0,0,0)` has floating-point world bounds of `(0,0,0)` to `(1,1,1)`.
 //!
 
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use std::hash::Hash;
 use std::ops::{Add, Deref, Sub};
 
 use bevy_math::{DVec3, prelude::*};
@@ -48,8 +50,24 @@ pub const CHUNK_DIM3Z: usize = (CHUNK_DIM * CHUNK_DIM * CHUNK_DIM) as usize;
 pub const CHUNK_DIM3V: Vec3A = Vec3A::splat(CHUNK_DIMF);
 /// Chunk dimensions in blocks as a [`IVec3`] for convenience
 pub const CHUNK_DIM3IV: IVec3 = IVec3::splat(CHUNK_DIM);
+
+/// Length of a side of a quart in blocks
+pub const QUART_DIM: i32 = 2;
+/// Length of a side of a chunk in quarts
+pub const CHUNK_DIM_QUART: i32 = CHUNK_DIM / QUART_DIM;
+/// Length of a side of a chunk in quarts
+pub const CHUNK_DIM_QUARTZ: usize = CHUNK_DIM_QUART as usize;
+/// Number of blocks on the face of a chunk
+pub const CHUNK_DIM_QUART2: i32 = CHUNK_DIM_QUART * CHUNK_DIM_QUART;
+/// Number of quarts in the volume of the chunk
+pub const CHUNK_DIM_QUART3: i32 = CHUNK_DIM_QUART * CHUNK_DIM_QUART * CHUNK_DIM_QUART;
+/// Number of quarts in the volume of the chunk
+pub const CHUNK_DIM_QUART3Z: usize = (CHUNK_DIM_QUART * CHUNK_DIM_QUART * CHUNK_DIM_QUART) as usize;
+
 /// Maximum block position allowed, +-2^30 or 1 billion blocks to have a safe margin to avoid integer overflows.
 pub const MAX_BLOCK_POS: i32 = 1 << 30;
+/// [`MAX_BLOCK_POS`] converted to the unit of quarts.
+pub const MAX_QUART_POS: i32 = MAX_BLOCK_POS / QUART_DIM;
 /// [`MAX_BLOCK_POS`] converted to the unit of chunks.
 pub const MAX_CHUNK_POS: i32 = MAX_BLOCK_POS / CHUNK_DIM;
 
@@ -409,6 +427,30 @@ pub struct AbsBlockPos(pub(crate) IVec3);
 #[repr(transparent)]
 /// A block position relative to another block position
 pub struct RelBlockPos(pub(crate) IVec3);
+
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Pod, Zeroable, Serialize, Deserialize)]
+#[repr(transparent)]
+/// A quart position inside a chunk, limited to 0..=[`CHUNK_DIM_QUART`]
+pub struct InChunkQuartPos(pub(crate) IVec3);
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Pod, Zeroable, Serialize, Deserialize)]
+#[repr(C)]
+/// A range of quart positions inside a chunk, with coordinates limited to 0..[`CHUNK_DIM_QUART`] (min&max are *inclusive*)
+pub struct InChunkQuartRange {
+    pub(crate) min: InChunkQuartPos,
+    pub(crate) max: InChunkQuartPos,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Pod, Zeroable, Serialize, Deserialize)]
+#[repr(transparent)]
+/// An absolute quart position in a voxel world
+pub struct AbsQuartPos(pub(crate) IVec3);
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Pod, Zeroable, Serialize, Deserialize)]
+#[repr(transparent)]
+/// A quart position relative to another quart position
+pub struct RelQuartPos(pub(crate) IVec3);
 
 // === Utils
 macro_rules! impl_simple_ivec3_newtype {
@@ -940,9 +982,9 @@ impl AbsBlockPos {
 
 #[test]
 fn zpack_block_back_and_forth() {
-    let pos = AbsChunkPos::new(1, 2, 3);
+    let pos = AbsBlockPos::new(1, 2, 3);
     let packed = pos.as_zpack();
-    assert_eq!(pos, AbsChunkPos::from_zpack(packed));
+    assert_eq!(pos, AbsBlockPos::from_zpack(packed));
 }
 
 impl Display for AbsBlockPos {
@@ -994,3 +1036,303 @@ impl Display for RelBlockPos {
         write!(f, "Block Difference(x={}, y={}, z={})", self.x, self.y, self.z)
     }
 }
+
+// === InChunkQuartPos
+
+impl TryFrom<IVec3> for InChunkQuartPos {
+    type Error = InChunkVecError;
+
+    #[inline]
+    fn try_from(value: IVec3) -> Result<Self, Self::Error> {
+        Self::try_from_ivec3(value)
+    }
+}
+
+impl From<InChunkQuartPos> for IVec3 {
+    #[inline]
+    fn from(value: InChunkQuartPos) -> IVec3 {
+        value.0
+    }
+}
+
+impl Deref for InChunkQuartPos {
+    type Target = IVec3;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl InChunkQuartPos {
+    /// (0, 0, 0)
+    pub const ZERO: Self = Self(IVec3::ZERO);
+    /// (1, 1, 1)
+    pub const ONE: Self = Self(IVec3::ONE);
+    /// (1, 0, 0)
+    pub const X: Self = Self(IVec3::X);
+    /// (0, 1, 0)
+    pub const Y: Self = Self(IVec3::Y);
+    /// (0, 0, 1)
+    pub const Z: Self = Self(IVec3::Z);
+    /// (31, 31, 31)
+    pub const MAX: Self = Self(IVec3::splat(CHUNK_DIM_QUART - 1));
+
+    /// Const-friendly `try_from<IVec3>`
+    #[inline]
+    pub const fn try_from_ivec3(v: IVec3) -> Result<Self, InChunkVecError> {
+        let IVec3 { x, y, z } = v;
+        if (x < 0) || (x >= CHUNK_DIM_QUART) || (y < 0) || (y >= CHUNK_DIM_QUART) || (z < 0) || (z >= CHUNK_DIM_QUART) {
+            Err(InChunkVecError(v))
+        } else {
+            Ok(Self(v))
+        }
+    }
+
+    /// Constructs a new in-chunk position from the given coordinates,
+    /// or returns an error if it's outside of chunk bounds.
+    #[inline]
+    pub const fn try_new(x: i32, y: i32, z: i32) -> Result<Self, InChunkVecError> {
+        Self::try_from_ivec3(IVec3::new(x, y, z))
+    }
+
+    /// Same as `try_new(v, v, v)`
+    #[inline]
+    pub const fn try_splat(v: i32) -> Result<Self, InChunkVecError> {
+        Self::try_from_ivec3(IVec3::splat(v))
+    }
+
+    /// Convert a XZY-strided index into a chunk storage array into the coordinates
+    #[inline]
+    pub const fn try_from_index(idx: usize) -> Result<Self, InChunkIndexError> {
+        if idx >= CHUNK_DIM_QUART3Z {
+            return Err(InChunkIndexError(idx));
+        }
+        let i: i32 = idx as i32;
+        Ok(InChunkQuartPos(IVec3::new(
+            i % CHUNK_DIM_QUART,
+            (i / CHUNK_DIM_QUART2) % CHUNK_DIM_QUART,
+            (i / CHUNK_DIM_QUART) % CHUNK_DIM_QUART,
+        )))
+    }
+
+    /// Converts the coordinates into an XZY-strided index into the chunk storage array
+    #[inline]
+    pub const fn as_index(self) -> usize {
+        (self.0.x + (CHUNK_DIM_QUART * self.0.z) + (CHUNK_DIM_QUART2 * self.0.y)) as usize
+    }
+
+    /// Gets this position as a relative quart position relative to the origin of the chunk it would be in.
+    #[inline]
+    pub const fn offset_from_chunk_origin(self) -> RelQuartPos {
+        RelQuartPos::from_ivec3(self.0)
+    }
+}
+
+impl Add<InChunkQuartPos> for InChunkQuartPos {
+    type Output = RelQuartPos;
+    #[inline]
+    fn add(self, rhs: InChunkQuartPos) -> Self::Output {
+        RelQuartPos(self.0 + rhs.0)
+    }
+}
+
+// === AbsQuartPos
+impl_simple_ivec3_newtype!(AbsQuartPos);
+
+// === InChunkQuartRange
+impl InChunkQuartRange {
+    /// One block range containing the block at (0,0,0).
+    pub const BLOCK_AT_ZERO: Self = Self::from_corners(InChunkQuartPos::ZERO, InChunkQuartPos::ZERO);
+    /// The whole chunk `[(0, 0, 0), (31, 31, 31)]`.
+    pub const WHOLE_CHUNK: Self = Self::from_corners(InChunkQuartPos::ZERO, InChunkQuartPos::MAX);
+
+    /// Constructs a new range from two (inclusive) corner positions.
+    pub const fn from_corners(a: InChunkQuartPos, b: InChunkQuartPos) -> Self {
+        // Min/max manually implemented to allow for `const` calls
+        let (min_x, max_x) = if a.0.x < b.0.x {
+            (a.0.x, b.0.x)
+        } else {
+            (b.0.x, (a.0.x))
+        };
+        let (min_y, max_y) = if a.0.y < b.0.y {
+            (a.0.y, b.0.y)
+        } else {
+            (b.0.y, (a.0.y))
+        };
+        let (min_z, max_z) = if a.0.z < b.0.z {
+            (a.0.z, b.0.z)
+        } else {
+            (b.0.z, (a.0.z))
+        };
+        let min = InChunkQuartPos(IVec3::new(min_x, min_y, min_z));
+        let max = InChunkQuartPos(IVec3::new(max_x, max_y, max_z));
+        Self { min, max }
+    }
+
+    /// Checks if the range covers the entire chunk
+    #[inline]
+    pub const fn is_everything(self) -> bool {
+        self.min.0.x == 0
+            && self.min.0.y == 0
+            && self.min.0.z == 0
+            && self.max.0.x == InChunkQuartPos::MAX.0.x
+            && self.max.0.y == InChunkQuartPos::MAX.0.y
+            && self.max.0.z == InChunkQuartPos::MAX.0.z
+    }
+
+    /// Returns the corner with the smallest coordinates.
+    #[inline]
+    pub const fn min(self) -> InChunkQuartPos {
+        self.min
+    }
+
+    /// Returns the corner with the largest coordinates.
+    #[inline]
+    pub const fn max(self) -> InChunkQuartPos {
+        self.max
+    }
+
+    /// Returns an iterator over all the coordinates inside this range, in XZY order.
+    pub fn iter_xzy(self) -> impl Iterator<Item = InChunkQuartPos> {
+        itertools::iproduct!(
+            self.min.y..=self.max.y,
+            self.min.z..=self.max.z,
+            self.min.x..=self.max.x
+        )
+            .map(|(y, z, x)| InChunkQuartPos(IVec3::new(y, z, x)))
+    }
+}
+
+impl From<AbsChunkPos> for AbsQuartPos {
+    fn from(value: AbsChunkPos) -> Self {
+        Self(value.0 * IVec3::splat(CHUNK_DIM_QUART))
+    }
+}
+
+impl From<AbsBlockPos> for AbsQuartPos {
+    fn from(value: AbsBlockPos) -> Self {
+        Self::new(
+            value.x.div_euclid(QUART_DIM),
+            value.y.div_euclid(QUART_DIM),
+            value.z.div_euclid(QUART_DIM),
+        )
+    }
+}
+
+impl AbsQuartPos {
+    /// Splits the quart position into the coordinate of the chunk and coordinate of the quart within that chunk
+    pub fn split_chunk_component(self) -> (AbsChunkPos, InChunkQuartPos) {
+        (
+            AbsChunkPos::new(
+                self.x.div_euclid(CHUNK_DIM_QUART),
+                self.y.div_euclid(CHUNK_DIM_QUART),
+                self.z.div_euclid(CHUNK_DIM_QUART),
+            ),
+            InChunkQuartPos(IVec3::new(
+                self.x.rem_euclid(CHUNK_DIM_QUART),
+                self.y.rem_euclid(CHUNK_DIM_QUART),
+                self.z.rem_euclid(CHUNK_DIM_QUART),
+            )),
+        )
+    }
+
+    /// Converts the quart position to a Z-curve index. See [`zpack_3d`].
+    #[inline]
+    pub fn as_zpack(self) -> u128 {
+        zpack_3d(self.0.xzy())
+    }
+
+    /// Converts the quart position from a Z-curve index. See [`zunpack_3d`].
+    #[inline]
+    pub fn from_zpack(idx: u128) -> Self {
+        Self(zunpack_3d(idx).xzy())
+    }
+
+    /// Converts the quart position to a world-space f64 position vector of the quart origin.
+    #[inline]
+    pub fn as_world_dvec3(self) -> DVec3 {
+        self.0.as_dvec3()
+    }
+
+    /// Computes the floating-point center position of this quart space.
+    #[inline]
+    pub fn quart_center(self) -> DVec3 {
+        self.as_dvec3() + DVec3::ONE
+    }
+
+    /// Moves the quart position in the given direction by the given amount.
+    #[inline]
+    #[must_use]
+    pub fn direction_offset(self, direction: Direction, offset: i32) -> AbsQuartPos {
+        AbsQuartPos::from_ivec3(self.0 + direction.as_ivec() * offset)
+    }
+}
+
+#[test]
+fn zpack_quart_back_and_forth() {
+    let pos = AbsQuartPos::new(1, 2, 3);
+    let packed = pos.as_zpack();
+    assert_eq!(pos, AbsQuartPos::from_zpack(packed));
+}
+
+impl Display for AbsQuartPos {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Quart(x={}, y={}, z={})", self.x, self.y, self.z)
+    }
+}
+
+impl PartialOrd for AbsQuartPos {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+
+    fn lt(&self, other: &Self) -> bool {
+        self.as_zpack() < other.as_zpack()
+    }
+
+    fn le(&self, other: &Self) -> bool {
+        self.as_zpack() <= other.as_zpack()
+    }
+
+    fn gt(&self, other: &Self) -> bool {
+        self.as_zpack() > other.as_zpack()
+    }
+
+    fn ge(&self, other: &Self) -> bool {
+        self.as_zpack() >= other.as_zpack()
+    }
+}
+
+impl Ord for AbsQuartPos {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_zpack().cmp(&other.as_zpack())
+    }
+}
+
+// === RelQuartPos
+impl_simple_ivec3_newtype!(RelQuartPos);
+impl_rel_abs_pair!(RelQuartPos, AbsQuartPos);
+
+impl From<RelChunkPos> for RelQuartPos {
+    fn from(value: RelChunkPos) -> Self {
+        Self(value.0 * IVec3::splat(CHUNK_DIM_QUART))
+    }
+}
+
+impl From<RelBlockPos> for RelQuartPos {
+    fn from(value: RelBlockPos) -> Self {
+        Self::new(
+            value.x.div_euclid(QUART_DIM),
+            value.y.div_euclid(QUART_DIM),
+            value.z.div_euclid(QUART_DIM),
+        )
+    }
+}
+
+impl Display for RelQuartPos {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Quart Difference(x={}, y={}, z={})", self.x, self.y, self.z)
+    }
+}
+

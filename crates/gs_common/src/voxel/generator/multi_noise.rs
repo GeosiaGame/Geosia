@@ -1,4 +1,5 @@
-//! Standard multi noise world generator
+//! Standard multi noise world generator.
+//! Biomes are decided for every 2x2 block 'quart' instead of every block to save system resources.
 
 use std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
 use std::sync::Arc;
@@ -8,7 +9,7 @@ use std::mem::MaybeUninit;
 use std::rc::Rc;
 use std::iter::zip;
 
-use bevy_math::{DVec2, IVec2, Vec3Swizzles};
+use bevy_math::{DVec2, IVec2, IVec3, Vec3Swizzles};
 use gs_schemas::{
     GsExtraData,
     dependencies::itertools::{Itertools, iproduct},
@@ -42,18 +43,18 @@ pub const BIOME_SIZE: f64 = 1.0;
 
 const BIOME_BLEND_RADIUS: f64 = 32.0;
 
-const THREE_CHUNK_DIMZ: usize = CHUNK_DIMZ * 3;
+const THREE_CHUNK_DIM_QUARTZ: usize = CHUNK_DIM_QUARTZ * 3;
 /// offset for noise value lists so that they can contain values `-1..1` chunks around the current chunk.
-const NOISE_TABLE_OFFSET: i32 = CHUNK_DIM * 2;
+const NOISE_TABLE_OFFSET: i32 = CHUNK_DIM_QUART * 2;
 /// size of list 3x3 chunk area-sized list offset by [`NOISE_TABLE_OFFSET`] so that no values are negative.
-const NOISE_TABLE_SIZE: usize = (CHUNK_DIM2 * 9 + NOISE_TABLE_OFFSET) as usize;
+const NOISE_TABLE_SIZE: usize = (CHUNK_DIM_QUART2 * 9 + NOISE_TABLE_OFFSET) as usize;
 
 const fn table_index(x: i32, z: i32) -> usize {
-    assert!(x < NOISE_TABLE_OFFSET && x >= -CHUNK_DIM);
-    assert!(z < NOISE_TABLE_OFFSET && z >= -CHUNK_DIM);
-    let x = (x + CHUNK_DIM) as usize;
-    let z = (z + CHUNK_DIM) as usize;
-    x + z * THREE_CHUNK_DIMZ
+    assert!(x < NOISE_TABLE_OFFSET && x >= -CHUNK_DIM_QUART);
+    assert!(z < NOISE_TABLE_OFFSET && z >= -CHUNK_DIM_QUART);
+    let x = (x + CHUNK_DIM_QUART) as usize;
+    let z = (z + CHUNK_DIM_QUART) as usize;
+    x + z * THREE_CHUNK_DIM_QUARTZ
 }
 
 /// Standard world generator implementation
@@ -126,8 +127,8 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
             // FIXME this is UB.
             let mut vparams: [MaybeUninit<(SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>, (f64, f64, f64), i32)>; NOISE_TABLE_SIZE] = unsafe { MaybeUninit::uninit().assume_init() };
             for (i, v) in vparams[..].iter_mut().enumerate() {
-                let ix = (i % THREE_CHUNK_DIMZ) as i32 - CHUNK_DIM;
-                let iz = ((i / THREE_CHUNK_DIMZ) % THREE_CHUNK_DIMZ) as i32 - CHUNK_DIM;
+                let ix = (i % THREE_CHUNK_DIM_QUARTZ) as i32 - CHUNK_DIM_QUART;
+                let iz = ((i / THREE_CHUNK_DIM_QUARTZ) % THREE_CHUNK_DIM_QUARTZ) as i32 - CHUNK_DIM_QUART;
                 let (biomes, noise) = Self::find_biomes_at_point(
                     DVec2::new((ix + point.x) as f64, (iz + point.z) as f64),
                     &centers,
@@ -153,56 +154,69 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
             .lookup_name_to_object(VOID_BIOME_NAME.as_ref()).unwrap();
         let mut chunk = Chunk::new(BlockEntry::new(air_block_id, 0), extra_data);
 
-        for (pos_x, pos_y, pos_z) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM, 0..CHUNK_DIM) {
-            let index = table_index(pos_x, pos_z);
+        for (quart_x, quart_y, quart_z) in iproduct!(0..CHUNK_DIM_QUART, 0..CHUNK_DIM_QUART, 0..CHUNK_DIM_QUART) {
+            let index = table_index(quart_x, quart_z);
             let (ref blended_biomes, _, height) = vparams[index];
 
-            let biomes = {
-                let mut biomes: SmallVec<[(&BiomeDefinition, f64); EXPECTED_BIOME_COUNT]> = SmallVec::new();
-                for b in blended_biomes {
-                    let definition = b.lookup(&self.biome_registry).unwrap();
-                    let weight = b.weight * definition.block_influence;
+            let mut biomes: SmallVec<[(&BiomeDefinition, f64); EXPECTED_BIOME_COUNT]> = SmallVec::new();
+            for b in blended_biomes {
+                let e = b.lookup(&self.biome_registry).unwrap();
+                let w = b.weight * e.block_influence;
+                biomes.push((e, w));
+            }
+            // sort by block influence, then registry id if influence is same
+            biomes.sort_by(|(_, a_weight), (_, b_weight)| a_weight.partial_cmp(b_weight).unwrap_or(Ordering::Equal));
 
-                    // sort by block influence
-                    let index = biomes.iter()
-                        .position(|x| x.1 >= weight)
-                        .unwrap_or(biomes.len());
-                    biomes.insert(index, (definition, weight));
-                }
-                biomes
-            };
+            for (ox, oy, oz) in iproduct!(0..QUART_DIM, 0..QUART_DIM, 0..QUART_DIM) {
+                let b_pos = InChunkPos::try_new(quart_x * QUART_DIM + ox, quart_y * QUART_DIM + oy, quart_z * QUART_DIM + oz).unwrap();
+                let g_pos = position.block_pos(b_pos);
 
-            let b_pos = InChunkPos::try_new(pos_x, pos_y, pos_z).unwrap();
-            let g_pos = position.block_pos(b_pos);
+                let shift = RelBlockPos::new(
+                    self.point_offset_noise.get_2d([g_pos.x as f64, g_pos.z as f64]) as i32,
+                    0,
+                    self.point_offset_noise.get_2d([g_pos.x as f64, -g_pos.z as f64]) as i32,
+                );
+                let g_pos = g_pos + shift;
 
-            for (biome, _) in biomes {
-                let ctx = Context {
-                    seed: self.seed,
-                    chunk: &chunk.blocks,
-                    ground_y: height,
-                    sea_level: 0, /* hardcoded for now... */
-                };
-                let result = (biome.rule_source)(&g_pos, &ctx, &self.block_registry);
-                if let Some(result) = result {
-                    chunk.blocks.put(b_pos, result);
+                for (biome, _) in biomes {
+                    let ctx = Context {
+                        seed: self.seed,
+                        chunk: &chunk.blocks,
+                        ground_y: height,
+                        sea_level: 0, /* hardcoded for now... */
+                    };
+                    let result = (biome.rule_source)(g_pos, &ctx, &self.block_registry);
+                    if let Some(result) = result {
+                        chunk.blocks.put(b_pos, result);
+                    }
                 }
             }
         }
 
         // FIXME this is way too slow, make biome noise & placement be precomputed.
         for (ix, iz) in iproduct!(
-            -CHUNK_DIM..NOISE_TABLE_OFFSET,
-            -CHUNK_DIM..NOISE_TABLE_OFFSET
+            -CHUNK_DIM_QUART..NOISE_TABLE_OFFSET,
+            -CHUNK_DIM_QUART..NOISE_TABLE_OFFSET
         ) {
             let index = table_index(ix, iz);
             let (ref blend, (elevation, temperature, moisture), height) = vparams[index];
 
-            for iy in -CHUNK_DIM..NOISE_TABLE_OFFSET {
+            for (ox, iy, oz) in iproduct!(0..QUART_DIM, -CHUNK_DIM..(CHUNK_DIM * 2), 0..QUART_DIM) {
+                let b_pos = InChunkPos::try_new(ix * QUART_DIM + ox, iy, iz * QUART_DIM + oz).unwrap();
+                let g_pos = position.block_pos(b_pos);
+
+                let shift = RelBlockPos::new(
+                    <OpenSimplex as NoiseNDTo2D<4>>::get_2d(&self.point_offset_noise, [-g_pos.x as f64, g_pos.z as f64]) as i32,
+                    0,
+                    <OpenSimplex as NoiseNDTo2D<4>>::get_2d(&self.point_offset_noise, [g_pos.x as f64, -g_pos.z as f64]) as i32,
+                );
+                let b_pos = b_pos.offset_from_chunk_origin() + shift;
+
                 Self::place_decorators(
                     &mut chunk.blocks,
                     blend,
                     position,
-                    RelBlockPos::new(ix, iy, iz),
+                    b_pos,
                     &self.decorator_registry,
                     &self.block_registry,
                     &self.biome_registry,
@@ -284,7 +298,7 @@ impl MultiNoiseGenerator {
     }
 
     fn elevation_noise(
-        in_chunk_pos: IVec2,
+        in_chunk_quart_pos: IVec2,
         chunk_pos: IVec2,
         biome_registry: &BiomeRegistry,
         blend: &SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>,
@@ -293,8 +307,8 @@ impl MultiNoiseGenerator {
         let nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)(p, &noises.base_terrain_noise) + 1.0) / 2.0;
         let scale_factor = GLOBAL_SCALE_MOD;
         let global_pos = DVec2::new(
-            (in_chunk_pos.x + (chunk_pos.x * CHUNK_DIM)) as f64,
-            (in_chunk_pos.y + (chunk_pos.y * CHUNK_DIM)) as f64,
+            (in_chunk_quart_pos.x * QUART_DIM + (chunk_pos.x * CHUNK_DIM)) as f64,
+            (in_chunk_quart_pos.y * QUART_DIM + (chunk_pos.y * CHUNK_DIM)) as f64,
         );
 
         let mut heights = 0.0;
