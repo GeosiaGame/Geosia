@@ -2,7 +2,6 @@
 
 use std::ops::{Add, Mul, Sub};
 
-
 /// Performs cubic interpolation between two values bound between two other values.
 ///
 /// - n0 - The value before the first value.
@@ -37,59 +36,99 @@ where
 /// this function returns _n1_. If the alpha value is 1.0, this function returns _n2_.
 ///
 /// Source: <https://www.paulinternet.nl/?page=bicubic>
-pub fn bicubic<T>(n: [[T; 4]; 4], alpha_x: T, alpha_y: T) -> T
+#[inline]
+pub fn bicubic<T>(n: [[T; 4]; 4], alpha_1: T, alpha: T) -> T
 where
     T: Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Copy,
 {
-    let n: [T; 4] = {
-        let n0 = cubic(n[0], alpha_x);
-        let n1 = cubic(n[1], alpha_x);
-        let n2 = cubic(n[2], alpha_x);
-        let n3 = cubic(n[3], alpha_x);
-        [n0, n1, n2, n3]
-    };
-    cubic(n, alpha_y)
+    let n0 = cubic(n[0], alpha_1);
+    let n1 = cubic(n[1], alpha_1);
+    let n2 = cubic(n[2], alpha_1);
+    let n3 = cubic(n[3], alpha_1);
+    cubic([n0, n1, n2, n3], alpha)
 }
 
-/// Performs bicubic interpolation between two values bound between two other values.
-///
-/// - n0 - The value before the first value.
-/// - n1 - The first value.
-/// - n2 - The second value.
-/// - n3 - The value after the second value.
-/// - alpha - The alpha value.
-///
-/// The alpha value should range from 0.0 to 1.0. If the alpha value is 0.0,
-/// this function returns _n1_. If the alpha value is 1.0, this function returns _n2_.
-///
-/// Source: <https://www.paulinternet.nl/?page=bicubic>
-pub fn n_cubic<T, const N: usize>(n: [[T; 4]; 4], alpha: T) -> T
+#[allow(missing_docs)]
+#[inline]
+fn cubic_2<T>(n: [[T; 4]; 4], alpha_1: T, alpha: T) -> T
 where
     T: Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Copy,
 {
-    let n: [T; 4] = {
-        let n0 = cubic(n[0], alpha);
-        let n1 = cubic(n[1], alpha);
-        let n2 = cubic(n[2], alpha);
-        let n3 = cubic(n[3], alpha);
-        [n0, n1, n2, n3]
-    };
-    cubic(n, alpha)
+    bicubic(n, alpha_1, alpha)
 }
 
+#[allow(missing_docs)]
+#[macro_export]
+macro_rules! last_arg {
+    ($x:expr) => ($x);
+    ($x:expr, $($xs:expr),+) => ($crate::last_arg!($($xs),+));
+}
 
-macro_rules! n_cubic_aa {
-    ($name:ident, $N:expr, $([$arr:ty; 4]);+) => {
-        pub fn $name<T>(n: $($arr)*, alpha: T) -> T
+#[allow(missing_docs)]
+#[macro_export]
+macro_rules! n_cubic {
+    ($name:ident $N:literal $arr:tt $(($parent_name:ident, $arg_name:ident)),*) => {
+        #[inline]
+        fn $name<T>(n: $arr, $($arg_name: T),*, alpha: T) -> T
         where
-            T: Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Copy + Default,
+            T: Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Copy,
         {
-            for n in 0..$N {
-
-            }
-            T::default()
+            let n0 = $crate::last_arg!($($parent_name),*)(n[0], $($arg_name),*);
+            let n1 = $crate::last_arg!($($parent_name),*)(n[1], $($arg_name),*);
+            let n2 = $crate::last_arg!($($parent_name),*)(n[2], $($arg_name),*);
+            let n3 = $crate::last_arg!($($parent_name),*)(n[3], $($arg_name),*);
+            cubic([n0, n1, n2, n3], alpha)
         }
     }
 }
 
-n_cubic_aa!(n_cubic_aa, 5, [[[[[T; 4]; 4]; 4]; 4]; 4]);
+// Repeating macro definition for all N-cubic interpolations where N is 3..5.
+gs_macros::all_arrays!(
+    n_cubic,
+    3, 5,
+    [T; 4],
+    cubic_,
+    alpha_
+);
+
+#[allow(missing_docs)]
+#[inline]
+pub fn tricubic<T>(n: [[[T; 4]; 4]; 4], alpha_1: T, alpha_2: T, alpha: T) -> T
+where
+    T: Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Copy,
+{
+    cubic_3(n, alpha_1, alpha_2, alpha)
+}
+
+#[allow(missing_docs)]
+#[inline]
+pub fn pentcubic<T>(n: [[[[T; 4]; 4]; 4]; 4], alpha_1: T, alpha_2: T, alpha_3: T, alpha: T) -> T
+where
+    T: Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Copy,
+{
+    cubic_4(n, alpha_1, alpha_2, alpha_3, alpha)
+}
+
+#[allow(missing_docs)]
+#[inline]
+pub fn septcubic<T>(n: [[[[[T; 4]; 4]; 4]; 4]; 4], alpha_1: T, alpha_2: T, alpha_3: T, alpha_4: T, alpha: T) -> T
+where
+    T: Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Copy,
+{
+    cubic_5(n, alpha_1, alpha_2, alpha_3, alpha_4, alpha)
+}
+
+// internal map of (N)-cubic interpolation depth N -> function pointer
+static INTERPOLATORS: [usize; 5] = [
+    cubic::<f64> as usize,
+    bicubic::<f64> as usize,
+    tricubic::<f64> as usize,
+    pentcubic::<f64> as usize,
+    septcubic::<f64> as usize,
+];
+
+/// Get an interpolator function with specified depth `N`
+pub fn get_interpolator<const N: usize, Input>() -> fn(Input, f64) -> f64 {
+    let ptr = INTERPOLATORS[N] as *const ();
+    unsafe { std::mem::transmute(ptr) }
+}

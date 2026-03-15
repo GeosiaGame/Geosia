@@ -93,6 +93,7 @@ gs_client = { path = "crates/gs_client", version = "0.0.0" }
 gs_common = { path = "crates/gs_common", version = "0.0.0" }
 # Local, published
 gs_schemas = { version = "0.0.1", path = "lib/gs_schemas" }
+gs_macros = { version = "0.0.1", path = "lib/gs_macros" }
 
 # Remote
 anyhow = "1.0.98"

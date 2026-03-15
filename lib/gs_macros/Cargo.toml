@@ -1,0 +1,21 @@
+[package]
+name = "gs_macros"
+version = "0.0.1"
+description = "Custom proc macros Geosia uses"
+
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository = "https://github.com/GeosiaGame/Geosia/tree/dev/lib/gs_macros"
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true
+
+[dependencies]
+quote = "1.0.47"
+syn = { version = "2.0.119", features = ["full"] }
+proc-macro2 = "1.0.107"
