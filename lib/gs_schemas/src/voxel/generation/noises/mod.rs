@@ -4,8 +4,12 @@ use noise::NoiseFn;
 use std::f64::consts::TAU;
 
 mod fbm;
+mod curve;
+mod cache;
 
 pub use fbm::*;
+pub use curve::*;
+pub use cache::*;
 
 /// Get a point of [`N`]-dimensional noise as if it were a plane of 2D noise
 pub trait NoiseNDTo2D<const N: usize>: NoiseFn<f64, N> {

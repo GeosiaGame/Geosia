@@ -2,6 +2,8 @@
 
 use bevy_math::prelude::*;
 
+pub mod interpolate;
+
 /// An epsilon value so small that it should be indistinguishable from zero for most operations performed on close-to-natural numbers.
 /// Based on the floating-point precision around a value of `1`.
 pub const VERY_CLOSE_TO_ZERO_F32: f32 = 1e-7f32;
