@@ -27,14 +27,13 @@ use serde::{Deserialize, Serialize};
 use smallvec::*;
 use spade::handles::{FixedVertexHandle, VertexHandle};
 use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
-use tracing::{debug, warn};
+use tracing::debug;
 
 use gs_schemas::coordinates::*;
 use gs_schemas::voxel::chunk_storage::{ChunkStorage, PaletteStorage};
 use gs_schemas::voxel::generation::decorator::DecoratorRegistry;
 use gs_schemas::voxel::generation::{Context, VoxelGenerator};
 use gs_schemas::voxel::generation::noises::*;
-use crate::prelude::FloatExt;
 use crate::voxel::biomes::*;
 
 /// Biome size in chunks

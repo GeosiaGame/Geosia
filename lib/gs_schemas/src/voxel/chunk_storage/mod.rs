@@ -1,6 +1,5 @@
 //! Data structures for storage and manipulation of per-block data.
 use std::fmt::Debug;
-use std::hash::Hash;
 use std::iter::{Enumerate, Map, Take};
 
 use crate::coordinates::*;

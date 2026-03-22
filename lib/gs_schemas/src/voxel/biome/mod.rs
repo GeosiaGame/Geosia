@@ -5,7 +5,6 @@ use std::hash::{Hash, Hasher};
 use bevy_color::Srgba;
 use bevy_math::DVec2;
 use noise::{OpenSimplex, Value};
-use noisy_float::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::{
