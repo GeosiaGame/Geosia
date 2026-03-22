@@ -93,7 +93,7 @@ impl<'registry, ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator<'reg
 
         let mut centers: Vec<Center> = Vec::new();
         {
-            let mut center_lookup: HashMap<IVec2, usize> = HashMap::new();
+            let mut center_map: HashMap<IVec2, usize> = HashMap::new();
             let mut corners: Vec<Corner> = Vec::new();
             let mut corner_map: HashMap<IVec2, usize> = HashMap::new();
             let mut edges: Vec<Edge> = Vec::new();
@@ -119,7 +119,7 @@ impl<'registry, ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator<'reg
                     point,
                     &delaunay,
                     &mut centers,
-                    &mut center_lookup,
+                    &mut center_map,
                     &mut corners,
                     &mut corner_map,
                     &mut edges,
@@ -320,28 +320,22 @@ impl<'registry> MultiNoiseGenerator<'registry> {
         (heights / weights) as i32
     }
 
+    fn make_center(point: DVec2, centers: &mut Vec<Center>, center_map: &mut HashMap<IVec2, usize>, noises: &Noises) -> usize {
+        *center_map.entry(point.as_ivec2()).or_insert_with(|| {
+            let mut center = Center::new(point);
+            let index = centers.len();
+            center.noise = Self::make_noise(noises, center.point);
+            centers.push(center);
+            index
+        })
+    }
+
     fn make_corner(point: DVec2, corners: &mut Vec<Corner>, corner_map: &mut HashMap<IVec2, usize>) -> usize {
-        const EPSILON: f64 = 1e-6;
-
-        let point_i = point.as_ivec2();
-        let IVec2 { x, y } = point_i;
-        for (x, y) in iproduct!(
-            x.wrapping_sub(2)..=x.wrapping_add(2),
-            y.wrapping_sub(2)..=y.wrapping_add(2)
-        ) {
-            let point_i = IVec2::new(x, y);
-            let Some(&q) = corner_map.get(&point_i) else {
-                continue;
-            };
-            if point.distance(corners[q].point) < EPSILON {
-                return q;
-            }
-        }
-
-        let index = corners.len();
-        corners.push(Corner::new(point));
-        corner_map.insert(point_i, index);
-        index
+        *corner_map.entry(point.as_ivec2()).or_insert_with(|| {
+            let index = corners.len();
+            corners.push(Corner::new(point));
+            index
+        })
     }
 
     fn bind_centers_and_corners_for_edge(edge: &Edge, edge_index: usize, centers: &mut [Center], corners: &mut [Corner]) {
@@ -350,41 +344,62 @@ impl<'registry> MultiNoiseGenerator<'registry> {
                 v.push(x);
             }
         }
+        fn fill_triangulation_vertex_fields(
+            edge_index: usize,
+            // adjacent edge indices
+            borders_protrudes: &mut Vec<usize>,
+            // Adjacent center indices
+            neighbors_adjacent: &mut Vec<usize>,
+            // adjacent corner indices
+            corners_touches: &mut Vec<usize>,
+            // Index of the vertex opposite to this one
+            opposite: usize,
+            // Index of Voronoi vertex 0 (if this is a delaunay vertex) or Delaunay vertex 0 if this is a Voronoi vertex
+            v0_d0: usize,
+            // Same as above, but for vertex 1
+            v1_d1: usize,
+        ) {
+            // Centers point to Delaunay edges
+            // Corners point to Voronoi edges
+            borders_protrudes.push(edge_index);
+            // Centers point to centers (Delaunay edges)
+            // Corners point to corners (Voronoi edges)
+            add_if_empty(neighbors_adjacent, opposite);
+            // Centers point to corners (Voronoi edges)
+            // Corners point to centers (Delaunay edges)
+            add_if_empty(corners_touches, v0_d0);
+            add_if_empty(corners_touches, v1_d1);
+        }
+
         // Centers point to Delaunay edges
         let d0 = &mut centers[edge.d0];
-        d0.borders.push(edge_index);
+        fill_triangulation_vertex_fields(
+            edge_index,
+            &mut d0.borders, &mut d0.neighbors, &mut d0.corners,
+            edge.d1, edge.v0, edge.v1
+        );
+
         let d1 = &mut centers[edge.d1];
-        d1.borders.push(edge_index);
+        fill_triangulation_vertex_fields(
+            edge_index,
+            &mut d1.borders, &mut d1.neighbors, &mut d1.corners,
+            edge.d0, edge.v0, edge.v1
+        );
 
         // Corners point to Voronoi edges
         let v0 = &mut corners[edge.v0];
-        v0.protrudes.push(edge_index);
+        fill_triangulation_vertex_fields(
+            edge_index,
+            &mut v0.protrudes, &mut v0.adjacent, &mut v0.touches,
+            edge.v1, edge.d0, edge.d1
+        );
+        // Corners point to Voronoi edges
         let v1 = &mut corners[edge.v1];
-        v1.protrudes.push(edge_index);
-
-        // Centers point to centers (Delaunay edges)
-        add_if_empty(&mut d0.neighbors, edge.d1);
-        add_if_empty(&mut d1.neighbors, edge.d0);
-
-        // Centers point to corners (Voronoi edges)
-        add_if_empty(&mut d0.corners, edge.v0);
-        add_if_empty(&mut d0.corners, edge.v1);
-
-        // Centers point to corners (Voronoi edges)
-        add_if_empty(&mut d1.corners, edge.v0);
-        add_if_empty(&mut d1.corners, edge.v1);
-
-        // Corners point to corners (Voronoi edges)
-        add_if_empty(&mut v0.adjacent, edge.v1);
-        add_if_empty(&mut v1.adjacent, edge.v0);
-
-        // Corners point to centers (Delaunay edges)
-        add_if_empty(&mut v0.touches, edge.d0);
-        add_if_empty(&mut v0.touches, edge.d1);
-
-        // Corners point to centers (Delaunay edges)
-        add_if_empty(&mut v1.touches, edge.d0);
-        add_if_empty(&mut v1.touches, edge.d1);
+        fill_triangulation_vertex_fields(
+            edge_index,
+            &mut v1.protrudes, &mut v1.adjacent, &mut v1.touches,
+            edge.v0, edge.d0, edge.d1
+        );
     }
 
     fn make_center_with_edges_corners(
@@ -392,20 +407,11 @@ impl<'registry> MultiNoiseGenerator<'registry> {
         handle: FixedVertexHandle,
         delaunay: &DelaunayTriangulation<DelaunayVertex>,
         centers: &mut Vec<Center>,
-        center_lookup: &mut HashMap<IVec2, usize>,
+        center_map: &mut HashMap<IVec2, usize>,
         corners: &mut Vec<Corner>,
         corner_map: &mut HashMap<IVec2, usize>,
         edges: &mut Vec<Edge>,
     ) -> usize {
-        let get_or_create_center = |point: DVec2| -> usize {
-            *center_lookup.entry(point.as_ivec2()).or_insert_with(|| {
-                let mut center = Center::new(point);
-                let index = centers.len();
-                center.noise = Self::make_noise(&self.noises, center.point);
-                centers.push(center);
-                index
-            })
-        };
 
         let point = delaunay.vertex(handle);
         let map_edges = Self::make_edges(&point);
@@ -413,8 +419,8 @@ impl<'registry> MultiNoiseGenerator<'registry> {
         for (PointEdge(delaunay_start, delaunay_end), PointEdge(voronoi_start, voronoi_end)) in map_edges {
 
             // Delaunay edges point to centers
-            let d0 = get_or_create_center(delaunay_start);
-            let d1 = get_or_create_center(delaunay_end);
+            let d0 = Self::make_center(delaunay_start, centers, center_map, &self.noises);
+            let d1 = Self::make_center(delaunay_end, centers, center_map, &self.noises);
             // Voronoi edges point to corners
             let v0 = Self::make_corner(voronoi_start, corners, corner_map);
             let v1 = Self::make_corner(voronoi_end, corners, corner_map);
@@ -427,7 +433,7 @@ impl<'registry> MultiNoiseGenerator<'registry> {
         }
 
         let point: DVec2 = spade_point_to_vector(point.position());
-        get_or_create_center(point)
+        Self::make_center(point, centers, center_map, &self.noises)
     }
 
     /// returns: \[(delaunay edges, voronoi edges)\]
@@ -560,19 +566,17 @@ impl<'registry> MultiNoiseGenerator<'registry> {
 
         for (first_node, second_node) in nearby.clone().into_iter().tuple_combinations() {
             let mut first_node = first_node.borrow_mut();
-            let (first, mut first_weight) = *first_node;
             let mut second_node = second_node.borrow_mut();
-            let (second, mut second_weight) = *second_node;
 
-            let first = first.point;
-            let second = second.point;
+            let first = first_node.0.point;
+            let second = second_node.0.point;
 
             let distance_from_midpoint =
                 (point - (first + second) / 2.0).dot(second - first) / (second - first).length();
             let weight = fade((distance_from_midpoint / BIOME_BLEND_RADIUS).clamp(-1.0, 1.0) * 0.5 + 0.5);
 
-            first_weight *= 1.0 - weight;
-            second_weight *= weight;
+            first_node.1 *= 1.0 - weight;
+            second_node.1 *= weight;
         }
 
         let mut to_blend = SmallVec::<[BiomeEntry; EXPECTED_BIOME_COUNT]>::new();
@@ -628,8 +632,11 @@ pub struct Center {
     ocean: bool,
     coast: bool,
 
+    /// Adjacent center indices
     neighbors: Vec<usize>,
+    /// adjacent edge indices
     borders: Vec<usize>,
+    /// adjacent corner indices
     corners: Vec<usize>,
 }
 
