@@ -92,7 +92,7 @@ impl Debug for BiomeDefinition {
 
 impl Display for BiomeDefinition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BiomeDefinition").field("id", &self.name).finish()
+        Display::fmt(&self.name, f)
     }
 }
 

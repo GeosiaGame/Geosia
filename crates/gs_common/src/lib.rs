@@ -338,7 +338,9 @@ impl GameServer {
             123456789,
             Arc::clone(&biome_registry),
             Arc::clone(&block_registry),
-            Arc::clone(&decorator_registry));
+            Arc::clone(&decorator_registry),
+            voxel::biomes::PLAINS_BIOME_NAME.as_ref(),
+        );
         /*
         let generator = FlatGenerator::new(5, [
             FlatLayer { block_type: BlockEntry::new(block_registry.lookup_name_to_object(STONE_BLOCK_NAME.as_ref()).unwrap().0, 0), thickness: 10 },

@@ -104,8 +104,9 @@ pub fn client_packet_handler_system(
                     commands.queue(move |world: &mut World| {
                         let block_registry = Arc::clone(&registries.block_types);
                         let biome_registry = Arc::clone(&registries.biome_types);
+                        let decorator_registry = Arc::clone(&registries.decorator_types);
                         world.insert_resource(SharedRegistryHolder(registries));
-                        VoxelUniverseBuilder::<ClientData>::new(world, block_registry, biome_registry)
+                        VoxelUniverseBuilder::<ClientData>::new(world, block_registry, biome_registry, decorator_registry)
                             .unwrap()
                             .with_client_chunk_system()
                             .build();

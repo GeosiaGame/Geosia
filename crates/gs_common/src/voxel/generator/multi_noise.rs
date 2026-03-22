@@ -21,8 +21,6 @@ use gs_schemas::{
 };
 use hashbrown::HashMap;
 use noise::{OpenSimplex, Value};
-use rand::{Rng, SeedableRng};
-use rand_xoshiro::Xoshiro128StarStar;
 use serde::{Deserialize, Serialize};
 use smallvec::*;
 use spade::handles::{FixedVertexHandle, VertexHandle};
@@ -30,6 +28,7 @@ use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 use tracing::debug;
 
 use gs_schemas::coordinates::*;
+use gs_schemas::registry::RegistryNameRef;
 use gs_schemas::voxel::chunk_storage::{ChunkStorage, PaletteStorage};
 use gs_schemas::voxel::generation::decorator::DecoratorRegistry;
 use gs_schemas::voxel::generation::{Context, VoxelGenerator};
@@ -58,7 +57,7 @@ const fn table_index(x: i32, z: i32) -> usize {
 }
 
 /// Standard world generator implementation
-pub struct MultiNoiseGenerator<'registry> {
+pub struct MultiNoiseGenerator {
     biome_registry: Arc<BiomeRegistry>,
     block_registry: Arc<BlockRegistry>,
     decorator_registry: Arc<DecoratorRegistry>,
@@ -68,10 +67,10 @@ pub struct MultiNoiseGenerator<'registry> {
     noises: Noises,
     point_offset_noise: OpenSimplex,
 
-    generatable_biomes: Vec<(RegistryId, &'registry BiomeDefinition)>,
+    default_biome_id: RegistryId,
 }
 
-impl<'registry, ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator<'registry> {
+impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
     fn generate_chunk(&self, position: AbsChunkPos, extra_data: <ED as GsExtraData>::ChunkData) -> Chunk<ED> {
         let point = AbsBlockPos::from(position);
         let offset_point = DelaunayVertex::new((point.x + CHUNK_DIM / 2) as f64, (point.z + CHUNK_DIM / 2) as f64);
@@ -85,11 +84,6 @@ impl<'registry, ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator<'reg
             seed[i] = x[i].wrapping_mul(seed_bytes_be[i]);
             seed[i + 8] = y[i].wrapping_mul(seed_bytes_le[i]);
         }
-        // This Rand is not safe to use in world gen as it's not replicable in neighboring chunks.
-        // do not use if at all possible, and if you must, send a log message first
-        // to warn of incoming breakage.
-        // The biome logic really ought to use some default value instead... later.
-        let mut rand = Xoshiro128StarStar::from_seed(seed);
 
         let mut centers: Vec<Center> = Vec::new();
         {
@@ -124,7 +118,7 @@ impl<'registry, ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator<'reg
                     &mut corner_map,
                     &mut edges,
                 );
-                self.assign_biome(center, &mut centers, &mut rand);
+                self.assign_biome(center, &mut centers);
             }
         }
 
@@ -225,26 +219,21 @@ impl<'registry, ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator<'reg
     }
 }
 
-impl<'registry> MultiNoiseGenerator<'registry> {
+impl MultiNoiseGenerator {
     /// create a new [`MultiNoiseGenerator`].
     pub fn new(
         seed: u64,
         biome_registry: Arc<BiomeRegistry>,
         block_registry: Arc<BlockRegistry>,
         decorator_registry: Arc<DecoratorRegistry>,
+        default_biome: RegistryNameRef,
     ) -> Self {
         let seed_int = seed as u32;
 
         Self {
-            generatable_biomes: {
-                let mut biomes = Vec::new();
-                for (id, _, def) in biome_registry.iter() {
-                    if def.can_generate {
-                        biomes.push((id, def));
-                    }
-                }
-                biomes
-            },
+            default_biome_id: biome_registry.lookup_name_to_object(default_biome)
+                .expect(&format!("Default biome {default_biome} is invalid."))
+                .0,
 
             biome_registry,
             block_registry,
@@ -481,7 +470,7 @@ impl<'registry> MultiNoiseGenerator<'registry> {
         }
     }
 
-    fn assign_biome(&self, center: usize, centers: &mut [Center], rand: &mut Xoshiro128StarStar) {
+    fn assign_biome(&self, center: usize, centers: &mut [Center]) {
         // go over all centers and assign biomes to them based on noise & other parameters.
         let center = &mut centers[center];
         if center.biome.is_some() {
@@ -523,12 +512,11 @@ impl<'registry> MultiNoiseGenerator<'registry> {
 
         if center.biome.is_none() {
             // could not find a biome
-            debug!("found no biome for point {:?}, noise values: {:?}. Picking randomly.", center.point, center.noise);
-            let biome = rand.random_range(0..self.generatable_biomes.len());
-            let (id, biome) = self.generatable_biomes[biome];
+            debug!("found no biome for point {:?}, noise values: {:?}. Using default biome.", center.point, center.noise);
+            center.biome = Some(self.default_biome_id);
 
-            center.biome = Some(id);
-            debug!("picked {biome}");
+            let default_biome = self.biome_registry.lookup_id_to_object(self.default_biome_id);
+            debug!("picked {default_biome:?}");
         }
     }
 
