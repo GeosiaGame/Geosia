@@ -3528,7 +3528,6 @@ dependencies = [
  "spade",
  "static_assertions",
  "thiserror 2.0.18",
- "thread_local",
  "tokio",
  "tokio-util",
  "tracing",
