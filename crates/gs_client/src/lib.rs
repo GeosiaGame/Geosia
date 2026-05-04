@@ -12,6 +12,7 @@ use bevy::platform::cell::SyncCell;
 use bevy::window::{CursorOptions, ExitCondition, PresentMode};
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 use gs_common::network::thread::NetworkThread;
+use gs_common::universe::geosia_universe_plugin;
 use gs_common::{GAME_BRAND_NAME, GameBevyCommand};
 use gs_schemas::dependencies::smallvec::SmallVec;
 use gs_schemas::{GameSide, GsExtraData};
@@ -96,7 +97,9 @@ pub fn client_main() {
     configure_sets(&mut app, FixedUpdate);
     configure_sets(&mut app, FixedPostUpdate);
 
-    app.add_plugins(ui::common_game_ui_plugin)
+    app //
+        .add_plugins(geosia_universe_plugin)
+        .add_plugins(ui::common_game_ui_plugin)
         .add_plugins(debugcam::PlayerPlugin)
         .add_plugins(VoxelUniverseClientPlugin)
         .add_plugins(states::main_menu::MainMenuPlugin)

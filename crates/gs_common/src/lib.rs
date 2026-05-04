@@ -7,6 +7,7 @@ pub mod player;
 pub mod prelude;
 pub mod promises;
 pub mod raycast;
+pub mod universe;
 pub mod voxel;
 
 use std::thread::JoinHandle;
@@ -39,6 +40,7 @@ use crate::network::thread::NetworkThread;
 use crate::network::transport::PacketWrapper;
 use crate::player::player_data_server_plugin;
 use crate::prelude::*;
+use crate::universe::geosia_universe_plugin;
 use crate::voxel::generator::multi_noise::MultiNoiseGenerator;
 use crate::voxel::persistence::savefile::SavefilePersistenceLayer;
 use crate::voxel::plugin::VoxelUniversePlugin;
@@ -325,7 +327,8 @@ impl GameServer {
             .add_plugins(AssetPlugin::default())
             .add_plugins(ScheduleRunnerPlugin::run_loop(TICK));
 
-        app.add_plugins(VoxelUniversePlugin::<ServerData>::new())
+        app.add_plugins(geosia_universe_plugin)
+            .add_plugins(VoxelUniversePlugin::<ServerData>::new())
             .add_plugins(NetworkServerPlugin)
             .add_plugins(player_data_server_plugin);
 

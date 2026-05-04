@@ -192,7 +192,12 @@ impl Sub for WorldPos {
     type Output = DVec3;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        self.as_dvec3() - rhs.as_dvec3()
+        Self {
+            // It's fine to break the abs/rel type system here as it's immediately converted to DVec3
+            chunk: AbsChunkPos(self.chunk.0 - rhs.chunk.0),
+            offset: self.offset - rhs.offset,
+        }
+        .as_dvec3()
     }
 }
 
