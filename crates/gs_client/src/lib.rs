@@ -151,7 +151,7 @@ mod debug_window {
 
         commands.spawn((
             DirectionalLight {
-                shadows_enabled: false,
+                shadow_maps_enabled: false,
                 illuminance: light_consts::lux::AMBIENT_DAYLIGHT * 0.75,
                 ..default()
             },
@@ -163,7 +163,7 @@ mod debug_window {
         ));
         commands.spawn((
             DirectionalLight {
-                shadows_enabled: false,
+                shadow_maps_enabled: false,
                 illuminance: light_consts::lux::AMBIENT_DAYLIGHT * 0.25,
                 ..default()
             },

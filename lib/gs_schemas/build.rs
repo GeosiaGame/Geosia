@@ -113,7 +113,7 @@ fn regen_sql() -> Result<()> {
     )
     .unwrap();
     for (&i, migration) in &migrations {
-        writeln!(&mut sql_rs, "    ({i}i32, {var})", var = &migration.var_name).unwrap();
+        writeln!(&mut sql_rs, "    ({i}i32, {var})", var = migration.var_name).unwrap();
     }
     writeln!(&mut sql_rs, "];").unwrap();
 

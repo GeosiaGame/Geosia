@@ -2,10 +2,9 @@
 
 use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::tailwind;
+use bevy::material::OpaqueRendererMethod;
 use bevy::mesh::{Indices, MeshVertexAttribute, MeshVertexBufferLayoutRef, PrimitiveTopology};
-use bevy::pbr::{
-    ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline, OpaqueRendererMethod,
-};
+use bevy::pbr::{ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline};
 use bevy::render::render_resource::{
     AsBindGroup, RenderPipelineDescriptor, SpecializedMeshPipelineError, VertexFormat,
 };
