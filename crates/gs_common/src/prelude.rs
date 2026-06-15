@@ -42,6 +42,9 @@ pub use tokio_util::compat::TokioAsyncReadCompatExt;
 // Our Promises
 pub use crate::promises::{GenericAsyncResult, AsyncResult};
 
+// Identifiers
+pub use gs_schemas::registry::{RegistryId, RegistryName, RegistryNameRef, GS_REGISTRY_DOMAIN, GS_REGISTRY_DOMAIN_CONST, GS_REGISTRY_DOMAIN_KS};
+
 // Capnp namespaces
 pub use gs_schemas::schemas::network_capnp as rpc;
 
@@ -49,3 +52,5 @@ pub use gs_schemas::schemas::network_capnp as rpc;
 pub use bevy::prelude::*;
 // Prefer `tracing` logging methods to `log`.
 pub use bevy::log::tracing::{debug, error, info, trace, warn};
+// Our core bevy types
+pub use crate::universe::UniverseTransform;
