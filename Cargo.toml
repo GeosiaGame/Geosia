@@ -3,7 +3,7 @@ members = ["lib/*", "crates/*"]
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.92"
+rust-version = "1.96"
 edition = "2024"
 license = "LGPL-3.0-only"
 authors = ["Geosia team"]
@@ -65,7 +65,6 @@ enum_glob_use = "allow"
 explicit_deref_methods = "allow"
 explicit_into_iter_loop = "allow"
 explicit_iter_loop = "allow"
-from_iter_instead_of_collect = "allow"
 if_not_else = "allow"
 ignored_unit_patterns = "allow"
 inline_always = "allow"
@@ -117,12 +116,12 @@ chrono = "0.4.41"
 clap = { version = "4.5.39", features = ["derive"] }
 either = "1.15.0"
 futures = "0.3.31"
-glam = { version = "0.30.7", features = [
+glam = { version = "0.32.0", features = [
     "bytemuck",
     "serde",
 ] } # Keep in sync with bevy
 hashbrown = { version = "0.16.1", features = ["serde"] }
-image = "0.25.6" # Keep in sync with bevy
+image = { version = "0.25.6", default-features = false, features = ["png"] } # Keep in sync with bevy
 itertools = "0.14.0"
 kstring = { version = "2.0.2", features = ["serde"] }
 lru = "0.16.2"
@@ -188,7 +187,7 @@ zorder = "0.2.2"
 zstd = "0.13.3"
 
 # Remote, bevy plugins
-bevy_egui = { version = "0.39.0", default-features = false, features = [
+bevy_egui = { version = "0.40.0-rc.1", default-features = false, features = [
     "manage_clipboard",
     "open_url",
     "default_fonts",
@@ -202,7 +201,7 @@ quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
 [workspace.dependencies.bevy]
-version = "0.18.0"
+version = "0.19.0-rc.3"
 default-features = false
 # Extra features are used in gs_client on top of these common ones
 features = [
@@ -225,7 +224,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_math]
-version = "0.18.0"
+version = "0.19.0-rc.3"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -233,7 +232,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_color]
-version = "0.18.0"
+version = "0.19.0-rc.3"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -241,7 +240,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_reflect]
-version = "0.18.0"
+version = "0.19.0-rc.3"
 features = ["smallvec", "glam", "uuid", "std"]
 
 [profile.dev]

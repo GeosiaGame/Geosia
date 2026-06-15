@@ -117,11 +117,7 @@ pub fn insert_critical_log_entries<S: AsRef<str>>(db: &Transaction, entries: &[S
     if entries.is_empty() {
         return Ok(());
     }
-    let timestamp = UNIX_EPOCH
-        .elapsed()
-        .as_ref()
-        .map(Duration::as_secs_f64)
-        .unwrap_or(0.0f64);
+    let timestamp = UNIX_EPOCH.elapsed().as_ref().map_or(0.0f64, Duration::as_secs_f64);
     // language=sqlite
     let mut stmt =
         db.prepare_cached("INSERT INTO geosia_critical_log (unix_timestamp, log_message) VALUES (?1, ?2);")?;
