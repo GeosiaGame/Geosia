@@ -123,118 +123,118 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
     let mut pos_buf: Vec<[f32; 3]> = Vec::with_capacity(6144);
     let mut normal_buf: Vec<[f32; 3]> = Vec::with_capacity(6144);
     let mut color_buf: Vec<[f32; 4]> = Vec::with_capacity(6144);
-    let mut bidx_flag_buf: Vec<u32> = Vec::with_capacity(6144);
+    let mut block_index_flag_buf: Vec<u32> = Vec::with_capacity(6144);
     let mut barycentric_buf: Vec<[f32; 3]> = Vec::with_capacity(6144);
     let mut ibuf: Vec<u32> = Vec::with_capacity(6144);
 
     for (cell_y, cell_z, cell_x) in iproduct!(0..CHUNK_DIM, 0..CHUNK_DIM, 0..CHUNK_DIM) {
         // Assume the chunk is at (0,0,0), mesh is translated using transforms elsewhere
         let ipos = AbsBlockPos::new(cell_x, cell_y, cell_z);
-        let ventry = get_block(chunks, ipos);
-        let vdef = registry.lookup_id_to_object(ventry.id).context("invalid block")?;
-        let vstdmeta = StandardShapeMetadata::from_meta(ventry.metadata);
-        let vshape = if vdef.has_drawable_mesh {
-            vstdmeta.shape()
+        let voxel_entry = get_block(chunks, ipos);
+        let voxel_def = registry.lookup_id_to_object(voxel_entry.id).context("invalid block")?;
+        let voxel_std_meta = StandardShapeMetadata::from_meta(voxel_entry.metadata);
+        let voxel_shape = if voxel_def.has_drawable_mesh {
+            voxel_std_meta.shape()
         } else {
             &VOXEL_NO_SHAPE
         };
-        let vor = vstdmeta.orientation();
+        let voxel_orientation = voxel_std_meta.orientation();
         let ipos_as_offset = ipos.split_chunk_component().1.as_index() as u32;
 
-        if !vdef.has_drawable_mesh {
+        if !voxel_def.has_drawable_mesh {
             continue;
         }
 
         for &side_dir in &ALL_DIRECTIONS {
-            let rot_side_dir = vor.unapply_to_dir(side_dir);
-            let side = &vshape.sides[rot_side_dir.as_index()];
+            let rot_side_dir = voxel_orientation.unapply_to_dir(side_dir);
+            let side = &voxel_shape.sides[rot_side_dir.as_index()];
             if side.indices.is_empty() {
                 continue;
             }
-            let ioffset = RelBlockPos::from(side_dir.as_ivec());
+            let side_offset = RelBlockPos::from(side_dir.as_ivec());
 
             // hidden face removal
-            let touchside = side_dir.opposite();
-            let touchpos = ipos + ioffset;
-            let tentry = get_block(chunks, touchpos);
-            let tdef = registry.lookup_id_to_object(tentry.id).context("invalid block")?;
-            let tstdmeta = StandardShapeMetadata::from_meta(tentry.metadata);
-            let tshape = if tdef.has_drawable_mesh {
-                tstdmeta.shape()
+            let touch_side = side_dir.opposite();
+            let touch_pos = ipos + side_offset;
+            let touch_entry = get_block(chunks, touch_pos);
+            let touch_def = registry.lookup_id_to_object(touch_entry.id).context("invalid block")?;
+            let touch_std_meta = StandardShapeMetadata::from_meta(touch_entry.metadata);
+            let touch_shape = if touch_def.has_drawable_mesh {
+                touch_std_meta.shape()
             } else {
                 &VOXEL_NO_SHAPE
             };
-            let tor = tstdmeta.orientation();
-            let touchrotside = tor.unapply_to_dir(touchside);
-            let tside = &tshape.sides[touchrotside.as_index()];
+            let touch_orientation = touch_std_meta.orientation();
+            let touch_rot_side = touch_orientation.unapply_to_dir(touch_side);
+            let touch_shape_side = &touch_shape.sides[touch_rot_side.as_index()];
 
-            if side.can_be_clipped && tdef.has_drawable_mesh && tside.can_clip {
+            if side.can_be_clipped && touch_def.has_drawable_mesh && touch_shape_side.can_clip {
                 continue;
             }
 
-            let voff = pos_buf.len() as u32;
-            let boff = barycentric_buf.len();
+            let pos_buf_offset = pos_buf.len() as u32;
+            let barycentric_buf_offset = barycentric_buf.len();
             let mut barycentric_color_sum: Vec4 = Vec4::ZERO;
-            let vor_matf = vor.to_matrix();
+            let voxel_orientation_matrix = voxel_orientation.to_matrix();
             for vtx in side.vertices.iter() {
                 // Ambient Occlusion
-                let mut ao = 1.0;
-                for &ao_off in vtx.ao_offsets.iter() {
-                    let pos = ipos + RelBlockPos::from(vor.unapply_to_ivec(ao_off));
-                    let bentry = get_block(chunks, pos);
-                    let bdef = registry.lookup_id_to_object(bentry.id).context("invalid block")?;
-                    let bstdmeta = StandardShapeMetadata::from_meta(bentry.metadata);
-                    let bshape = if bdef.has_drawable_mesh {
-                        bstdmeta.shape()
+                let mut ambient_occlusion = 1.0;
+                for &ao_offset in vtx.ao_offsets.iter() {
+                    let pos = ipos + RelBlockPos::from(voxel_orientation.unapply_to_ivec(ao_offset));
+                    let block_entry = get_block(chunks, pos);
+                    let block_def = registry.lookup_id_to_object(block_entry.id).context("invalid block")?;
+                    let block_std_meta = StandardShapeMetadata::from_meta(block_entry.metadata);
+                    let block_shape = if block_def.has_drawable_mesh {
+                        block_std_meta.shape()
                     } else {
                         &VOXEL_NO_SHAPE
                     };
-                    if bshape.causes_ambient_occlusion {
-                        ao *= AO_OCCLUSION_FACTOR;
+                    if block_shape.causes_ambient_occlusion {
+                        ambient_occlusion *= AO_OCCLUSION_FACTOR;
                     }
                 }
 
-                let voffset = vor_matf * vtx.offset;
-                let vnormal = vor_matf * vtx.normal;
+                let vertex_offset = voxel_orientation_matrix * vtx.offset;
+                let vertex_normal = voxel_orientation_matrix * vtx.normal;
                 let position: [f32; 3] = [
-                    ipos.x as f32 + voffset.x + 0.5,
-                    ipos.y as f32 + voffset.y + 0.5,
-                    ipos.z as f32 + voffset.z + 0.5,
+                    ipos.x as f32 + vertex_offset.x + 0.5,
+                    ipos.y as f32 + vertex_offset.y + 0.5,
+                    ipos.z as f32 + vertex_offset.z + 0.5,
                 ];
-                let normal: [f32; 3] = vnormal.to_array();
+                let normal: [f32; 3] = vertex_normal.to_array();
                 // let texid = *vdef.texture_mapping.at_direction(rot_side_dir);
                 let color = [
-                    vdef.representative_color.red * ao,
-                    vdef.representative_color.green * ao,
-                    vdef.representative_color.blue * ao,
+                    voxel_def.representative_color.red * ambient_occlusion,
+                    voxel_def.representative_color.green * ambient_occlusion,
+                    voxel_def.representative_color.blue * ambient_occlusion,
                     1.0,
                 ];
                 barycentric_color_sum += vtx.barycentric_sign * Vec4::from(color);
 
-                let mut idx_flags = ipos_as_offset;
+                let mut block_index_with_flags = ipos_as_offset;
                 if vtx.barycentric.x > 0.1 {
-                    idx_flags |= 1 << 17;
+                    block_index_with_flags |= 1 << 17;
                 }
                 if vtx.barycentric.y > 0.1 {
-                    idx_flags |= 1 << 18;
+                    block_index_with_flags |= 1 << 18;
                 }
 
                 pos_buf.push(position);
                 color_buf.push(color);
                 normal_buf.push(normal);
-                bidx_flag_buf.push(idx_flags);
+                block_index_flag_buf.push(block_index_with_flags);
                 barycentric_buf.push([0.0; 3]); // initialized after the loop
             }
             let final_barycentric_sum = barycentric_color_sum.xyz().into();
-            barycentric_buf[boff..].fill(final_barycentric_sum);
-            ibuf.extend(side.indices.iter().map(|x| x + voff));
+            barycentric_buf[barycentric_buf_offset..].fill(final_barycentric_sum);
+            ibuf.extend(side.indices.iter().map(|x| x + pos_buf_offset));
         }
     }
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos_buf);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normal_buf);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color_buf);
-    mesh.insert_attribute(VERTEX_ATTRIBUTE_BLOCK_INDEX_WITH_FLAGS, bidx_flag_buf);
+    mesh.insert_attribute(VERTEX_ATTRIBUTE_BLOCK_INDEX_WITH_FLAGS, block_index_flag_buf);
     mesh.insert_attribute(VERTEX_ATTRIBUTE_BARYCENTRIC_COLOR_OFFSET, barycentric_buf);
     mesh.insert_indices(Indices::U32(ibuf));
 
