@@ -12,6 +12,7 @@ use gs_schemas::mutwatcher::MutWatcher;
 use gs_schemas::schemas::CapnpExt;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
+use gs_schemas::dependencies::itertools::Itertools;
 use meshgen::mesh_from_chunk;
 use smallvec::{SmallVec, smallvec};
 
@@ -164,28 +165,62 @@ fn client_chunk_mesher_system(
         if !needs_mesh {
             continue;
         }
-        let Some(neighbors) = loaded_chunks.get_neighborhood_around(pos).transpose_option() else {
-            continue;
-        };
-        let chunk_mesh = match mesh_from_chunk(&block_registry, &neighbors) {
-            Ok(mesh) => mesh,
-            Err(e) => {
-                error!(position = %pos, error = %e, "Could not mesh chunk");
-                continue;
+
+        let chunk_mesh = {
+            // skip creating a mesh for this chunk if it's completely empty
+            let any_chunk_block_filled = match chunk.blocks.iter()
+                .map(|ventry| block_registry.lookup_id_to_object(ventry.id).context("invalid block"))
+                .process_results(|mut iter| iter.any(|x| x.has_drawable_mesh)) {
+                Ok(any_filled) => any_filled,
+                Err(e) => {
+                    error!(position = %pos, error = %e, "Could not determine if chunk needs mesh");
+                    continue;
+                }
+            };
+            if !any_chunk_block_filled {
+                None
+            } else {
+                let Some(neighbors) = loaded_chunks.get_neighborhood_around(pos).transpose_option() else {
+                    continue;
+                };
+
+                let mesh = match mesh_from_chunk(&block_registry, &neighbors) {
+                    Ok(mesh) => mesh,
+                    Err(e) => {
+                        error!(position = %pos, error = %e, "Could not mesh chunk");
+                        continue;
+                    }
+                };
+                // require a nonempty mesh because Bevy doesn't like empty meshes
+                if mesh.count_vertices() == 0 {
+                    None
+                } else {
+                    Some(mesh)
+                }
             }
         };
-        let mesh = mesh_assets.add(chunk_mesh);
+        let mesh = chunk_mesh.map(|chunk_mesh| mesh_assets.add(chunk_mesh));
         if let Some(mut old_mesh_entity_commands) = old_mesh.and_then(|om| commands.get_entity(om.entities[0]).ok()) {
-            old_mesh_entity_commands.insert(Mesh3d(mesh));
+            if let Some(mesh) = mesh {
+                // only add a mesh component if the chunk has blocks with meshes
+                old_mesh_entity_commands.insert(Mesh3d(mesh));
+            } else {
+                // and remove the old one if it doesn't
+                old_mesh_entity_commands.remove::<Mesh3d>();
+            }
             chunk_mutations.push((pos, Mutation::NewMeshRevision(chunk.new_with_same_revision(()))));
         } else {
-            let entity = commands
-                .spawn((
-                    Mesh3d(mesh),
+            let entity = {
+                let mut entity_commands = commands.spawn((
                     MeshMaterial3d(voxel_material.clone()),
                     Transform::from_translation(AbsBlockPos::from(pos).as_vec3()),
-                ))
-                .id();
+                ));
+                if let Some(mesh) = mesh {
+                    // only add a mesh component if the chunk has blocks with meshes
+                    entity_commands.insert(Mesh3d(mesh));
+                }
+                entity_commands.id()
+            };
             chunk_mutations.push((
                 pos,
                 Mutation::NewMesh(chunk.new_with_same_revision(ChunkMeshState {
