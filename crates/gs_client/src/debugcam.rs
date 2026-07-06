@@ -4,16 +4,21 @@
 //
 //THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::tailwind;
+use bevy::image::ImageSampler;
 use bevy::input::mouse::AccumulatedMouseMotion;
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
-use bevy_egui::egui::Align2;
+use bevy_egui::egui::{Align2, AtomExt, TextureOptions};
 use bevy_egui::input::egui_wants_any_input;
-use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, EguiTextureHandle};
+use image::{ImageBuffer, Rgba};
 use gs_common::raycast::{RaycastContext, raycast};
-use gs_common::voxel::plugin::BlockRegistryHolder;
+use gs_common::voxel::plugin::{BlockRegistryHolder, CHUNK_LOAD_RADIUS};
 use gs_schemas::actions::{BlockAction, PositionData};
-use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, WorldPos};
+use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, RelChunkPos, WorldPos};
+use gs_schemas::dependencies::itertools::iproduct;
 use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
 use gs_schemas::voxel::voxeltypes::EMPTY_BLOCK;
 
@@ -263,11 +268,23 @@ fn player_action(
     }
 }
 
-#[derive(Default, Resource)]
+#[derive(Resource)]
 struct DebugGizmoToggles {
     local_coordinates: bool,
     current_chunk: bool,
     raycast: bool,
+    generated_chunk_minimap: bool,
+}
+
+impl Default for DebugGizmoToggles {
+    fn default() -> Self {
+        Self {
+            local_coordinates: false,
+            current_chunk: true,
+            raycast: false,
+            generated_chunk_minimap: true,
+        }
+    }
 }
 
 fn gizmo_toggles(
@@ -293,6 +310,7 @@ fn gizmo_toggles(
             ui.checkbox(&mut toggles.local_coordinates, "Local Coords");
             ui.checkbox(&mut toggles.current_chunk, "Current Chunk");
             ui.checkbox(&mut toggles.raycast, "Raycast");
+            ui.checkbox(&mut toggles.generated_chunk_minimap, "Generated Chunk Minimap");
         });
 }
 
@@ -333,7 +351,6 @@ fn cur_chunk_gizmo(
     let camera_zero: Vec3A = camera.transform_point(Vec3::ZERO).into();
 
     let curcpos = AbsChunkPos::from(WorldPos::from_vec3(camera_zero).as_blockpos());
-    // let curcpos = AbsChunkPos::from(AbsBlockPos::from_ivec3(camera_zero.floor().as_ivec3()));
     let curchunk = voxels.loaded_chunks().get_chunk(curcpos);
     if let Some(chunk) = curchunk {
         let chunk = chunk.read();
@@ -396,6 +413,86 @@ fn lookat_gizmo(
     gizmos.sphere(zero_cube + Vec3::from(rc.f32_offset), 0.1, tailwind::GREEN_800);
 }
 
+fn generated_chunk_minimap_gizmo(
+    camera_query: Query<&Transform, With<FlyCam>>,
+    voxels: Query<&ClientVoxelUniverse>,
+    toggles: Res<DebugGizmoToggles>,
+
+    mut image_assets: ResMut<Assets<Image>>,
+    images: Res<Images>,
+    mut rendered_texture_id: Local<bevy_egui::egui::TextureId>,
+    mut is_initialized: Local<bool>,
+
+    mut ui: EguiContexts,
+) {
+    use bevy_egui::egui;
+
+    if !toggles.generated_chunk_minimap {
+        return;
+    }
+
+    let image_asset_id = images.minimap_image.id();
+    if !*is_initialized {
+        *is_initialized = true;
+        *rendered_texture_id = ui.add_image(EguiTextureHandle::Weak(image_asset_id));
+    }
+    // Obtain a mutable reference to the Image asset.
+    let Some(mut image) = image_assets.get_mut(image_asset_id) else {
+        return;
+    };
+    if image.data.is_none() {
+        let buf = ImageBuffer::from_pixel(MINIMAP_IMAGE_SIZE, MINIMAP_IMAGE_SIZE, BLANK_COLOR);
+        image.data = Some(buf.into_raw());
+    } else {
+        image.clear(&BLANK_COLOR.0);
+    }
+
+    let Ok(ctx) = ui.ctx_mut() else { return };
+
+    let Ok(camera) = camera_query.single() else {
+        return;
+    };
+    let Ok(voxels) = voxels.single() else {
+        return;
+    };
+    let camera_zero: Vec3A = camera.translation.into();
+
+    let current_c_pos = AbsChunkPos::from(WorldPos::from_vec3(camera_zero).as_blockpos());
+    for (x, y, z) in iproduct!(-MINIMAP_IMAGE_HALF_SIZE..=MINIMAP_IMAGE_HALF_SIZE, -MINIMAP_IMAGE_HALF_SIZE..=MINIMAP_IMAGE_HALF_SIZE, -MINIMAP_IMAGE_HALF_SIZE..=MINIMAP_IMAGE_HALF_SIZE) {
+        let p_x = (current_c_pos.x + x + MINIMAP_IMAGE_HALF_SIZE) as u32;
+        let p_y = (current_c_pos.z + z + MINIMAP_IMAGE_HALF_SIZE) as u32;
+        if p_x >= MINIMAP_IMAGE_SIZE || p_y >= MINIMAP_IMAGE_SIZE {
+            continue;
+        }
+
+        let current_chunk = voxels.loaded_chunks().get_chunk(current_c_pos + RelChunkPos::new(x, y, z));
+        if let Some(_) = current_chunk {
+            let LinearRgba {red: luma, .. } = image.get_color_at(p_x, p_y).expect("invalid color").to_linear();
+
+            const SINGLE_STEP_LUMA: f32 = 8.0 / 255.0;
+            image.set_color_at(p_x, p_y, LinearRgba::gray(luma + SINGLE_STEP_LUMA).into()).expect("invalid color");
+        }
+    }
+
+    egui::Window::new("Generated Chunk Minimap")
+        .collapsible(true)
+        .resizable(false)
+        .anchor(Align2::RIGHT_TOP, egui::vec2(0.0, 0.0))
+        .auto_sized()
+        .show(ctx, move |ui| {
+            ui.add(egui::Image::new(
+                egui::load::SizedTexture::new(
+                    *rendered_texture_id,
+                    [MINIMAP_IMAGE_SIZEF, MINIMAP_IMAGE_SIZEF]
+                ))
+                .show_loading_spinner(true)
+                .fit_to_original_size(MINIMAP_DISPLAY_FACTOR)
+                .texture_options(TextureOptions::NEAREST)
+                .atom_align(Align2::RIGHT_TOP)
+            );
+        });
+}
+
 fn cursor_grab(
     keys: Res<ButtonInput<KeyCode>>,
     key_bindings: Res<KeyBindings>,
@@ -411,7 +508,7 @@ fn spawn_debug_text(asset_server: Res<AssetServer>, mut commands: Commands) {
     let font: Handle<Font> = asset_server.load("fonts/cascadiacode.ttf");
     commands
         .spawn((
-            Text::new("Current Biome:"),
+            Text::new("Current Biome: "),
             TextFont::from(font.clone()).with_font_size(15.0),
             TextColor(Color::srgb(0.9, 0.9, 0.9)),
             BiomeText,
@@ -447,6 +544,41 @@ fn spawn_debug_text(asset_server: Res<AssetServer>, mut commands: Commands) {
         });
 }
 
+const MINIMAP_IMAGE_HALF_SIZE: i32 = CHUNK_LOAD_RADIUS * 2;
+const MINIMAP_IMAGE_SIZE: u32 = MINIMAP_IMAGE_HALF_SIZE as u32 * 2;
+const MINIMAP_IMAGE_SIZEF: f32 = MINIMAP_IMAGE_SIZE as f32;
+const MINIMAP_DISPLAY_FACTOR: f32 = 16.0;
+const BLANK_COLOR: Rgba<u8> = Rgba([0x00, 0x00, 0x00, 0x00]);
+
+#[derive(Resource)]
+struct Images {
+    minimap_image: Handle<Image>,
+}
+
+impl FromWorld for Images {
+    fn from_world(world: &mut World) -> Self {
+        let mut image_assets = world.get_resource_mut::<Assets<Image>>().unwrap();
+
+        let buf = ImageBuffer::from_pixel(MINIMAP_IMAGE_SIZE, MINIMAP_IMAGE_SIZE, BLANK_COLOR);
+        let mut image = Image::new(
+            Extent3d {
+                width: buf.width(),
+                height: buf.height(),
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            buf.into_raw(),
+            TextureFormat::Rgba8Unorm,
+            RenderAssetUsages::default()
+        );
+        image.sampler = ImageSampler::linear();
+
+        Self {
+            minimap_image: image_assets.add(image),
+        }
+    }
+}
+
 /// Contains everything needed to add first-person fly camera behavior to your game
 pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
@@ -454,6 +586,7 @@ impl Plugin for PlayerPlugin {
         app.init_resource::<MovementSettings>()
             .init_resource::<KeyBindings>()
             .init_resource::<DebugGizmoToggles>()
+            .init_resource::<Images>()
             .add_systems(Startup, setup_camera)
             .add_systems(OnEnter(ClientAppState::InGame), initial_grab_cursor)
             .add_systems(OnEnter(ClientAppState::InGame), spawn_debug_text)
@@ -469,7 +602,7 @@ impl Plugin for PlayerPlugin {
                 Update,
                 player_action.run_if(not(egui_wants_any_input)).in_set(InGameSystemSet),
             )
-            .add_systems(EguiPrimaryContextPass, gizmo_toggles.in_set(InGameSystemSet))
+            .add_systems(EguiPrimaryContextPass, (gizmo_toggles, generated_chunk_minimap_gizmo).in_set(InGameSystemSet))
             .add_systems(
                 Update,
                 (xyz_gizmo, cur_chunk_gizmo, lookat_gizmo)
