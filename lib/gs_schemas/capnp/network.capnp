@@ -41,6 +41,9 @@ enum PacketId @0xb9187b435a666525 {
 
     # S->C :ChunkDataStreamPacket (usually asynchronous)
     chunkData @6;
+
+    # S->C :EntityDataStreamPacket (usually asynchronous)
+    entityData @7;
 }
 
 # Each packet is prefixed with a LEB128-encoded length field
@@ -109,4 +112,12 @@ struct ChunkDataStreamPacket {
     position @1 :GameTypes.IVec3;
     # Serialized chunk data.
     data @2 :GameTypes.FullChunkData;
+}
+
+struct EntityDataStreamPacket {
+    # Game tick these changes belong to
+    tick @0 :UInt64;
+    newEntities @1 :List(GameTypes.EntitySpawnData);
+    updatedEntities @2 :List(GameTypes.EntityUpdateData);
+    deletedEntities @3 :List(GameTypes.Uuid);
 }

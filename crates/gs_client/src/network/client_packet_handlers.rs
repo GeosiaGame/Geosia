@@ -21,6 +21,7 @@ use gs_schemas::{
 };
 
 use super::AuthenticatedNetworkClient;
+use crate::network::client_entity_syncer::NetworkEntityClient;
 use crate::{
     ClientData, ClientNetworkThreadHolder, prelude::*, states::loading_game::LoadingBootstrapPromiseResolver,
     voxel::ClientVoxelUniverseBuilder,
@@ -65,6 +66,7 @@ pub fn client_packet_handler_system(
     current_state: Res<State<ClientAppState>>,
     mut commands: Commands,
     mut network_voxel_client: Option<Single<&mut NetworkVoxelClient>>,
+    mut network_entity_client: ResMut<NetworkEntityClient>,
 ) {
     let client = &mut *client;
     let response_timestamp = client.packet_timestamp();
@@ -138,6 +140,9 @@ pub fn client_packet_handler_system(
                         .chunk_packet_queue
                         .push_back(incoming);
                 }
+                PacketId::EntityData => {
+                    network_entity_client.packet_queue.push_back(incoming);
+                }
             }
         } else {
             // response on c2s
@@ -163,7 +168,7 @@ pub fn client_packet_handler_system(
                     let result = SimpleResult::from_i32(root.get()?.get_simple_payload());
                     info!("Block action result: {result:?}");
                 }
-                PacketId::ChunkData => {
+                PacketId::ChunkData | PacketId::EntityData => {
                     // no-op
                 }
             }

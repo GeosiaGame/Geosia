@@ -229,7 +229,7 @@ pub fn server_packet_handler_system(
                     root.set_timestamp_ms(response_timestamp);
                     root.set_simple_payload(SimpleResult::Ok.as_i32());
                 }
-                PacketId::ChunkData => {
+                PacketId::ChunkData | PacketId::EntityData => {
                     // no-op
                 }
             }
@@ -271,7 +271,7 @@ pub fn server_packet_handler_system(
                 PacketId::BlockAction => {
                     // no-op
                 }
-                PacketId::ChunkData => {
+                PacketId::ChunkData | PacketId::EntityData => {
                     // no-op
                 }
             }

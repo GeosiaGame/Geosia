@@ -15,7 +15,6 @@ pub mod mutwatcher;
 pub mod player;
 pub mod range;
 pub mod raycast;
-pub mod registries;
 pub mod registry;
 pub mod savefile;
 pub mod schemas;

@@ -4,8 +4,7 @@ use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::time::Instant;
 
-use bevy::ecs::component::{Mutable, StorageType};
-use bevy::ecs::lifecycle::ComponentHook;
+use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
 use gs_schemas::GameSide;
 use gs_schemas::player::{PlayerAccount, PlayerCharacter};
@@ -29,6 +28,7 @@ use super::transport::{
 };
 use crate::GameServer;
 use crate::network::PeerAddress;
+use crate::network::server_entity_syncer::server_entity_syncer_plugin;
 use crate::network::transport::{InProcessDuplex, quinn_server_config};
 use crate::prelude::*;
 
@@ -107,6 +107,8 @@ pub struct QueuedPacket {
 }
 
 /// A reference to a connected and bootstrapped player in the ECS.
+#[derive(Component)]
+#[component(on_insert = Self::on_insert, on_remove = Self::on_remove)]
 pub struct ConnectedPlayer {
     /// Information acquired about the player during authentication.
     pub authenticated_info: AuthenticatedInfo,
@@ -118,6 +120,24 @@ pub struct ConnectedPlayer {
     pub main_s2c_stream: Arc<PacketStream>,
     /// Main ordered stream for client requests to the server and their replies.
     pub main_c2s_stream: Arc<PacketStream>,
+}
+
+/// An event triggered when a player successfully authenticates with the server for joining the game.
+/// Only ran on the server bevy app.
+#[derive(EntityEvent)]
+pub struct ServerPlayerJoined {
+    /// The [`ConnectedPlayer`] entity who joined.
+    #[event_target]
+    pub connected_player: Entity,
+}
+
+/// An event triggered when a player is about to be removed from the game due to a disconnection.
+/// Only ran on the server bevy app.
+#[derive(EntityEvent)]
+pub struct ServerPlayerLeft {
+    /// The [`ConnectedPlayer`] entity who is leaving.
+    #[event_target]
+    pub connected_player: Entity,
 }
 
 /// A table entity keeping lookup information for all connected players.
@@ -145,45 +165,44 @@ impl ConnectedPlayersTable {
     }
 }
 
-impl Component for ConnectedPlayer {
-    const STORAGE_TYPE: StorageType = StorageType::Table;
-    type Mutability = Mutable;
-
-    fn on_insert() -> Option<ComponentHook> {
-        Some(|mut world: DeferredWorld, context| {
-            let entity = context.entity;
-            let player = world.get::<ConnectedPlayer>(entity).unwrap();
-            let addr = player.authenticated_info.address;
-            let mut table = world.resource_mut::<ConnectedPlayersTable>();
-            let old = table.players_by_address.insert(addr, entity);
-            if let Some(old) = old {
-                let new_char = &world
-                    .get::<ConnectedPlayer>(entity)
-                    .unwrap()
-                    .authenticated_info
-                    .player_character;
-                let old_char = world
-                    .get::<ConnectedPlayer>(old)
-                    .map(|p| &p.authenticated_info.player_character);
-                if let Some(old_char) = old_char {
-                    panic!(
-                        "Attempting to insert a player `{new_char}` with a duplicate peer address: {addr} of `{old_char}`"
-                    );
-                } else {
-                    panic!("Attempting to insert a player `{new_char}` with a duplicate peer address: {addr}");
-                }
+impl ConnectedPlayer {
+    fn on_insert(mut world: DeferredWorld, context: HookContext) {
+        let entity = context.entity;
+        let player = world.get::<ConnectedPlayer>(entity).unwrap();
+        let addr = player.authenticated_info.address;
+        let mut table = world.resource_mut::<ConnectedPlayersTable>();
+        let old = table.players_by_address.insert(addr, entity);
+        if let Some(old) = old {
+            let new_char = &world
+                .get::<ConnectedPlayer>(entity)
+                .unwrap()
+                .authenticated_info
+                .player_character;
+            let old_char = world
+                .get::<ConnectedPlayer>(old)
+                .map(|p| &p.authenticated_info.player_character);
+            if let Some(old_char) = old_char {
+                panic!(
+                    "Attempting to insert a player `{new_char}` with a duplicate peer address: {addr} of `{old_char}`"
+                );
+            } else {
+                panic!("Attempting to insert a player `{new_char}` with a duplicate peer address: {addr}");
             }
-        })
+        }
+        world.trigger(ServerPlayerJoined {
+            connected_player: entity,
+        });
     }
 
-    fn on_remove() -> Option<ComponentHook> {
-        Some(|mut world: DeferredWorld, context| {
-            let entity = context.entity;
-            let player = world.get::<ConnectedPlayer>(entity).unwrap();
-            let addr = player.authenticated_info.address;
-            let mut table = world.resource_mut::<ConnectedPlayersTable>();
-            table.players_by_address.remove(&addr);
-        })
+    fn on_remove(mut world: DeferredWorld, context: HookContext) {
+        let entity = context.entity;
+        world.trigger(ServerPlayerLeft {
+            connected_player: entity,
+        });
+        let player = world.get::<ConnectedPlayer>(entity).unwrap();
+        let addr = player.authenticated_info.address;
+        let mut table = world.resource_mut::<ConnectedPlayersTable>();
+        table.players_by_address.remove(&addr);
     }
 }
 
@@ -193,6 +212,7 @@ pub struct NetworkServerPlugin;
 impl Plugin for NetworkServerPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(ServerPacketHandlerPlugin);
+        app.add_plugins(server_entity_syncer_plugin);
         app.world_mut().insert_resource(ConnectedPlayersTable::default());
     }
 }

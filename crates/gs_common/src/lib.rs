@@ -2,11 +2,13 @@
 
 pub mod config;
 pub mod dedicated_server;
+pub mod entity;
 pub mod network;
 pub mod player;
 pub mod prelude;
 pub mod promises;
 pub mod raycast;
+pub mod registries;
 pub mod universe;
 pub mod voxel;
 
@@ -20,8 +22,8 @@ use bevy::log::LogPlugin;
 use bevy::platform::cell::SyncCell;
 use bevy::state::app::StatesPlugin;
 use bevy::time::TimePlugin;
+use entity::standard_entities;
 use gs_schemas::dependencies::bytes::Bytes;
-use gs_schemas::registries::GameRegistries;
 use gs_schemas::registry::Registry;
 use gs_schemas::savefile::SavefileMetadata;
 use gs_schemas::schemas::network_capnp::game_server_metadata;
@@ -34,12 +36,13 @@ use voxel::persistence::generator::GeneratorPersistenceLayer;
 use voxel::plugin::VoxelUniverseBuilder;
 
 use crate::config::{GameConfig, GameConfigHandle};
-use crate::network::SharedRegistryHolder;
 use crate::network::server::{ConnectedPlayersTable, NetworkServerPlugin, NetworkThreadServerState};
 use crate::network::thread::NetworkThread;
 use crate::network::transport::PacketWrapper;
+use crate::network::{SharedRegistryHolder, networked_entities_plugin};
 use crate::player::player_data_server_plugin;
 use crate::prelude::*;
+use crate::registries::GameRegistries;
 use crate::universe::geosia_universe_plugin;
 use crate::voxel::generator::multi_noise::MultiNoiseGenerator;
 use crate::voxel::persistence::savefile::SavefilePersistenceLayer;
@@ -330,7 +333,8 @@ impl GameServer {
         app.add_plugins(geosia_universe_plugin)
             .add_plugins(VoxelUniversePlugin::<ServerData>::new())
             .add_plugins(NetworkServerPlugin)
-            .add_plugins(player_data_server_plugin);
+            .add_plugins(player_data_server_plugin)
+            .add_plugins(networked_entities_plugin);
 
         app.insert_resource(SharedRegistryHolder(engine.shared_registries.clone()));
         let block_registry = Arc::clone(&engine.shared_registries.block_types);
@@ -414,10 +418,13 @@ pub fn builtin_game_registries() -> GameRegistries {
     voxel::blocks::setup_basic_blocks(&mut block_types);
     let mut biome_types = Registry::default();
     voxel::biomes::setup_basic_biomes(&mut biome_types);
+    let mut entity_types = Registry::default();
+    standard_entities::setup_standard_server_entities(&mut entity_types);
 
     GameRegistries {
         block_types: Arc::new(block_types),
         biome_types: Arc::new(biome_types),
+        entity_types: Arc::new(entity_types),
     }
 }
 

@@ -101,6 +101,8 @@ struct GameBootstrapData @0xb0778941893c57e5 {
     blockRegistry @1 :RegistryIdMappingBundle;
     # Name->ID mappings for the biome registry.
     biomeRegistry @2 :RegistryIdMappingBundle;
+    # Name->ID mappings for the entity registry.
+    entityRegistry @3 :RegistryIdMappingBundle;
 }
 
 struct FullChunkData {
@@ -128,4 +130,20 @@ struct BlockAction {
             unused @1 :Void;
         }
     }
+}
+
+struct EntitySpawnData {
+    # The (network) UUID of the entity being spawned
+    nid @0 :Uuid;
+    # The registry ID of the entity being spawned
+    registryId @1 :UInt32;
+    # The serialized custom data of the entity
+    serialized @2 :List(UInt8);
+}
+
+struct EntityUpdateData {
+    # The (network) UUID of the entity being updated
+    nid @0 :Uuid;
+    # The serialized custom delta data of the entity
+    serialized @1 :List(UInt8);
 }

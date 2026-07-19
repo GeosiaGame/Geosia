@@ -5,6 +5,7 @@
 
 // Anyhow error handling
 pub use anyhow::{anyhow, bail, ensure, Context, Result};
+pub use bevy::prelude::Result as BevyResult;
 
 // Tokio and std MPSC channels
 pub use std::sync::mpsc::{
@@ -54,3 +55,4 @@ pub use bevy::prelude::*;
 pub use bevy::log::tracing::{debug, error, info, trace, warn};
 // Our core bevy types
 pub use crate::universe::UniverseTransform;
+pub use crate::network::{EntityNetworkId, server_entity_syncer::ServerToClientSyncableEntity};
