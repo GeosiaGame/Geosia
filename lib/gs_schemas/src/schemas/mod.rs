@@ -2,6 +2,7 @@
 //!
 //! Based on capnproto: <https://capnproto.org/language.html>, <https://docs.rs/capnp/latest/capnp/>
 
+use std::borrow::Cow;
 use std::convert::Infallible;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -420,6 +421,16 @@ pub fn new_packet_builder<OwnedPayloadType: capnp::traits::Owned>()
 pub fn new_simple_packet_builder()
 -> TypedBuilder<network_capnp::network_packet::Owned<capnp::any_pointer::Owned>, HeapAllocator> {
     capnp::message::TypedBuilder::new_default()
+}
+
+/// Helper to read a capnp-read byte array as a Rust slice, allocating a `Vec<u8>` if needed due to format evolution.
+pub fn capnp_bytes_to_cow<'b>(msg: &'b capnp::primitive_list::Reader<'_, u8>) -> Cow<'b, [u8]> {
+    if let Some(slice) = msg.as_slice() {
+        Cow::Borrowed(slice)
+    } else {
+        let data: Vec<u8> = msg.iter().collect();
+        Cow::Owned(data)
+    }
 }
 
 /// Alias for the capnp builder type used for passing raw packet data around.

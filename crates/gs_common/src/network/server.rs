@@ -7,6 +7,7 @@ use std::time::Instant;
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
 use gs_schemas::GameSide;
+use gs_schemas::limits::MAX_CONNECTED_PLAYERS;
 use gs_schemas::player::{PlayerAccount, PlayerCharacter};
 use gs_schemas::schemas::game_types_capnp::result;
 use gs_schemas::schemas::network_capnp::{
@@ -108,7 +109,7 @@ pub struct QueuedPacket {
 
 /// A reference to a connected and bootstrapped player in the ECS.
 #[derive(Component)]
-#[component(on_insert = Self::on_insert, on_remove = Self::on_remove)]
+#[component(on_insert = Self::on_insert, on_discard = Self::on_discard)]
 pub struct ConnectedPlayer {
     /// Information acquired about the player during authentication.
     pub authenticated_info: AuthenticatedInfo,
@@ -194,7 +195,7 @@ impl ConnectedPlayer {
         });
     }
 
-    fn on_remove(mut world: DeferredWorld, context: HookContext) {
+    fn on_discard(mut world: DeferredWorld, context: HookContext) {
         let entity = context.entity;
         world.trigger(ServerPlayerLeft {
             connected_player: entity,
@@ -401,7 +402,9 @@ impl NetworkThreadServerState {
                                 .context("Getting table of connected players")?;
                             let currently_connected_players = connected_players.players_by_address.len();
                             // TODO: harden against a flood of joins
-                            if currently_connected_players >= inner_engine.config().borrow().server.max_players as usize
+                            if currently_connected_players
+                                >= (inner_engine.config().borrow().server.max_players as usize)
+                                    .min(MAX_CONNECTED_PLAYERS as usize)
                             {
                                 return Ok(Some(authentication_error::Kind::ServerFull));
                             }

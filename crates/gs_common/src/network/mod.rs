@@ -94,7 +94,7 @@ pub fn networked_entities_plugin(app: &mut App) {
 /// A unique identifier used for disambiguating entities over the network.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Component)]
 #[component(immutable)]
-#[component(on_add, on_remove)]
+#[component(on_add, on_discard)]
 pub struct EntityNetworkId(pub NonNilUuid);
 
 impl Default for EntityNetworkId {
@@ -115,7 +115,7 @@ impl EntityNetworkId {
             .push(ctx.entity);
     }
 
-    fn on_remove(mut world: DeferredWorld, ctx: HookContext) {
+    fn on_discard(mut world: DeferredWorld, ctx: HookContext) {
         let nid = world.get::<Self>(ctx.entity).unwrap().0;
         let mut table = world.resource_mut::<EntityNetworkIdLookupTable>();
         let Entry::Occupied(mut entry) = table.network_ids.entry(nid) else {

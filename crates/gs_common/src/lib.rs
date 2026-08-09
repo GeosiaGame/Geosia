@@ -24,6 +24,7 @@ use bevy::state::app::StatesPlugin;
 use bevy::time::TimePlugin;
 use entity::standard_entities;
 use gs_schemas::dependencies::bytes::Bytes;
+use gs_schemas::limits::MAX_CONNECTED_PLAYERS;
 use gs_schemas::registry::Registry;
 use gs_schemas::savefile::SavefileMetadata;
 use gs_schemas::schemas::network_capnp::game_server_metadata;
@@ -145,7 +146,7 @@ impl GameServer {
         meta.set_title(&config.server.server_title);
         meta.set_subtitle(&config.server.server_subtitle);
         meta.set_player_count(connected_players);
-        meta.set_player_limit(config.server.max_players as i32);
+        meta.set_player_limit((config.server.max_players as i32).min(MAX_CONNECTED_PLAYERS as i32));
         PacketWrapper::from(response).as_bytes()
     }
 

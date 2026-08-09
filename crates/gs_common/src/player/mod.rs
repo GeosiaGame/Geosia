@@ -40,7 +40,7 @@ pub struct HasServerPlayerAvatar(Entity);
 
 /// Links an entity inside the game universe to a [`PlayerCharacter`], acting as its in-game avatar.
 #[derive(Debug, Component)]
-#[component(on_add = Self::on_add, on_remove = Self::on_remove)]
+#[component(on_add = Self::on_add, on_discard = Self::on_discard)]
 #[require(UniverseTransform, ServerToClientSyncableEntity = ServerToClientSyncableEntity::new(PLAYER_AVATAR_ENTITY_NAME))]
 #[relationship_target(relationship = HasServerPlayerAvatar)]
 pub struct ServerPlayerAvatar {
@@ -75,7 +75,7 @@ impl ServerPlayerAvatar {
         }
     }
 
-    fn on_remove(mut world: DeferredWorld, ctx: HookContext) {
+    fn on_discard(mut world: DeferredWorld, ctx: HookContext) {
         let Some(avatar) = world.entity(ctx.entity).get::<ServerPlayerAvatar>() else {
             return;
         };

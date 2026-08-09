@@ -2,12 +2,12 @@ use std::borrow::Cow;
 use std::collections::VecDeque;
 
 use gs_common::InGameSystemSet;
-use gs_common::network::SharedRegistryHolder;
 use gs_common::network::server::QueuedPacket;
 use gs_common::network::transport::RPC_CLIENT_READER_OPTIONS;
+use gs_common::network::{EntityNetworkIdLookupTable, SharedRegistryHolder};
 use gs_schemas::dependencies::itertools::Itertools;
-use gs_schemas::schemas::CapnpExt;
 use gs_schemas::schemas::network_capnp::entity_data_stream_packet;
+use gs_schemas::schemas::{CapnpExt, capnp_bytes_to_cow};
 use uuid::{NonNilUuid, Uuid};
 
 use crate::network::client_packet_handlers::client_packet_handler_system;
@@ -57,19 +57,42 @@ fn process_entity_packet_queue(world: &mut World) -> BevyResult {
             let rid = RegistryId::try_new(new_ent.get_registry_id()).context("invalid new entity registry id")?;
             let nid = Uuid::read_from_message(&new_ent.get_nid()?)?;
             let nid = NonNilUuid::new(nid).context("invalid new entity network id")?;
-            let data = new_ent.get_serialized()?;
-            let data = if let Some(slice) = data.as_slice() {
-                Cow::Borrowed(slice)
-            } else {
-                let data = data.iter().collect_vec();
-                Cow::Owned(data)
-            };
             let etype = registry
                 .lookup_id_to_object(rid)
                 .context("missing new entity registry id")?;
+            let data = new_ent.get_serialized()?;
+            let data = capnp_bytes_to_cow(&data);
             let e = world.spawn((EntityNetworkId(nid), ClientRemoteEntity { registry_id: rid }));
             (etype.deserialize_full)(&data, e)?;
-            info!(?nid, ?etype.name, "Created a network entity");
+        }
+        for upd_ent in payload.get_updated_entities()? {
+            let nid = Uuid::read_from_message(&upd_ent.get_nid()?)?;
+            let nid = NonNilUuid::new(nid).context("invalid updated entity network id")?;
+            let e = world
+                .resource::<EntityNetworkIdLookupTable>()
+                .get_entity(nid)
+                .context("update for non-existent entity ID")?;
+            let rid = world
+                .entity(e)
+                .get::<ClientRemoteEntity>()
+                .context("missing client remote entity component on networked entity")?
+                .registry_id;
+            let etype = registry
+                .lookup_id_to_object(rid)
+                .context("missing new entity registry id")?;
+            let data = upd_ent.get_serialized()?;
+            let data = capnp_bytes_to_cow(&data);
+            let e = world.entity_mut(e);
+            (etype.deserialize_delta)(&data, e)?;
+        }
+        for del_ent in payload.get_deleted_entities()? {
+            let nid = Uuid::read_from_message(&del_ent)?;
+            let nid = NonNilUuid::new(nid).context("invalid deleted entity network id")?;
+            let e = world
+                .resource::<EntityNetworkIdLookupTable>()
+                .get_entity(nid)
+                .context("update for non-existent entity ID")?;
+            world.entity_mut(e).despawn();
         }
     }
     world.resource_mut::<NetworkEntityClient>().packet_queue = queue;
