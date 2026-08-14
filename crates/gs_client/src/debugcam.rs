@@ -10,7 +10,7 @@ use bevy::image::ImageSampler;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
-use bevy_egui::egui::{Align2, AtomExt, TextureOptions};
+use bevy_egui::egui::{Align2, TextureOptions};
 use bevy_egui::input::egui_wants_any_input;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, EguiTextureHandle};
 use image::{ImageBuffer, Rgba};
@@ -98,7 +98,7 @@ fn initial_grab_cursor(state: Res<IsCursorGrabbed>, mut commands: Commands) {
 fn setup_camera(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 6.0, 12.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(0.0, 12.0, 0.0).looking_at(Vec3::ZERO, Vec3::Y),
         FlyCam,
     ));
 }
@@ -488,7 +488,6 @@ fn generated_chunk_minimap_gizmo(
                 .show_loading_spinner(true)
                 .fit_to_original_size(MINIMAP_DISPLAY_FACTOR)
                 .texture_options(TextureOptions::NEAREST)
-                .atom_align(Align2::RIGHT_TOP)
             );
         });
 }
