@@ -192,15 +192,15 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
             let (ref blend, (elevation, temperature, moisture), height) = vparams[index];
 
             for (ox, iy, oz) in iproduct!(0..QUART_DIM, -CHUNK_DIM..(CHUNK_DIM * 2), 0..QUART_DIM) {
-                let b_pos = InChunkPos::try_new(ix * QUART_DIM + ox, iy, iz * QUART_DIM + oz).unwrap();
-                let g_pos = position.block_pos(b_pos);
+                let b_pos = RelBlockPos::new(ix * QUART_DIM + ox, iy, iz * QUART_DIM + oz);
+                let g_pos = AbsBlockPos::from(position) + b_pos;
 
                 let shift = RelBlockPos::new(
                     <OpenSimplex as NoiseNDTo2D<i32, f64, 4>>::get_2d(&self.point_offset_noise, [-g_pos.x, g_pos.z]) as i32,
                     0,
                     <OpenSimplex as NoiseNDTo2D<i32, f64, 4>>::get_2d(&self.point_offset_noise, [g_pos.x, -g_pos.z]) as i32,
                 );
-                let b_pos = b_pos.offset_from_chunk_origin() + shift;
+                let b_pos = b_pos + shift;
 
                 Self::place_decorators(
                     &mut chunk.blocks,
