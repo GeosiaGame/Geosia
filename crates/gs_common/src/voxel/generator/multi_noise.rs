@@ -270,7 +270,7 @@ impl MultiNoiseGenerator {
 
         height: i32,
         elevation: f64, temperature: f64, moisture: f64,
-        weird_noise: &Box<dyn NoiseFn<f64, 4>>,
+        weird_noise: &Box<dyn NoiseFn<f64, 4> + Send + Sync>,
     ) {
         for (_, _, decorator) in decorator_registry.iter() {
             if !biomes.iter().any(|b| decorator.biomes.contains_value(b.lookup(biome_registry).unwrap(), biome_registry)) {
@@ -290,7 +290,7 @@ impl MultiNoiseGenerator {
         blend: &SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>,
         noises: &Noises,
     ) -> i32 {
-        let nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)(p, noises.base_terrain_noise) + 1.0) / 2.0;
+        let nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)(p, &noises.base_terrain_noise) + 1.0) / 2.0;
         let scale_factor = GLOBAL_SCALE_MOD;
         let global_pos = DVec2::new(
             (in_chunk_pos.x + (chunk_pos.x * CHUNK_DIM)) as f64,
@@ -459,9 +459,9 @@ impl MultiNoiseGenerator {
     fn make_noise(noises: &Noises, point: DVec2) -> NoiseValues {
         let scale_factor = GLOBAL_SCALE_MOD;
         let point = [point.x / scale_factor, point.y / scale_factor];
-        let elevation = <Fbm<OpenSimplex> as NoiseNDTo2D<NOISE_DIMS>>::get_2d(&noises.elevation_noise, point);
-        let temperature = <Fbm<OpenSimplex> as NoiseNDTo2D<NOISE_DIMS>>::get_2d(&noises.temperature_noise, point);
-        let moisture: f64 = <Fbm<OpenSimplex> as NoiseNDTo2D<NOISE_DIMS>>::get_2d(&noises.moisture_noise, point);
+        let elevation = noises.elevation_noise.get_2d(point);
+        let temperature = noises.temperature_noise.get_2d(point);
+        let moisture: f64 = noises.moisture_noise.get_2d(point);
 
         NoiseValues {
             elevation,

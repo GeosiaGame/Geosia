@@ -4,11 +4,11 @@ use noise::NoiseFn;
 use std::f64::consts::TAU;
 
 mod fbm;
-mod curve;
+mod interpolate;
 mod cache;
 
 pub use fbm::*;
-pub use curve::*;
+pub use interpolate::*;
 pub use cache::*;
 
 /// Get a point of [`N`]-dimensional noise as if it were a plane of 2D noise

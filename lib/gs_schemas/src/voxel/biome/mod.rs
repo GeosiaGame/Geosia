@@ -51,7 +51,7 @@ impl BiomeEntry {
 pub type BlockRuleSourceFunction = fn(pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>;
 /// A surface noise function.
 /// Return
-pub type SurfaceNoiseFunction = fn(pos: DVec2, noise: Box<dyn NoiseFn<f64, 4>>) -> f64;
+pub type SurfaceNoiseFunction = fn(pos: DVec2, noise: &Box<dyn NoiseFn<f64, 4> + Send + Sync>) -> f64;
 
 /// A named registry of biome definitions.
 pub type BiomeRegistry = Registry<BiomeDefinition>;
@@ -114,7 +114,6 @@ impl RegistryObject for BiomeDefinition {
 }
 
 /// Different noise layers for biome generation.
-#[derive(Clone)]
 pub struct Noises {
     /// Base noise from which all other noises are derived from
     pub base_terrain_noise: Box<dyn NoiseFn<f64, 4> + Send + Sync>,
