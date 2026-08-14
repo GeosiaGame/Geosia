@@ -9,7 +9,7 @@ use std::mem::MaybeUninit;
 use std::rc::Rc;
 use std::iter::zip;
 
-use bevy_math::{DVec2, IVec2, IVec3, Vec3Swizzles};
+use bevy_math::{DVec2, IVec2, Vec3Swizzles};
 use gs_schemas::{
     GsExtraData,
     dependencies::itertools::{Itertools, iproduct},
@@ -42,6 +42,7 @@ use crate::voxel::biomes::*;
 pub const BIOME_SIZE: f64 = 1.0;
 
 const BIOME_BLEND_RADIUS: f64 = 32.0;
+const BIOME_BLEND_RADIUS2: f64 = BIOME_BLEND_RADIUS * BIOME_BLEND_RADIUS;
 
 const THREE_CHUNK_DIM_QUARTZ: usize = CHUNK_DIM_QUARTZ * 3;
 /// offset for noise value lists so that they can contain values `-1..1` chunks around the current chunk.
@@ -74,17 +75,6 @@ pub struct MultiNoiseGenerator {
 impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
     fn generate_chunk(&self, position: AbsChunkPos, extra_data: <ED as GsExtraData>::ChunkData) -> Chunk<ED> {
         let point = AbsBlockPos::from(position);
-        let offset_point = DelaunayVertex::new((point.x + CHUNK_DIM / 2) as f64, (point.z + CHUNK_DIM / 2) as f64);
-
-        let seed_bytes_be = self.seed.to_be_bytes();
-        let seed_bytes_le = self.seed.to_le_bytes();
-        let x = offset_point.x.to_le_bytes();
-        let y = offset_point.y.to_be_bytes();
-        let mut seed = [0_u8; 16];
-        for i in 0..8 {
-            seed[i] = x[i].wrapping_mul(seed_bytes_be[i]);
-            seed[i + 8] = y[i].wrapping_mul(seed_bytes_le[i]);
-        }
 
         let mut centers: Vec<Center> = Vec::new();
         {
@@ -101,8 +91,8 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
                 position *= BIOME_SIZE * (GLOBAL_SCALE_MOD / CHUNK_DIMD);
                 let noise = CHUNK_DIMD
                     * 0.75
-                    * <OpenSimplex as NoiseNDTo2D<NOISE_DIMS>>::get_2d(&self.point_offset_noise, position.to_array());
-                let position = DVec2::new(position.x + noise, position.y + noise);
+                    * <OpenSimplex as NoiseNDTo2D<f64, f64, NOISE_DIMS>>::get_2d(&self.point_offset_noise, position.to_array());
+                let position = IVec2::new((position.x + noise) as i32, (position.y + noise) as i32);
 
                 let point = delaunay
                     .insert(DelaunayVertex(position))
@@ -130,7 +120,7 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
                 let ix = (i % THREE_CHUNK_DIM_QUARTZ) as i32 - CHUNK_DIM_QUART;
                 let iz = ((i / THREE_CHUNK_DIM_QUARTZ) % THREE_CHUNK_DIM_QUARTZ) as i32 - CHUNK_DIM_QUART;
                 let (biomes, noise) = Self::find_biomes_at_point(
-                    DVec2::new((ix + point.x) as f64, (iz + point.z) as f64),
+                    IVec2::new(ix + point.x, iz + point.z),
                     &centers,
                 );
 
@@ -172,13 +162,13 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
                 let g_pos = position.block_pos(b_pos);
 
                 let shift = RelBlockPos::new(
-                    self.point_offset_noise.get_2d([g_pos.x as f64, g_pos.z as f64]) as i32,
+                    <OpenSimplex as NoiseNDTo2D<i32, f64, 4>>::get_2d(&self.point_offset_noise, [g_pos.x, g_pos.z]) as i32,
                     0,
-                    self.point_offset_noise.get_2d([g_pos.x as f64, -g_pos.z as f64]) as i32,
+                    <OpenSimplex as NoiseNDTo2D<i32, f64, 4>>::get_2d(&self.point_offset_noise, [g_pos.x, -g_pos.z]) as i32,
                 );
                 let g_pos = g_pos + shift;
 
-                for (biome, _) in biomes {
+                for (biome, _) in biomes.iter() {
                     let ctx = Context {
                         seed: self.seed,
                         chunk: &chunk.blocks,
@@ -206,9 +196,9 @@ impl<ED: GsExtraData> VoxelGenerator<ED> for MultiNoiseGenerator {
                 let g_pos = position.block_pos(b_pos);
 
                 let shift = RelBlockPos::new(
-                    <OpenSimplex as NoiseNDTo2D<4>>::get_2d(&self.point_offset_noise, [-g_pos.x as f64, g_pos.z as f64]) as i32,
+                    <OpenSimplex as NoiseNDTo2D<i32, f64, 4>>::get_2d(&self.point_offset_noise, [-g_pos.x, g_pos.z]) as i32,
                     0,
-                    <OpenSimplex as NoiseNDTo2D<4>>::get_2d(&self.point_offset_noise, [g_pos.x as f64, -g_pos.z as f64]) as i32,
+                    <OpenSimplex as NoiseNDTo2D<i32, f64, 4>>::get_2d(&self.point_offset_noise, [g_pos.x, -g_pos.z]) as i32,
                 );
                 let b_pos = b_pos.offset_from_chunk_origin() + shift;
 
@@ -256,15 +246,15 @@ impl MultiNoiseGenerator {
             seed,
 
             noises: Noises {
-                base_terrain_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int)
+                base_terrain_noise: configure_noise_interpolation(Fbm::<OpenSimplex>::new(seed_int)
                     .set_octaves(&[-4.0, 1.0, 1.0, 0.0])),
-                elevation_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(1347))
+                elevation_noise: configure_noise_interpolation(Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(1347))
                     .set_octaves(&[1.0, 2.0, 2.0, 1.0])),
-                temperature_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(2349))
+                temperature_noise: configure_noise_interpolation(Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(2349))
                     .set_octaves(&[1.0, 2.0, 2.0, 1.0])),
-                moisture_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int.wrapping_shl(3243))
+                moisture_noise: configure_noise_interpolation(Fbm::<OpenSimplex>::new(seed_int.wrapping_shl(3243))
                     .set_octaves(&[1.0, 2.0, 2.0, 1.0])),
-                weird_noise: Box::new(Fbm::<Value>::new(seed_int.wrapping_shr(9357))
+                weird_noise: configure_noise_interpolation(Fbm::<Value>::new(seed_int.wrapping_shr(9357))
                     .set_octaves(&[4.0, 2.0, 0.0, 4.0, -25.0])),
             },
             point_offset_noise: OpenSimplex::new(seed_int.wrapping_mul(5463)),
@@ -284,7 +274,7 @@ impl MultiNoiseGenerator {
 
         height: i32,
         elevation: f64, temperature: f64, moisture: f64,
-        weird_noise: &Box<dyn NoiseFn<f64, 4> + Send + Sync>,
+        weird_noise: &Box<dyn NoiseFn<i32, 4> + Send + Sync>,
     ) {
         for (_, _, decorator) in decorator_registry.iter() {
             if !biomes.iter().any(|b| decorator.biomes.contains_value(b.lookup(biome_registry).unwrap(), biome_registry)) {
@@ -304,18 +294,17 @@ impl MultiNoiseGenerator {
         blend: &SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>,
         noises: &Noises,
     ) -> i32 {
-        let nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)(p, &noises.base_terrain_noise) + 1.0) / 2.0;
-        let scale_factor = GLOBAL_SCALE_MOD;
-        let global_pos = DVec2::new(
-            (in_chunk_quart_pos.x * QUART_DIM + (chunk_pos.x * CHUNK_DIM)) as f64,
-            (in_chunk_quart_pos.y * QUART_DIM + (chunk_pos.y * CHUNK_DIM)) as f64,
+        let nf = |p: IVec2, b: &BiomeDefinition| ((b.surface_noise)(p, &noises.base_terrain_noise) + 1.0) / 2.0;
+        let pos = IVec2::new(
+            ((in_chunk_quart_pos.x * QUART_DIM + (chunk_pos.x * CHUNK_DIM)) as f64 / GLOBAL_SCALE_MOD) as i32,
+            ((in_chunk_quart_pos.y * QUART_DIM + (chunk_pos.y * CHUNK_DIM)) as f64 / GLOBAL_SCALE_MOD) as i32,
         );
 
         let mut heights = 0.0;
         let mut weights = 0.0;
         for entry in blend {
             let biome = entry.lookup(biome_registry).unwrap();
-            let noise = nf(global_pos / scale_factor, biome);
+            let noise = nf(pos, biome);
             let strength = entry.weight * biome.blend_influence;
             heights += noise * strength;
             weights += strength;
@@ -323,8 +312,8 @@ impl MultiNoiseGenerator {
         (heights / weights) as i32
     }
 
-    fn make_center(point: DVec2, centers: &mut Vec<Center>, center_map: &mut HashMap<IVec2, usize>, noises: &Noises) -> usize {
-        *center_map.entry(point.as_ivec2()).or_insert_with(|| {
+    fn make_center(point: IVec2, centers: &mut Vec<Center>, center_map: &mut HashMap<IVec2, usize>, noises: &Noises) -> usize {
+        *center_map.entry(point).or_insert_with(|| {
             let mut center = Center::new(point);
             let index = centers.len();
             center.noise = Self::make_noise(noises, center.point);
@@ -333,8 +322,8 @@ impl MultiNoiseGenerator {
         })
     }
 
-    fn make_corner(point: DVec2, corners: &mut Vec<Corner>, corner_map: &mut HashMap<IVec2, usize>) -> usize {
-        *corner_map.entry(point.as_ivec2()).or_insert_with(|| {
+    fn make_corner(point: IVec2, corners: &mut Vec<Corner>, corner_map: &mut HashMap<IVec2, usize>) -> usize {
+        *corner_map.entry(point).or_insert_with(|| {
             let index = corners.len();
             corners.push(Corner::new(point));
             index
@@ -435,7 +424,7 @@ impl MultiNoiseGenerator {
             edges.push(edge);
         }
 
-        let point: DVec2 = spade_point_to_vector(point.position());
+        let point: IVec2 = spade_point_to_vector(point.position());
         Self::make_center(point, centers, center_map, &self.noises)
     }
 
@@ -470,12 +459,11 @@ impl MultiNoiseGenerator {
             .collect_vec()
     }
 
-    fn make_noise(noises: &Noises, point: DVec2) -> NoiseValues {
-        let scale_factor = GLOBAL_SCALE_MOD;
-        let point = [point.x / scale_factor, point.y / scale_factor];
-        let elevation = noises.elevation_noise.get_2d(point);
-        let temperature = noises.temperature_noise.get_2d(point);
-        let moisture: f64 = noises.moisture_noise.get_2d(point);
+    fn make_noise(noises: &Noises, point: IVec2) -> NoiseValues {
+        let point = [point.x / GLOBAL_SCALE_MOD as i32, point.y / GLOBAL_SCALE_MOD as i32];
+        let elevation = (*noises.elevation_noise).get_2d(point);
+        let temperature = (*noises.temperature_noise).get_2d(point);
+        let moisture = (*noises.moisture_noise).get_2d(point);
 
         NoiseValues {
             elevation,
@@ -535,12 +523,12 @@ impl MultiNoiseGenerator {
     }
 
     fn find_biomes_at_point(
-        point: DVec2,
+        point: IVec2,
         centers: &[Center],
     ) -> (SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>, (f64, f64, f64)) {
         let distance_ordering = |a: &Center, b: &Center| -> Ordering {
-            let dist_a = point.distance(a.point);
-            let dist_b = point.distance(b.point);
+            let dist_a = point.distance_squared(a.point);
+            let dist_b = point.distance_squared(b.point);
             if dist_a < dist_b {
                 Ordering::Less
             } else if dist_a > dist_b {
@@ -557,11 +545,11 @@ impl MultiNoiseGenerator {
         sorted.sort_by(distance_ordering);
 
         let closest = &sorted[0];
-        let closest_distance = closest.point.distance(point);
+        let closest_distance = closest.point.distance_squared(point);
 
         let mut nearby = Vec::new();
         for center in sorted {
-            if center.point.distance(point) <= 4.0 * BIOME_BLEND_RADIUS + closest_distance {
+            if center.point.distance_squared(point) <= (4.0 * BIOME_BLEND_RADIUS2) as i32 + closest_distance {
                 nearby.push(Rc::new(RefCell::new((center, 1.0))));
             }
         }
@@ -574,8 +562,8 @@ impl MultiNoiseGenerator {
             let second = second_node.0.point;
 
             let distance_from_midpoint =
-                (point - (first + second) / 2.0).dot(second - first) / (second - first).length();
-            let weight = fade((distance_from_midpoint / BIOME_BLEND_RADIUS).clamp(-1.0, 1.0) * 0.5 + 0.5);
+                (point - (first + second) / 2).dot(second - first) / (second - first).length_squared();
+            let weight = fade((distance_from_midpoint as f64 / BIOME_BLEND_RADIUS2).clamp(-1.0, 1.0) * 0.5 + 0.5);
 
             first_node.1 *= 1.0 - weight;
             second_node.1 *= weight;
@@ -611,8 +599,29 @@ impl MultiNoiseGenerator {
     }
 }
 
-fn spade_point_to_vector(point: Point2<f64>) -> DVec2 {
-    DVec2::new(point.x, point.y)
+fn configure_noise_interpolation<'a, Source>(source: Source) -> Box<dyn NoiseFn<i32, 4> + Send + Sync + 'a>
+where
+    Source: NoiseFn<f64, 4> + Send + Sync + 'a
+{
+    Box::new(Convert::<i32, f64, _, _, 4>::new(
+        Interpolate::new(
+            Convert::<f64, i32, _, _, 4>::new(
+                Cache::new(
+                    Convert::<i32, f64, Source, _, 4>::new(
+                        source,
+                        |pos: i32| pos as f64
+                    )
+                ),
+                |pos: f64| pos as i32
+            ),
+            QUART_DIM as f64
+        ),
+        |pos: i32| pos as f64
+    ))
+}
+
+fn spade_point_to_vector(point: Point2<f64>) -> IVec2 {
+    IVec2::new(point.x as i32, point.y as i32)
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, Default, PartialEq, Debug)]
@@ -626,7 +635,7 @@ struct NoiseValues {
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Center {
     /// Center of the cell
-    pub point: DVec2,
+    pub point: IVec2,
     noise: NoiseValues,
     biome: Option<RegistryId>,
 
@@ -643,7 +652,7 @@ pub struct Center {
 }
 
 impl Center {
-    fn new(point: DVec2) -> Center {
+    fn new(point: IVec2) -> Center {
         Self {
             point,
             noise: NoiseValues::default(),
@@ -661,7 +670,7 @@ impl Center {
 }
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
-struct PointEdge(DVec2, DVec2);
+struct PointEdge(IVec2, IVec2);
 
 /// Edge of a voronoi cell & delaunay triangle
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -680,7 +689,7 @@ pub struct Edge {
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Corner {
     /// Location of the corner
-    pub point: DVec2,
+    pub point: IVec2,
 
     /// Adjacent center indices
     touches: Vec<usize>,
@@ -691,7 +700,7 @@ pub struct Corner {
 }
 
 impl Corner {
-    fn new(position: DVec2) -> Corner {
+    fn new(position: IVec2) -> Corner {
         Self {
             point: position,
 
@@ -703,11 +712,11 @@ impl Corner {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
-struct DelaunayVertex(DVec2);
+struct DelaunayVertex(IVec2);
 
 impl DelaunayVertex {
-    fn new(x: f64, y: f64) -> DelaunayVertex {
-        DelaunayVertex(DVec2::new(x, y))
+    fn new(x: i32, y: i32) -> DelaunayVertex {
+        DelaunayVertex(IVec2::new(x, y))
     }
 }
 
@@ -738,7 +747,7 @@ impl SubAssign<DelaunayVertex> for DelaunayVertex {
     }
 }
 impl Deref for DelaunayVertex {
-    type Target = DVec2;
+    type Target = IVec2;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -747,25 +756,25 @@ impl Deref for DelaunayVertex {
 impl HasPosition for DelaunayVertex {
     type Scalar = f64;
     fn position(&self) -> Point2<Self::Scalar> {
-        Point2::new(self.x, self.y)
+        Point2::new(self.x as f64, self.y as f64)
     }
 }
-impl From<DVec2> for DelaunayVertex {
-    fn from(value: DVec2) -> Self {
+impl From<IVec2> for DelaunayVertex {
+    fn from(value: IVec2) -> Self {
         DelaunayVertex(value)
     }
 }
-impl From<Point2<f64>> for DelaunayVertex {
-    fn from(value: Point2<f64>) -> Self {
+impl From<Point2<i32>> for DelaunayVertex {
+    fn from(value: Point2<i32>) -> Self {
         DelaunayVertex::new(value.x, value.y)
     }
 }
-impl From<DelaunayVertex> for Point2<f64> {
+impl From<DelaunayVertex> for Point2<i32> {
     fn from(value: DelaunayVertex) -> Self {
         Point2::new(value.x, value.y)
     }
 }
-impl From<DelaunayVertex> for DVec2 {
+impl From<DelaunayVertex> for IVec2 {
     fn from(value: DelaunayVertex) -> Self {
         value.0
     }

@@ -3,7 +3,7 @@
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use bevy_color::Srgba;
-use bevy_math::DVec2;
+use bevy_math::IVec2;
 use noise::NoiseFn;
 use serde::{Deserialize, Serialize};
 use crate::coordinates::AbsBlockPos;
@@ -51,7 +51,7 @@ impl BiomeEntry {
 pub type BlockRuleSourceFunction = fn(pos: AbsBlockPos, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>;
 /// A surface noise function.
 /// Return
-pub type SurfaceNoiseFunction = fn(pos: DVec2, noise: &Box<dyn NoiseFn<f64, 4> + Send + Sync>) -> f64;
+pub type SurfaceNoiseFunction = fn(pos: IVec2, noise: &Box<dyn NoiseFn<i32, 4> + Send + Sync>) -> f64;
 
 /// A named registry of biome definitions.
 pub type BiomeRegistry = Registry<BiomeDefinition>;
@@ -116,16 +116,16 @@ impl RegistryObject for BiomeDefinition {
 /// Different noise layers for biome generation.
 pub struct Noises {
     /// Base noise from which all other noises are derived from
-    pub base_terrain_noise: Box<dyn NoiseFn<f64, 4> + Send + Sync>,
+    pub base_terrain_noise: Box<dyn NoiseFn<i32, 4> + Send + Sync>,
     /// Height noise (0~5)
-    pub elevation_noise: Box<dyn NoiseFn<f64, 4> + Send + Sync>,
+    pub elevation_noise: Box<dyn NoiseFn<i32, 4> + Send + Sync>,
     /// Temperature noise (0~5)
-    pub temperature_noise: Box<dyn NoiseFn<f64, 4> + Send + Sync>,
+    pub temperature_noise: Box<dyn NoiseFn<i32, 4> + Send + Sync>,
     /// Moisture noise (0~5)
-    pub moisture_noise: Box<dyn NoiseFn<f64, 4> + Send + Sync>,
+    pub moisture_noise: Box<dyn NoiseFn<i32, 4> + Send + Sync>,
     /// Weird noise (-4~4)
     /// use for seemingly random values that need to be deterministic, e.g. decorators
-    pub weird_noise: Box<dyn NoiseFn<f64, 4> + Send + Sync>,
+    pub weird_noise: Box<dyn NoiseFn<i32, 4> + Send + Sync>,
 }
 
 /// The registry name of [`VOID_BIOME`]

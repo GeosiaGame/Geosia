@@ -1,5 +1,5 @@
-use core::cell::RefCell;
 use std::hash::Hash;
+use std::sync::Arc;
 use hashbrown::HashMap;
 use noise::NoiseFn;
 
@@ -8,19 +8,19 @@ use noise::NoiseFn;
 /// Caching a noise function is useful if it is used as a source function for multiple noise functions. If a source
 /// function is not cached, the source function will redundantly calculate the same output value once for each noise
 /// function in which it is included.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Cache<T, Source, const DIM: usize> {
     /// Outputs the value to be cached.
     pub source: Source,
 
-    cache: RefCell<HashMap<[T; DIM], f64>>,
+    cache: Arc<HashMap<[T; DIM], f64>>,
 }
 
 impl<T, Source, const DIM: usize> Cache<T, Source, DIM> {
     pub fn new(source: Source) -> Self {
         Cache {
             source,
-            cache: RefCell::new(HashMap::new()),
+            cache: Arc::new(HashMap::new()),
         }
     }
 }
@@ -31,11 +31,12 @@ where
     Source: NoiseFn<T, DIM>,
 {
     fn get(&self, point: [T; DIM]) -> f64 {
-        if let Some(&value) = self.cache.borrow().get(&point) {
+        if let Some(&value) = self.cache.get(&point) {
             value
         } else {
             let value = self.source.get(point);
-            self.cache.borrow_mut().insert(point, value);
+            let mut map = Arc::clone(&self.cache);
+            Arc::get_mut(&mut map).unwrap().insert(point, value);
             value
         }
     }

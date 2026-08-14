@@ -66,10 +66,10 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 None
             },
             surface_noise: |point, noise| {
-                let new_point = point * 1.5;
+                let new_point = point * 3 / 2;
 
-                let mut value = (*noise).get_2d(new_point.to_array()) * 0.75;
-                value += (*noise).get_2d((new_point * 2.0).to_array()) * 0.25;
+                let mut value = (**noise).get_2d(new_point.to_array()) * 0.75;
+                value += (**noise).get_2d((new_point * 2).to_array()) * 0.25;
                 value *= 5.0;
                 value += 10.0;
                 value
@@ -109,12 +109,12 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 None
             },
             surface_noise: |point, noise| {
-                let new_point = point / 3.0;
+                let new_point = point / 3;
                 let new_point_arr = new_point.to_array();
 
-                let mut value = (*noise).get_2d(new_point_arr) * 0.6;
-                value += (*noise).get_2d((new_point * 1.5).to_array()) * 0.25;
-                value += (*noise).get_2d((new_point * 3.0).to_array()) * 0.15;
+                let mut value = (**noise).get_2d(new_point_arr) * 0.6;
+                value += (**noise).get_2d((new_point * 3 / 2).to_array()) * 0.25;
+                value += (**noise).get_2d((new_point * 3).to_array()) * 0.15;
                 value *= 8.0;
                 value += 15.0;
                 value
@@ -154,17 +154,16 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 None
             },
             surface_noise: |point, noise| {
-                let new_point = point / 4.0;
+                let new_point = point / 4;
                 let new_point_arr = new_point.to_array();
-                let h_n = |p| ((*noise).get_2d(p) + 1.0) / 2.0;
-                let h_rn = |p| (0.5 - (0.5 - h_n(p)).abs()) * 2.0;
+                let h_n = |p| ((**noise).get_2d(p) + 1.0) / 2.0;
+                let h_rn = |p| (0.5 - f64::abs(0.5 - h_n(p))) * 2.0;
 
                 let h0 = 0.50 * h_rn(new_point_arr);
-                let h01 = 0.25 * h_rn((new_point * 2.0).to_array()) + h0;
+                let h01 = 0.25 * h_rn((new_point * 2).to_array()) + h0;
 
-                (h01 + (h01 / 0.75) * 0.15 * h_n((new_point * 5.0).to_array())
-                    + (h01 / 0.75) * 0.05 * h_rn((new_point * 9.0).to_array()))
-                    .abs()
+                f64::abs(h01 + (h01 / 0.75) * 0.15 * h_n((new_point * 5).to_array())
+                    + (h01 / 0.75) * 0.05 * h_rn((new_point * 9).to_array()))
                     * 100.0
                     + 40.0
             },
@@ -195,7 +194,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 None
             },
             surface_noise: |point, noise| {
-                (*noise).get_2d((point / 25.0).to_array()) * -7.5 + 1.0
+                (**noise).get_2d((point / 25).to_array()) * -7.5 + 1.0
             },
             blend_influence: 1.0,
             block_influence: 1.0,
@@ -222,7 +221,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 None
             },
             surface_noise: |point, noise| {
-                (*noise).get_2d(point.to_array()) * 1.0 + 1.0
+                (**noise).get_2d(point.to_array()) * 1.0 + 1.0
             },
             blend_influence: 1.0,
             block_influence: 1.0,
@@ -252,7 +251,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 None
             },
             surface_noise: |point, noise| {
-                (*noise).get_2d(point.to_array()) * -1.5 + 1.0
+                (**noise).get_2d(point.to_array()) * -1.5 + 1.0
             },
             blend_influence: 1.0,
             block_influence: 1.0,
@@ -290,7 +289,7 @@ pub fn setup_basic_biomes(biome_registry: &mut BiomeRegistry) {
                 None
             },
             surface_noise: |point, noise| {
-                (*noise).get_2d((point / 12.5).to_array()) * -4.5 + 1.0
+                (**noise).get_2d((point * 25 / 2).to_array()) * -4.5 + 1.0
             },
             blend_influence: 1.0,
             block_influence: 1.0,

@@ -17,7 +17,7 @@ use crate::voxel::voxeltypes::{BlockEntry, BlockRegistry};
 pub type DecoratorPlacer = fn(
     &DecoratorDefinition,
     &mut PaletteStorage<BlockEntry>,
-    &Box<dyn NoiseFn<f64, 4> + Send + Sync>,
+    &Box<dyn NoiseFn<i32, 4> + Send + Sync>,
     RelBlockPos,
     AbsChunkPos,
     &BlockRegistry,
@@ -25,7 +25,7 @@ pub type DecoratorPlacer = fn(
 /// A count function.
 /// return `true` if a decorator should be placed at this position.
 pub type DecoratorPlacementCheck =
-    fn(&DecoratorDefinition, &Box<dyn NoiseFn<f64, 4> + Send + Sync>, AbsBlockPos, i32, f64, f64, f64) -> bool;
+    fn(&DecoratorDefinition, &Box<dyn NoiseFn<i32, 4> + Send + Sync>, AbsBlockPos, i32, f64, f64, f64) -> bool;
 
 /// A named registry of biome definitions.
 pub type DecoratorRegistry = Registry<DecoratorDefinition>;
