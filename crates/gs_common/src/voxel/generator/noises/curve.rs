@@ -2,10 +2,10 @@ use core::marker::PhantomData;
 use std::cmp::Ordering;
 use std::ops::{Add, Mul, Sub};
 use bevy_math::FloatExt;
-use itertools::Itertools;
+use gs_schemas::dependencies::itertools::Itertools;
 use noise::NoiseFn;
 
-use crate::math::interpolate;
+use gs_schemas::math::interpolate;
 
 /// Noise function that maps the output value from the source function onto an
 /// arbitrary function curve.
@@ -127,16 +127,10 @@ where
         let input0 = self.control_points[index1].input;
         let input1 = self.control_points[index2].input;
 
-        let alpha: [T; DIM] = {
-
-        };
-
         let alpha = f64::inverse_lerp(input0, input1, source_value);
 
-
-
         // Now perform the cubic interpolation and return.
-        interpolate::bicubic([
+        interpolate::cubic([
                 self.source.get(self.control_points[index0].point),
                 self.source.get(self.control_points[index1].point),
                 self.source.get(self.control_points[index2].point),

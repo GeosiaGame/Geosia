@@ -4,14 +4,13 @@ use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use bevy_color::Srgba;
 use bevy_math::DVec2;
-use noise::{OpenSimplex, Value};
+use noise::NoiseFn;
 use serde::{Deserialize, Serialize};
 
 use super::{
     generation::Context,
     voxeltypes::{BlockEntry, BlockRegistry},
 };
-use crate::voxel::generation::noises::Fbm;
 use crate::registry::{Registry, RegistryId, RegistryName, RegistryObject};
 use crate::range::Range;
 
@@ -52,7 +51,7 @@ impl BiomeEntry {
 pub type BlockRuleSourceFunction = fn(pos: &bevy_math::IVec3, ctx: &Context, registry: &BlockRegistry) -> Option<BlockEntry>;
 /// A surface noise function.
 /// Return
-pub type SurfaceNoiseFunction = fn(pos: DVec2, noise: &Fbm<OpenSimplex>) -> f64;
+pub type SurfaceNoiseFunction = fn(pos: DVec2, noise: Box<dyn NoiseFn<f64, 4>>) -> f64;
 
 /// A named registry of biome definitions.
 pub type BiomeRegistry = Registry<BiomeDefinition>;
@@ -118,16 +117,16 @@ impl RegistryObject for BiomeDefinition {
 #[derive(Clone)]
 pub struct Noises {
     /// Base noise from which all other noises are derived from
-    pub base_terrain_noise: Fbm<OpenSimplex>,
+    pub base_terrain_noise: Box<dyn NoiseFn<f64, 4> + Send + Sync>,
     /// Height noise (0~5)
-    pub elevation_noise: Fbm<OpenSimplex>,
+    pub elevation_noise: Box<dyn NoiseFn<f64, 4> + Send + Sync>,
     /// Temperature noise (0~5)
-    pub temperature_noise: Fbm<OpenSimplex>,
+    pub temperature_noise: Box<dyn NoiseFn<f64, 4> + Send + Sync>,
     /// Moisture noise (0~5)
-    pub moisture_noise: Fbm<OpenSimplex>,
+    pub moisture_noise: Box<dyn NoiseFn<f64, 4> + Send + Sync>,
     /// Weird noise (-4~4)
     /// use for seemingly random values that need to be deterministic, e.g. decorators
-    pub weird_noise: Fbm<Value>,
+    pub weird_noise: Box<dyn NoiseFn<f64, 4> + Send + Sync>,
 }
 
 /// The registry name of [`VOID_BIOME`]

@@ -20,7 +20,7 @@ use gs_schemas::{
     },
 };
 use hashbrown::HashMap;
-use noise::{OpenSimplex, Value};
+use noise::{NoiseFn, OpenSimplex, Value};
 use serde::{Deserialize, Serialize};
 use smallvec::*;
 use spade::handles::{FixedVertexHandle, VertexHandle};
@@ -32,7 +32,7 @@ use gs_schemas::registry::RegistryNameRef;
 use gs_schemas::voxel::chunk_storage::{ChunkStorage, PaletteStorage};
 use gs_schemas::voxel::generation::decorator::DecoratorRegistry;
 use gs_schemas::voxel::generation::{Context, VoxelGenerator};
-use gs_schemas::voxel::generation::noises::*;
+use crate::voxel::generator::noises::*;
 use crate::voxel::biomes::*;
 
 /// Biome size in chunks
@@ -242,16 +242,16 @@ impl MultiNoiseGenerator {
             seed,
 
             noises: Noises {
-                base_terrain_noise: Fbm::<OpenSimplex>::new(seed_int)
-                    .set_octaves(&[-4.0, 1.0, 1.0, 0.0]),
-                elevation_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(1347))
-                    .set_octaves(&[1.0, 2.0, 2.0, 1.0]),
-                temperature_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(2349))
-                    .set_octaves(&[1.0, 2.0, 2.0, 1.0]),
-                moisture_noise: Fbm::<OpenSimplex>::new(seed_int.wrapping_shl(3243))
-                    .set_octaves(&[1.0, 2.0, 2.0, 1.0]),
-                weird_noise: Fbm::<Value>::new(seed_int.wrapping_shr(9357))
-                    .set_octaves(&[4.0, 2.0, 0.0, 4.0, -25.0]),
+                base_terrain_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int)
+                    .set_octaves(&[-4.0, 1.0, 1.0, 0.0])),
+                elevation_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(1347))
+                    .set_octaves(&[1.0, 2.0, 2.0, 1.0])),
+                temperature_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int.wrapping_pow(2349))
+                    .set_octaves(&[1.0, 2.0, 2.0, 1.0])),
+                moisture_noise: Box::new(Fbm::<OpenSimplex>::new(seed_int.wrapping_shl(3243))
+                    .set_octaves(&[1.0, 2.0, 2.0, 1.0])),
+                weird_noise: Box::new(Fbm::<Value>::new(seed_int.wrapping_shr(9357))
+                    .set_octaves(&[4.0, 2.0, 0.0, 4.0, -25.0])),
             },
             point_offset_noise: OpenSimplex::new(seed_int.wrapping_mul(5463)),
         }
@@ -270,7 +270,7 @@ impl MultiNoiseGenerator {
 
         height: i32,
         elevation: f64, temperature: f64, moisture: f64,
-        weird_noise: &Fbm<Value>,
+        weird_noise: &Box<dyn NoiseFn<f64, 4>>,
     ) {
         for (_, _, decorator) in decorator_registry.iter() {
             if !biomes.iter().any(|b| decorator.biomes.contains_value(b.lookup(biome_registry).unwrap(), biome_registry)) {
@@ -290,7 +290,7 @@ impl MultiNoiseGenerator {
         blend: &SmallVec<[BiomeEntry; EXPECTED_BIOME_COUNT]>,
         noises: &Noises,
     ) -> i32 {
-        let nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)(p, &noises.base_terrain_noise) + 1.0) / 2.0;
+        let nf = |p: DVec2, b: &BiomeDefinition| ((b.surface_noise)(p, noises.base_terrain_noise) + 1.0) / 2.0;
         let scale_factor = GLOBAL_SCALE_MOD;
         let global_pos = DVec2::new(
             (in_chunk_pos.x + (chunk_pos.x * CHUNK_DIM)) as f64,

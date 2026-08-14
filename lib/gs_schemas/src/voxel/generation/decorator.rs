@@ -3,14 +3,13 @@
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 
-use noise::Value;
+use noise::NoiseFn;
 use serde::{Deserialize, Serialize};
 
 use crate::coordinates::{AbsBlockPos, AbsChunkPos, RelBlockPos};
 use crate::registry::{Registry, RegistryDataSet, RegistryName, RegistryObject};
 use crate::voxel::biome::BiomeDefinition;
 use crate::voxel::chunk_storage::PaletteStorage;
-use crate::voxel::generation::noises::Fbm;
 use crate::voxel::voxeltypes::{BlockEntry, BlockRegistry};
 
 /// A placer function.
@@ -18,7 +17,7 @@ use crate::voxel::voxeltypes::{BlockEntry, BlockRegistry};
 pub type DecoratorPlacer = fn(
     &DecoratorDefinition,
     &mut PaletteStorage<BlockEntry>,
-    &Fbm<Value>,
+    &Box<dyn NoiseFn<f64, 4>>,
     RelBlockPos,
     AbsChunkPos,
     &BlockRegistry,
@@ -26,7 +25,7 @@ pub type DecoratorPlacer = fn(
 /// A count function.
 /// return `true` if a decorator should be placed at this position.
 pub type DecoratorPlacementCheck =
-    fn(&DecoratorDefinition, &Fbm<Value>, AbsBlockPos, i32, f64, f64, f64) -> bool;
+    fn(&DecoratorDefinition, &Box<dyn NoiseFn<f64, 4>>, AbsBlockPos, i32, f64, f64, f64) -> bool;
 
 /// A named registry of biome definitions.
 pub type DecoratorRegistry = Registry<DecoratorDefinition>;

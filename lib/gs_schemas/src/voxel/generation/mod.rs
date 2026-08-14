@@ -6,7 +6,6 @@ use crate::voxel::chunk::Chunk;
 use super::{chunk_storage::PaletteStorage, voxeltypes::BlockEntry};
 
 pub mod decorator;
-pub mod noises;
 
 /// Context data for world generation.
 pub struct Context<'a> {
