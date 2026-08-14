@@ -3535,15 +3535,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gs_macros"
-version = "0.0.1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "gs_schemas"
 version = "0.0.1"
 dependencies = [
@@ -3562,7 +3553,6 @@ dependencies = [
  "criterion",
  "either",
  "futures",
- "gs_macros",
  "hashbrown 0.16.1",
  "itertools 0.14.0",
  "kstring",

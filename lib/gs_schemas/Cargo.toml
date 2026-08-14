@@ -21,9 +21,6 @@ name = "schemabench"
 harness = false
 
 [dependencies]
-# Local
-gs_macros.workspace = true
-# Remote
 anyhow.workspace = true
 bevy_color.workspace = true
 bevy_math.workspace = true
