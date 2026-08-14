@@ -605,15 +605,7 @@ where
 {
     Box::new(Convert::<i32, f64, _, _, 4>::new(
         Interpolate::new(
-            Convert::<f64, i32, _, _, 4>::new(
-                Cache::new(
-                    Convert::<i32, f64, Source, _, 4>::new(
-                        source,
-                        |pos: i32| pos as f64
-                    )
-                ),
-                |pos: f64| pos as i32
-            ),
+            source,
             QUART_DIM as f64
         ),
         |pos: i32| pos as f64
