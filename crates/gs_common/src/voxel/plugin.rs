@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
-use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, AbsChunkRange, RelChunkPos, WorldPos};
+use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, AbsChunkRange, RelChunkPos};
 use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::mutwatcher::{MutWatcher, RevisionNumber};
 use gs_schemas::schemas::network_capnp::{PacketId, chunk_data_stream_packet};
@@ -208,7 +208,7 @@ fn server_system_process_chunk_loading(
         &mut PersistentVoxelStorage<ServerData>,
         &VoxelUniverseTag,
     )>,
-    mut chunk_loaders: Query<(&ChunkLoader, &UniverseTransform)>,
+    chunk_loaders: Query<(&ChunkLoader, &UniverseTransform)>,
 ) {
     let Ok((mut voxels, mut persistence, _)) = voxel_q.single_mut() else {
         return;

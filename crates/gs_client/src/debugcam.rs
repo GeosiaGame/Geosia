@@ -496,7 +496,7 @@ fn generated_chunk_minimap_gizmo(
         }
 
         let current_chunk = voxels.loaded_chunks().get_chunk(current_c_pos + RelChunkPos::new(x, y, z));
-        if let Some(_) = current_chunk {
+        if current_chunk.is_some() {
             let LinearRgba {red: luma, .. } = image.get_color_at(p_x, p_y).expect("invalid color").to_linear();
 
             const SINGLE_STEP_LUMA: f32 = 1.0 / CHUNK_LOAD_RADIUS as f32;
