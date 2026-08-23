@@ -17,6 +17,7 @@ use futures::{AsyncRead, AsyncReadExt};
 use smallvec::SmallVec;
 use uuid::Uuid;
 
+use crate::coordinates::{AbsBlockPos, WorldPos};
 use crate::registry::RegistryName;
 
 /// Common game object types.
@@ -362,6 +363,28 @@ impl CapnpExt for Quat {
 
     fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
         Ok(Self::from_xyzw(reader.get_x(), reader.get_y(), reader.get_z(), reader.get_w()).normalize())
+    }
+}
+
+impl CapnpExt for WorldPos {
+    type Builder<'a> = game_types_capnp::world_pos::Builder<'a>;
+    type Reader<'a> = game_types_capnp::world_pos::Reader<'a>;
+    type ReaderError = Infallible;
+
+    fn write_to_message(&self, builder: &mut Self::Builder<'_>) {
+        builder.set_chunk_x(self.chunk.x);
+        builder.set_chunk_y(self.chunk.y);
+        builder.set_chunk_z(self.chunk.z);
+        builder.set_x(self.offset.x);
+        builder.set_y(self.offset.y);
+        builder.set_z(self.offset.z);
+    }
+
+    fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
+        Ok(Self::from_offset_blockpos(
+            AbsBlockPos::new(reader.get_chunk_x(), reader.get_chunk_y(), reader.get_chunk_z()),
+            Vec3A::new(reader.get_x(), reader.get_y(), reader.get_z()),
+        ))
     }
 }
 

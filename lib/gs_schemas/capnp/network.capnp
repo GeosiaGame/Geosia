@@ -105,7 +105,7 @@ struct BlockActionRequest @0xa74244e28dcb5f2f {
     tick @2 :UInt64;
 }
 
-struct ChunkDataStreamPacket {
+struct ChunkDataStreamPacket @0xa7b8435e68c4c291 {
     # Game tick on which this chunk was updated.
     tick @0 :UInt64;
     # AbsChunkPos of the chunk.
@@ -114,7 +114,7 @@ struct ChunkDataStreamPacket {
     data @2 :GameTypes.FullChunkData;
 }
 
-struct EntityDataStreamPacket {
+struct EntityDataStreamPacket @0xe493dd088f49c162 {
     # Game tick these changes belong to
     tick @0 :UInt64;
     newEntities @1 :List(GameTypes.EntitySpawnData);

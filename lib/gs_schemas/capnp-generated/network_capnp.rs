@@ -2206,7 +2206,7 @@ pub mod block_action_request {
       ::capnp::word(112, 111, 115, 105, 116, 105, 111, 110),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(16, 0, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(224, 249, 178, 196, 42, 142, 176, 165),
+      ::capnp::word(51, 159, 46, 23, 162, 234, 63, 161),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(16, 0, 0, 0, 0, 0, 0, 0),
@@ -2214,7 +2214,7 @@ pub mod block_action_request {
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(97, 99, 116, 105, 111, 110, 0, 0),
       ::capnp::word(16, 0, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(114, 249, 128, 56, 240, 42, 102, 129),
+      ::capnp::word(223, 153, 212, 83, 8, 220, 149, 174),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(16, 0, 0, 0, 0, 0, 0, 0),
@@ -2447,12 +2447,12 @@ pub mod chunk_data_stream_packet {
   mod _private {
     pub static ENCODED_NODE: [::capnp::Word; 66] = [
       ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
-      ::capnp::word(77, 52, 86, 185, 123, 167, 233, 255),
+      ::capnp::word(145, 194, 196, 104, 94, 67, 184, 167),
       ::capnp::word(14, 0, 0, 0, 1, 0, 1, 0),
       ::capnp::word(203, 38, 210, 159, 176, 70, 145, 184),
       ::capnp::word(2, 0, 7, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(167, 12, 0, 0, 146, 13, 0, 0),
+      ::capnp::word(167, 12, 0, 0, 166, 13, 0, 0),
       ::capnp::word(21, 0, 0, 0, 34, 1, 0, 0),
       ::capnp::word(37, 0, 0, 0, 7, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
@@ -2506,7 +2506,7 @@ pub mod chunk_data_stream_packet {
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(100, 97, 116, 97, 0, 0, 0, 0),
       ::capnp::word(16, 0, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(76, 101, 84, 137, 193, 207, 247, 142),
+      ::capnp::word(214, 198, 167, 15, 211, 251, 77, 160),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(16, 0, 0, 0, 0, 0, 0, 0),
@@ -2533,7 +2533,7 @@ pub mod chunk_data_stream_packet {
     pub static NONUNION_MEMBERS : &[u16] = &[0,1,2];
     pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
     pub static MEMBERS_BY_NAME : &[u16] = &[2,1,0];
-    pub const TYPE_ID: u64 = 0xffe9_a77b_b956_344d;
+    pub const TYPE_ID: u64 = 0xa7b8_435e_68c4_c291;
   }
 }
 
@@ -2749,12 +2749,12 @@ pub mod entity_data_stream_packet {
   mod _private {
     pub static ENCODED_NODE: [::capnp::Word; 95] = [
       ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
-      ::capnp::word(125, 251, 228, 97, 244, 144, 185, 226),
+      ::capnp::word(98, 193, 73, 143, 8, 221, 147, 228),
       ::capnp::word(14, 0, 0, 0, 1, 0, 1, 0),
       ::capnp::word(203, 38, 210, 159, 176, 70, 145, 184),
       ::capnp::word(3, 0, 7, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(148, 13, 0, 0, 143, 14, 0, 0),
+      ::capnp::word(168, 13, 0, 0, 183, 14, 0, 0),
       ::capnp::word(21, 0, 0, 0, 42, 1, 0, 0),
       ::capnp::word(37, 0, 0, 0, 7, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
@@ -2811,7 +2811,7 @@ pub mod entity_data_stream_packet {
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 3, 0, 1, 0),
       ::capnp::word(16, 0, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(146, 151, 81, 119, 228, 223, 234, 149),
+      ::capnp::word(138, 236, 58, 93, 197, 149, 10, 207),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(14, 0, 0, 0, 0, 0, 0, 0),
@@ -2824,7 +2824,7 @@ pub mod entity_data_stream_packet {
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 3, 0, 1, 0),
       ::capnp::word(16, 0, 0, 0, 0, 0, 0, 0),
-      ::capnp::word(249, 8, 109, 243, 139, 185, 132, 203),
+      ::capnp::word(201, 92, 227, 192, 200, 96, 128, 162),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
       ::capnp::word(14, 0, 0, 0, 0, 0, 0, 0),
@@ -2865,6 +2865,6 @@ pub mod entity_data_stream_packet {
     pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3];
     pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
     pub static MEMBERS_BY_NAME : &[u16] = &[3,1,0,2];
-    pub const TYPE_ID: u64 = 0xe2b9_90f4_61e4_fb7d;
+    pub const TYPE_ID: u64 = 0xe493_dd08_8f49_c162;
   }
 }
