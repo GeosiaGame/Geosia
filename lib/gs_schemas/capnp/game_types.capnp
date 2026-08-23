@@ -167,6 +167,7 @@ struct EntityComponent @0x9498e1200e81c4df {
     union {
         transform @0 :EntityTransformComponent;
         avatar @1 :EntityAvatarComponent;
+        dummy @2 :EntityDummyComponent;
     }
 }
 
@@ -180,3 +181,6 @@ struct EntityAvatarComponent @0xfa93c0f187d98679 {
     accountId @0 :Uuid;
     characterId @1 :Uuid;
 }
+
+# TODO: temporary component to avoid exhaustive match warnings, remove when a third component is added
+struct EntityDummyComponent @0x85dc4ff77236d621 {}

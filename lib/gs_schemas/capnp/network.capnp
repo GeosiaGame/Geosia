@@ -44,6 +44,9 @@ enum PacketId @0xb9187b435a666525 {
 
     # S->C :EntityDataStreamPacket (usually asynchronous)
     entityData @7;
+
+    # C->S :PlayerMoveRequest
+    movePlayer @8;
 }
 
 # Each packet is prefixed with a LEB128-encoded length field
@@ -120,4 +123,11 @@ struct EntityDataStreamPacket @0xe493dd088f49c162 {
     newEntities @1 :List(GameTypes.EntitySpawnData);
     updatedEntities @2 :List(GameTypes.EntityUpdateData);
     deletedEntities @3 :List(GameTypes.Uuid);
+}
+
+struct PlayerMoveRequest @0x8f4415191b9f8ca6 {
+    # Game tick these changes belong to
+    tick @0 :UInt64;
+    position @1 :GameTypes.WorldPos;
+    rotation @2 :GameTypes.Quat;
 }
