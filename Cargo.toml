@@ -250,6 +250,7 @@ opt-level = 3
 
 [profile.dev.package."*"]
 opt-level = 3
+debug = "line-tables-only"
 
 [profile.release]
 debug = 1
