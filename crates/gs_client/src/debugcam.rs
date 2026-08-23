@@ -13,7 +13,6 @@ use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use bevy_egui::egui::{Align2, TextureOptions};
 use bevy_egui::input::egui_wants_any_input;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, EguiTextureHandle};
-use image::{ImageBuffer, Rgba};
 use gs_common::network::transport::PacketWrapper;
 use gs_common::raycast::{RaycastContext, raycast};
 use gs_common::voxel::plugin::{BlockRegistryHolder, CHUNK_LOAD_RADIUS};
@@ -24,6 +23,7 @@ use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
 use gs_schemas::schemas::network_capnp::{PacketId, player_move_request};
 use gs_schemas::schemas::{CapnpExt, new_packet_builder};
 use gs_schemas::voxel::voxeltypes::EMPTY_BLOCK;
+use image::{ImageBuffer, Rgba};
 
 use crate::network::AuthenticatedNetworkClient;
 use crate::prelude::*;
@@ -488,19 +488,27 @@ fn generated_chunk_minimap_gizmo(
     let camera_zero: Vec3A = camera.translation.into();
 
     let current_c_pos = AbsChunkPos::from(WorldPos::from_vec3(camera_zero).as_blockpos());
-    for (x, y, z) in iproduct!(-MINIMAP_IMAGE_HALF_SIZE..=MINIMAP_IMAGE_HALF_SIZE, -MINIMAP_IMAGE_HALF_SIZE..=MINIMAP_IMAGE_HALF_SIZE, -MINIMAP_IMAGE_HALF_SIZE..=MINIMAP_IMAGE_HALF_SIZE) {
+    for (x, y, z) in iproduct!(
+        -MINIMAP_IMAGE_HALF_SIZE..=MINIMAP_IMAGE_HALF_SIZE,
+        -MINIMAP_IMAGE_HALF_SIZE..=MINIMAP_IMAGE_HALF_SIZE,
+        -MINIMAP_IMAGE_HALF_SIZE..=MINIMAP_IMAGE_HALF_SIZE
+    ) {
         let p_x = (current_c_pos.x + x + MINIMAP_IMAGE_HALF_SIZE) as u32;
         let p_y = (current_c_pos.z + z + MINIMAP_IMAGE_HALF_SIZE) as u32;
         if p_x >= MINIMAP_IMAGE_SIZE || p_y >= MINIMAP_IMAGE_SIZE {
             continue;
         }
 
-        let current_chunk = voxels.loaded_chunks().get_chunk(current_c_pos + RelChunkPos::new(x, y, z));
+        let current_chunk = voxels
+            .loaded_chunks()
+            .get_chunk(current_c_pos + RelChunkPos::new(x, y, z));
         if current_chunk.is_some() {
-            let LinearRgba {red: luma, .. } = image.get_color_at(p_x, p_y).expect("invalid color").to_linear();
+            let LinearRgba { red: luma, .. } = image.get_color_at(p_x, p_y).expect("invalid color").to_linear();
 
             const SINGLE_STEP_LUMA: f32 = 1.0 / CHUNK_LOAD_RADIUS as f32;
-            image.set_color_at(p_x, p_y, LinearRgba::gray(luma + SINGLE_STEP_LUMA).into()).expect("invalid color");
+            image
+                .set_color_at(p_x, p_y, LinearRgba::gray(luma + SINGLE_STEP_LUMA).into())
+                .expect("invalid color");
         }
     }
 
@@ -510,14 +518,14 @@ fn generated_chunk_minimap_gizmo(
         .anchor(Align2::RIGHT_TOP, egui::vec2(0.0, 0.0))
         .auto_sized()
         .show(ctx, move |ui| {
-            ui.add(egui::Image::new(
-                egui::load::SizedTexture::new(
+            ui.add(
+                egui::Image::new(egui::load::SizedTexture::new(
                     *rendered_texture_id,
-                    [MINIMAP_IMAGE_SIZEF, MINIMAP_IMAGE_SIZEF]
+                    [MINIMAP_IMAGE_SIZEF, MINIMAP_IMAGE_SIZEF],
                 ))
                 .show_loading_spinner(true)
                 .fit_to_original_size(MINIMAP_DISPLAY_FACTOR)
-                .texture_options(TextureOptions::NEAREST)
+                .texture_options(TextureOptions::NEAREST),
             );
         });
 }
@@ -599,7 +607,7 @@ impl FromWorld for Images {
             TextureDimension::D2,
             buf.into_raw(),
             TextureFormat::Rgba8Unorm,
-            RenderAssetUsages::default()
+            RenderAssetUsages::default(),
         );
         image.sampler = ImageSampler::linear();
 
@@ -632,7 +640,10 @@ impl Plugin for PlayerPlugin {
                 Update,
                 player_action.run_if(not(egui_wants_any_input)).in_set(InGameSystemSet),
             )
-            .add_systems(EguiPrimaryContextPass, (gizmo_toggles, generated_chunk_minimap_gizmo).in_set(InGameSystemSet))
+            .add_systems(
+                EguiPrimaryContextPass,
+                (gizmo_toggles, generated_chunk_minimap_gizmo).in_set(InGameSystemSet),
+            )
             .add_systems(
                 Update,
                 (xyz_gizmo, cur_chunk_gizmo, lookat_gizmo)
