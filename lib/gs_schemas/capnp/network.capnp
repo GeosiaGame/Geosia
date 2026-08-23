@@ -41,6 +41,12 @@ enum PacketId @0xb9187b435a666525 {
 
     # S->C :ChunkDataStreamPacket (usually asynchronous)
     chunkData @6;
+
+    # S->C :EntityDataStreamPacket (usually asynchronous)
+    entityData @7;
+
+    # C->S :PlayerMoveRequest
+    movePlayer @8;
 }
 
 # Each packet is prefixed with a LEB128-encoded length field
@@ -102,11 +108,26 @@ struct BlockActionRequest @0xa74244e28dcb5f2f {
     tick @2 :UInt64;
 }
 
-struct ChunkDataStreamPacket {
+struct ChunkDataStreamPacket @0xa7b8435e68c4c291 {
     # Game tick on which this chunk was updated.
     tick @0 :UInt64;
     # AbsChunkPos of the chunk.
     position @1 :GameTypes.IVec3;
     # Serialized chunk data.
     data @2 :GameTypes.FullChunkData;
+}
+
+struct EntityDataStreamPacket @0xe493dd088f49c162 {
+    # Game tick these changes belong to
+    tick @0 :UInt64;
+    newEntities @1 :List(GameTypes.EntitySpawnData);
+    updatedEntities @2 :List(GameTypes.EntityUpdateData);
+    deletedEntities @3 :List(GameTypes.Uuid);
+}
+
+struct PlayerMoveRequest @0x8f4415191b9f8ca6 {
+    # Game tick these changes belong to
+    tick @0 :UInt64;
+    position @1 :GameTypes.WorldPos;
+    rotation @2 :GameTypes.Quat;
 }

@@ -22,3 +22,7 @@ Follows https://matklad.github.io/2021/08/22/large-rust-workspaces.html
 - [Vulkan SDK](https://vulkan.lunarg.com/#new_tab): Provides validation layers, shader debugging tools and other useful utilities
 - [RenderDoc](https://renderdoc.org/): can record full replayable GPU traces and visually inspect any rendering command
 - [tracy](https://github.com/wolfpld/tracy): nanosecond-resolution interactive profiler, useful for identifying performance issues
+
+## Hard limits
+
+- 63 players connected to a server at any given time

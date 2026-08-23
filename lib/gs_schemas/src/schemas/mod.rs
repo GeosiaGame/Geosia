@@ -2,6 +2,7 @@
 //!
 //! Based on capnproto: <https://capnproto.org/language.html>, <https://docs.rs/capnp/latest/capnp/>
 
+use std::borrow::Cow;
 use std::convert::Infallible;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -16,6 +17,7 @@ use futures::{AsyncRead, AsyncReadExt};
 use smallvec::SmallVec;
 use uuid::Uuid;
 
+use crate::coordinates::{AbsChunkPos, WorldPos};
 use crate::registry::RegistryName;
 
 /// Common game object types.
@@ -364,6 +366,28 @@ impl CapnpExt for Quat {
     }
 }
 
+impl CapnpExt for WorldPos {
+    type Builder<'a> = game_types_capnp::world_pos::Builder<'a>;
+    type Reader<'a> = game_types_capnp::world_pos::Reader<'a>;
+    type ReaderError = Infallible;
+
+    fn write_to_message(&self, builder: &mut Self::Builder<'_>) {
+        builder.set_chunk_x(self.chunk.x);
+        builder.set_chunk_y(self.chunk.y);
+        builder.set_chunk_z(self.chunk.z);
+        builder.set_x(self.offset.x);
+        builder.set_y(self.offset.y);
+        builder.set_z(self.offset.z);
+    }
+
+    fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
+        Ok(Self::from_offset_chunkpos(
+            AbsChunkPos::new(reader.get_chunk_x(), reader.get_chunk_y(), reader.get_chunk_z()),
+            Vec3A::new(reader.get_x(), reader.get_y(), reader.get_z()),
+        ))
+    }
+}
+
 impl CapnpExt for RegistryName {
     type Builder<'a> = game_types_capnp::registry_name::Builder<'a>;
     type Reader<'a> = game_types_capnp::registry_name::Reader<'a>;
@@ -420,6 +444,16 @@ pub fn new_packet_builder<OwnedPayloadType: capnp::traits::Owned>()
 pub fn new_simple_packet_builder()
 -> TypedBuilder<network_capnp::network_packet::Owned<capnp::any_pointer::Owned>, HeapAllocator> {
     capnp::message::TypedBuilder::new_default()
+}
+
+/// Helper to read a capnp-read byte array as a Rust slice, allocating a `Vec<u8>` if needed due to format evolution.
+pub fn capnp_bytes_to_cow<'b>(msg: &'b capnp::primitive_list::Reader<'_, u8>) -> Cow<'b, [u8]> {
+    if let Some(slice) = msg.as_slice() {
+        Cow::Borrowed(slice)
+    } else {
+        let data: Vec<u8> = msg.iter().collect();
+        Cow::Owned(data)
+    }
 }
 
 /// Alias for the capnp builder type used for passing raw packet data around.

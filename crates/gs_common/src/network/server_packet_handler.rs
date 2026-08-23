@@ -1,5 +1,6 @@
 //! Centralizes the authenticated packet handling to a bevy system.
 
+use gs_schemas::schemas::network_capnp::player_move_request;
 use gs_schemas::{
     ErrorList, GameSide,
     coordinates::WorldPos,
@@ -23,6 +24,8 @@ use super::{
     server::{ConnectedPlayer, QueuedPacket},
     transport::PacketWrapper,
 };
+use crate::network::server_entity_syncer::ServerToClientEntityDirtyTag;
+use crate::player::ServerPlayerAvatarController;
 use crate::voxel::plugin::PersistentVoxelStorage;
 use crate::{
     GameServerResource, InGameSystemSet, ServerData,
@@ -113,7 +116,8 @@ pub fn server_packet_handler_system(
                                   player: &ConnectedPlayer,
                                   is_bootstrapping: bool,
                                   is_bootstrapped: bool,
-                                  incoming: QueuedPacket|
+                                  incoming: QueuedPacket,
+                                  commands: &mut Commands|
           -> Result<()> {
         const READER_OPTIONS: capnp::message::ReaderOptions = RPC_SERVER_READER_OPTIONS;
 
@@ -228,9 +232,51 @@ pub fn server_packet_handler_system(
                     root.set_id(PacketId::BlockAction);
                     root.set_timestamp_ms(response_timestamp);
                     root.set_simple_payload(SimpleResult::Ok.as_i32());
+                    let response = PacketWrapper::from(response);
+                    incoming.stream.send_packet(response)?;
                 }
-                PacketId::ChunkData => {
+                PacketId::ChunkData | PacketId::EntityData => {
                     // no-op
+                }
+                PacketId::MovePlayer => {
+                    let incoming_data = incoming
+                        .data
+                        .parse_typed::<player_move_request::Owned>(READER_OPTIONS)?;
+                    let message = incoming_data.get()?.get_payload()?;
+                    let new_position = WorldPos::read_from_message(&message.get_position()?)?;
+                    let new_rotation = Quat::read_from_message(&message.get_rotation()?)?;
+
+                    commands.queue_silenced(move |world: &mut World| {
+                        // Ignore errors because the player might have left the game since this command was queued.
+                        let Ok(player) = world.get_entity(player_entity) else {
+                            return;
+                        };
+                        let Some(has_character) = player.get::<ServerPlayerAvatarController>() else {
+                            return;
+                        };
+                        let avatar_id = has_character.server_player_avatar_id();
+                        let Ok(mut avatar) = world.get_entity_mut(avatar_id) else {
+                            return;
+                        };
+                        let Some(mut utf) = avatar.get_mut::<UniverseTransform>() else {
+                            return;
+                        };
+                        // TODO: Anti-cheat, once we actually have physics :P
+                        utf.position = new_position;
+                        let Some(mut tf) = avatar.get_mut::<Transform>() else {
+                            return;
+                        };
+                        tf.rotation = new_rotation;
+                        avatar.insert_if_new(ServerToClientEntityDirtyTag);
+                    });
+
+                    let mut response = new_simple_packet_builder();
+                    let mut root = response.init_root();
+                    root.set_id(PacketId::MovePlayer);
+                    root.set_timestamp_ms(response_timestamp);
+                    root.set_simple_payload(SimpleResult::Ok.as_i32());
+                    let response = PacketWrapper::from(response);
+                    incoming.stream.send_packet(response)?;
                 }
             }
         } else {
@@ -271,7 +317,10 @@ pub fn server_packet_handler_system(
                 PacketId::BlockAction => {
                     // no-op
                 }
-                PacketId::ChunkData => {
+                PacketId::ChunkData | PacketId::EntityData => {
+                    // no-op
+                }
+                PacketId::MovePlayer => {
                     // no-op
                 }
             }
@@ -284,7 +333,14 @@ pub fn server_packet_handler_system(
         let mut queue = player.received_packet_queue.blocking_lock();
         while let Ok(incoming) = queue.try_recv() {
             let packet_id = incoming.id;
-            let result = handle_packet(player_entity, player, is_bootstrapping, is_bootstrapped, incoming);
+            let result = handle_packet(
+                player_entity,
+                player,
+                is_bootstrapping,
+                is_bootstrapped,
+                incoming,
+                &mut commands,
+            );
             if let Err(e) = result {
                 warn!(
                     "Error occured during packet {} handling from {} ({}): {}",

@@ -108,9 +108,10 @@ impl MaterialExtension for ChunkMeshMaterialExtension {
 }
 
 /// Creates a bevy mesh from a chunk, using neighboring chunks to determine culling&ambient occlusion information.
+/// Returns [`None`] when the chunk mesh is empty.
 #[allow(clippy::cognitive_complexity)]
 #[inline(never)]
-pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<ClientData>) -> anyhow::Result<Mesh> {
+pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<ClientData>) -> Result<Option<Mesh>> {
     // position relative to the central chunk
     #[inline(always)]
     fn get_block(chunks: &ChunkRefNeighborhood<ClientData>, position: AbsBlockPos) -> BlockEntry {
@@ -231,6 +232,10 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
         }
     }
 
+    if pos_buf.is_empty() {
+        return Ok(None);
+    }
+
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos_buf);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normal_buf);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color_buf);
@@ -238,5 +243,5 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
     mesh.insert_attribute(VERTEX_ATTRIBUTE_BARYCENTRIC_COLOR_OFFSET, barycentric_buf);
     mesh.insert_indices(Indices::U32(ibuf));
 
-    Ok(mesh)
+    Ok(Some(mesh))
 }

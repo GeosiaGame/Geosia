@@ -2,11 +2,14 @@
 
 pub mod config;
 pub mod dedicated_server;
+pub mod entity;
 pub mod network;
 pub mod player;
 pub mod prelude;
 pub mod promises;
 pub mod raycast;
+pub mod registries;
+pub mod universe;
 pub mod voxel;
 
 use std::thread::JoinHandle;
@@ -17,10 +20,12 @@ use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::log::LogPlugin;
 use bevy::platform::cell::SyncCell;
+use bevy::scene::ScenePlugin;
 use bevy::state::app::StatesPlugin;
 use bevy::time::TimePlugin;
+use entity::standard_entities;
 use gs_schemas::dependencies::bytes::Bytes;
-use gs_schemas::registries::GameRegistries;
+use gs_schemas::limits::MAX_CONNECTED_PLAYERS;
 use gs_schemas::registry::Registry;
 use gs_schemas::savefile::SavefileMetadata;
 use gs_schemas::schemas::network_capnp::game_server_metadata;
@@ -33,12 +38,14 @@ use voxel::persistence::generator::GeneratorPersistenceLayer;
 use voxel::plugin::VoxelUniverseBuilder;
 
 use crate::config::{GameConfig, GameConfigHandle};
-use crate::network::SharedRegistryHolder;
 use crate::network::server::{ConnectedPlayersTable, NetworkServerPlugin, NetworkThreadServerState};
 use crate::network::thread::NetworkThread;
 use crate::network::transport::PacketWrapper;
+use crate::network::{SharedRegistryHolder, networked_entities_plugin};
 use crate::player::player_data_server_plugin;
 use crate::prelude::*;
+use crate::registries::GameRegistries;
+use crate::universe::geosia_universe_plugin;
 use crate::voxel::generator::multi_noise::MultiNoiseGenerator;
 use crate::voxel::persistence::savefile::SavefilePersistenceLayer;
 use crate::voxel::plugin::VoxelUniversePlugin;
@@ -140,7 +147,7 @@ impl GameServer {
         meta.set_title(&config.server.server_title);
         meta.set_subtitle(&config.server.server_subtitle);
         meta.set_player_count(connected_players);
-        meta.set_player_limit(config.server.max_players as i32);
+        meta.set_player_limit((config.server.max_players as i32).min(MAX_CONNECTED_PLAYERS as i32));
         PacketWrapper::from(response).as_bytes()
     }
 
@@ -181,7 +188,7 @@ impl GameServer {
         let server = Self {
             config,
             savefile,
-            shared_registries: builtin_game_registries(),
+            shared_registries: builtin_server_game_registries(),
             engine_thread,
             network_thread,
             pause: AtomicBool::new(true),
@@ -323,11 +330,14 @@ impl GameServer {
             .add_plugins(TransformPlugin)
             .add_plugins(DiagnosticsPlugin)
             .add_plugins(AssetPlugin::default())
-            .add_plugins(ScheduleRunnerPlugin::run_loop(TICK));
+            .add_plugins(ScheduleRunnerPlugin::run_loop(TICK))
+            .add_plugins(ScenePlugin);
 
-        app.add_plugins(VoxelUniversePlugin::<ServerData>::new())
+        app.add_plugins(geosia_universe_plugin)
+            .add_plugins(VoxelUniversePlugin::<ServerData>::new())
             .add_plugins(NetworkServerPlugin)
-            .add_plugins(player_data_server_plugin);
+            .add_plugins(player_data_server_plugin)
+            .add_plugins(networked_entities_plugin);
 
         app.insert_resource(SharedRegistryHolder(engine.shared_registries.clone()));
         let block_registry = Arc::clone(&engine.shared_registries.block_types);
@@ -406,15 +416,18 @@ impl GameServer {
 }
 
 /// Simple hardcoded registries of some game objects.
-pub fn builtin_game_registries() -> GameRegistries {
+pub fn builtin_server_game_registries() -> GameRegistries {
     let mut block_types = Registry::default();
     voxel::blocks::setup_basic_blocks(&mut block_types);
     let mut biome_types = Registry::default();
     voxel::biomes::setup_basic_biomes(&mut biome_types);
+    let mut entity_types = Registry::default();
+    standard_entities::setup_standard_server_entities(&mut entity_types);
 
     GameRegistries {
         block_types: Arc::new(block_types),
         biome_types: Arc::new(biome_types),
+        entity_types: Arc::new(entity_types),
     }
 }
 

@@ -1,5 +1,6 @@
 //! The clientside of Geosia
 mod debugcam;
+pub mod entity;
 pub mod network;
 pub mod prelude;
 pub mod states;
@@ -11,15 +12,22 @@ use bevy::log::LogPlugin;
 use bevy::platform::cell::SyncCell;
 use bevy::window::{CursorOptions, ExitCondition, PresentMode};
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
+use gs_common::network::networked_entities_plugin;
 use gs_common::network::thread::NetworkThread;
+use gs_common::registries::GameRegistries;
+use gs_common::universe::geosia_universe_plugin;
 use gs_common::{GAME_BRAND_NAME, GameBevyCommand};
 use gs_schemas::dependencies::smallvec::SmallVec;
+use gs_schemas::registry::Registry;
 use gs_schemas::{GameSide, GsExtraData};
 use network::client_packet_handlers::ClientPacketHandlerPlugin;
 use states::{ClientAppState, InGameSystemSet, LoadingGameSystemSet, MainMenuSystemSet};
 use voxel::ClientVoxelUniversePlugin;
 
+use crate::entity::client_entities_plugin;
+use crate::entity::standard_entities::setup_standard_client_entities;
 use crate::network::NetworkThreadClientState;
+use crate::network::client_entity_syncer::client_entity_syncer_plugin;
 use crate::prelude::*;
 use crate::voxel::client_plugin::VoxelUniverseClientPlugin;
 
@@ -96,7 +104,9 @@ pub fn client_main() {
     configure_sets(&mut app, FixedUpdate);
     configure_sets(&mut app, FixedPostUpdate);
 
-    app.add_plugins(ui::common_game_ui_plugin)
+    app //
+        .add_plugins(geosia_universe_plugin)
+        .add_plugins(ui::common_game_ui_plugin)
         .add_plugins(debugcam::PlayerPlugin)
         .add_plugins(VoxelUniverseClientPlugin)
         .add_plugins(states::main_menu::MainMenuPlugin)
@@ -104,6 +114,9 @@ pub fn client_main() {
         .add_plugins(states::in_game::InGamePlugin)
         .add_plugins(ClientVoxelUniversePlugin)
         .add_plugins(ClientPacketHandlerPlugin)
+        .add_plugins(client_entities_plugin)
+        .add_plugins(networked_entities_plugin)
+        .add_plugins(client_entity_syncer_plugin)
         .add_plugins(ui::chat::chat_plugin)
         .add_plugins(debug_window::DebugWindow);
 
@@ -127,6 +140,22 @@ fn control_command_handler_system(world: &mut World) {
     };
     for cmd in pending_cmds {
         cmd(world);
+    }
+}
+
+/// Simple hardcoded registries of some game objects.
+pub fn builtin_client_game_registries() -> GameRegistries {
+    let mut block_types = Registry::default();
+    gs_common::voxel::blocks::setup_basic_blocks(&mut block_types);
+    let mut biome_types = Registry::default();
+    gs_common::voxel::biomes::setup_basic_biomes(&mut biome_types);
+    let mut entity_types = Registry::default();
+    setup_standard_client_entities(&mut entity_types);
+
+    GameRegistries {
+        block_types: Arc::new(block_types),
+        biome_types: Arc::new(biome_types),
+        entity_types: Arc::new(entity_types),
     }
 }
 

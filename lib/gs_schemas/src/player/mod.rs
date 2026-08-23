@@ -33,6 +33,24 @@ static URL_UUID_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new("(?-u)\\A[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}\\z").unwrap()
 });
 
+/// A simple illegal account UUID used for default initialization.
+pub static INVALID_ACCOUNT_ID: AccountId = AccountId(NonNilUuid::new(Uuid::from_u128(0x1)).unwrap());
+
+impl Default for AccountId {
+    fn default() -> Self {
+        INVALID_ACCOUNT_ID
+    }
+}
+
+/// A simple illegal character UUID used for default initialization.
+pub static INVALID_CHARACTER_ID: CharacterId = CharacterId(NonNilUuid::new(Uuid::from_u128(0x1)).unwrap());
+
+impl Default for CharacterId {
+    fn default() -> Self {
+        INVALID_CHARACTER_ID
+    }
+}
+
 /// Sample UUID for testing defined as `uuid.uuid5(uuid.NAMESPACE_DNS, 'alice.geosia.org')`
 pub static TEST_ALICE_PLAYER_UUID: AccountId =
     AccountId(NonNilUuid::new(Uuid::from_u128(0xf57eb054325c51dda5d41922706f34eb)).unwrap());

@@ -72,6 +72,15 @@ struct Vec3 @0xed69b4c78460e1c0 {
     z @2 :Float32;
 }
 
+struct WorldPos @0x95549819dde82ce9 {
+    chunkX @0 :Int32;
+    chunkY @1 :Int32;
+    chunkZ @2 :Int32;
+    x @3 :Float32;
+    y @4 :Float32;
+    z @5 :Float32;
+}
+
 struct Quat @0xfab98c6be0936a7d {
     x @0 :Float32;
     y @1 :Float32;
@@ -101,9 +110,11 @@ struct GameBootstrapData @0xb0778941893c57e5 {
     blockRegistry @1 :RegistryIdMappingBundle;
     # Name->ID mappings for the biome registry.
     biomeRegistry @2 :RegistryIdMappingBundle;
+    # Name->ID mappings for the entity registry.
+    entityRegistry @3 :RegistryIdMappingBundle;
 }
 
-struct FullChunkData {
+struct FullChunkData @0xa04dfbd30fa7c6d6 {
     # Revision number of the chunk, used by MutWatcher deserialization.
     revision @0 :UInt64;
     blockPalette @1 :List(UInt64);
@@ -111,13 +122,14 @@ struct FullChunkData {
 }
 
 # Action Data
-struct PositionData {
+# TODO: Rename
+struct PositionData @0xa13feaa2172e9f33 {
     position @0 :IVec3;
     offset @1 :Vec3;
     look @2 :Vec3;
 }
 
-struct BlockAction {
+struct BlockAction @0xae95dc0853d499df {
     union {
         placeBlock :group {
             # should eventually contain information on what is being placed
@@ -129,3 +141,46 @@ struct BlockAction {
         }
     }
 }
+
+struct EntitySpawnData @0xcf0a95c55d3aec8a {
+    # The (network) UUID of the entity being spawned
+    nid @0 :Uuid;
+    # The registry ID of the entity being spawned
+    registryId @1 :UInt32;
+    # The serialized custom data of the entity
+    serialized @2 :List(UInt8);
+}
+
+struct EntityUpdateData @0xa28060c8c0e35cc9 {
+    # The (network) UUID of the entity being updated
+    nid @0 :Uuid;
+    # The serialized custom delta data of the entity
+    serialized @1 :List(UInt8);
+}
+
+# Storage for arbitrary component data making up an in-game entity.
+struct EntityComponents @0xb930afb8e69235e6 {
+    components @0 :List(EntityComponent);
+}
+
+struct EntityComponent @0x9498e1200e81c4df {
+    union {
+        transform @0 :EntityTransformComponent;
+        avatar @1 :EntityAvatarComponent;
+        dummy @2 :EntityDummyComponent;
+    }
+}
+
+struct EntityTransformComponent @0x93d09af64a350c35 {
+    position @0 :WorldPos;
+    rotation @1 :Quat;
+    scale @2 :Vec3;
+}
+
+struct EntityAvatarComponent @0xfa93c0f187d98679 {
+    accountId @0 :Uuid;
+    characterId @1 :Uuid;
+}
+
+# TODO: temporary component to avoid exhaustive match warnings, remove when a third component is added
+struct EntityDummyComponent @0x85dc4ff77236d621 {}

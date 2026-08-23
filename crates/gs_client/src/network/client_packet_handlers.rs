@@ -2,7 +2,7 @@
 
 use gs_common::network::SharedRegistryHolder;
 use gs_common::{
-    InGameSystemSet, builtin_game_registries,
+    InGameSystemSet,
     network::{
         server::QueuedPacket,
         transport::{PacketWrapper, RPC_CLIENT_READER_OPTIONS},
@@ -21,9 +21,10 @@ use gs_schemas::{
 };
 
 use super::AuthenticatedNetworkClient;
+use crate::network::client_entity_syncer::NetworkEntityClient;
 use crate::{
-    ClientData, ClientNetworkThreadHolder, prelude::*, states::loading_game::LoadingBootstrapPromiseResolver,
-    voxel::ClientVoxelUniverseBuilder,
+    ClientData, ClientNetworkThreadHolder, builtin_client_game_registries, prelude::*,
+    states::loading_game::LoadingBootstrapPromiseResolver, voxel::ClientVoxelUniverseBuilder,
 };
 use crate::{
     states::{ClientAppState, LoadingGameSystemSet},
@@ -65,6 +66,7 @@ pub fn client_packet_handler_system(
     current_state: Res<State<ClientAppState>>,
     mut commands: Commands,
     mut network_voxel_client: Option<Single<&mut NetworkVoxelClient>>,
+    mut network_entity_client: ResMut<NetworkEntityClient>,
 ) {
     let client = &mut *client;
     let response_timestamp = client.packet_timestamp();
@@ -88,7 +90,7 @@ pub fn client_packet_handler_system(
                         .data
                         .parse_typed::<game_bootstrap_data::Owned>(reader_options)?;
                     let message = incoming_data.get()?.get_payload()?;
-                    let default_registries = builtin_game_registries();
+                    let default_registries = builtin_client_game_registries();
                     let uuid = Uuid::read_from_message(&message.get_universe_id()?)?;
                     let registries = default_registries.clone_with_serialized_ids(&message)?;
                     let nblocks = registries.block_types.len();
@@ -138,6 +140,12 @@ pub fn client_packet_handler_system(
                         .chunk_packet_queue
                         .push_back(incoming);
                 }
+                PacketId::EntityData => {
+                    network_entity_client.packet_queue.push_back(incoming);
+                }
+                PacketId::MovePlayer => {
+                    // no-op
+                }
             }
         } else {
             // response on c2s
@@ -163,8 +171,13 @@ pub fn client_packet_handler_system(
                     let result = SimpleResult::from_i32(root.get()?.get_simple_payload());
                     info!("Block action result: {result:?}");
                 }
-                PacketId::ChunkData => {
+                PacketId::ChunkData | PacketId::EntityData => {
                     // no-op
+                }
+                PacketId::MovePlayer => {
+                    let root = incoming.data.parse_simple(reader_options)?;
+                    let _result = SimpleResult::from_i32(root.get()?.get_simple_payload());
+                    // TODO: Rollback failed movements
                 }
             }
         }

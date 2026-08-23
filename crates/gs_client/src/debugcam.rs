@@ -10,11 +10,14 @@ use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use bevy_egui::egui::Align2;
 use bevy_egui::input::egui_wants_any_input;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
+use gs_common::network::transport::PacketWrapper;
 use gs_common::raycast::{RaycastContext, raycast};
 use gs_common::voxel::plugin::BlockRegistryHolder;
 use gs_schemas::actions::{BlockAction, PositionData};
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, WorldPos};
 use gs_schemas::raycast::{RaycastHitMask, RaycastResult, RaycastSpec};
+use gs_schemas::schemas::network_capnp::{PacketId, player_move_request};
+use gs_schemas::schemas::{CapnpExt, new_packet_builder};
 use gs_schemas::voxel::voxeltypes::EMPTY_BLOCK;
 
 use crate::network::AuthenticatedNetworkClient;
@@ -209,7 +212,7 @@ fn player_action(
     mouse: Res<ButtonInput<MouseButton>>,
     primary_window: Query<&CursorOptions, With<PrimaryWindow>>,
     key_bindings: Res<KeyBindings>,
-    mut camera_query: Query<(&FlyCam, &mut Transform)>, //    mut query: Query<&mut Transform, With<FlyCam>>,
+    mut camera_query: Query<(&FlyCam, &Transform)>,
 ) {
     if let Ok(cursor_options) = primary_window.single() {
         for (_camera, transform) in camera_query.iter_mut() {
@@ -259,6 +262,35 @@ fn player_action(
     } else {
         warn!("Primary window not found for `player_action`!");
     }
+}
+
+fn player_movement_packet_sender(
+    authenticated_client: Res<AuthenticatedNetworkClient>,
+    camera_query: Populated<&Transform, (With<FlyCam>, Changed<Transform>)>,
+    mut previous_transform: Local<Transform>,
+) -> BevyResult<()> {
+    let transform = camera_query.single()?;
+    if transform == &*previous_transform {
+        return Ok(());
+    }
+    *previous_transform = *transform;
+    // To be replaced with a real universe position once we keep track of that in a client player entity.
+    let world_pos = WorldPos::from_dvec3(transform.translation.as_dvec3());
+
+    let mut request = new_packet_builder::<player_move_request::Owned>();
+    let mut root = request.init_root();
+    root.set_id(PacketId::MovePlayer);
+    root.set_timestamp_ms(authenticated_client.packet_timestamp());
+    let mut root = root.init_payload();
+    root.set_tick(0); // TODO send the actual client tick
+    world_pos.write_to_message(&mut root.reborrow().init_position());
+    transform
+        .rotation
+        .write_to_message(&mut root.reborrow().init_rotation());
+    let request = PacketWrapper::from(request);
+    let _ = authenticated_client.main_c2s_stream.send_packet(request);
+
+    Ok(())
 }
 
 #[derive(Default, Resource)]
@@ -477,6 +509,7 @@ impl Plugin for PlayerPlugin {
                     .after(player_look)
                     .after(player_action),
             )
+            .add_systems(PostUpdate, (player_movement_packet_sender).in_set(InGameSystemSet))
             .add_systems(Update, cursor_grab.in_set(InGameSystemSet));
     }
 }

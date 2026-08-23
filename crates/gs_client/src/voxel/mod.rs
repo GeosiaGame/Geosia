@@ -8,12 +8,13 @@ use gs_common::network::transport::RPC_CLIENT_READER_OPTIONS;
 use gs_common::prelude::rpc::chunk_data_stream_packet;
 use gs_common::voxel::plugin::{BlockRegistryHolder, CHUNK_PACKET_QUEUE_LENGTH, VoxelUniverse, VoxelUniverseBuilder};
 use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos};
+use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::mutwatcher::MutWatcher;
 use gs_schemas::schemas::CapnpExt;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
 use meshgen::mesh_from_chunk;
-use smallvec::{SmallVec, smallvec};
+use smallvec::SmallVec;
 
 use crate::ClientData;
 use crate::prelude::*;
@@ -148,11 +149,7 @@ fn client_chunk_mesher_system(
 
     // Schedule new meshes for all outdated chunks
     let loaded_chunks = voxels.loaded_chunks();
-    enum Mutation {
-        NewMesh(MutWatcher<ChunkMeshState>),
-        NewMeshRevision(MutWatcher<()>),
-    }
-    let mut chunk_mutations: Vec<(AbsChunkPos, Mutation)> = Vec::new();
+    let mut chunk_mutations: Vec<(AbsChunkPos, MutWatcher<ChunkMeshState>)> = Vec::new();
 
     for (&pos, chunk) in loaded_chunks.chunks.iter() {
         let old_mesh = chunk.extra_data.mesh.as_ref();
@@ -174,40 +171,49 @@ fn client_chunk_mesher_system(
                 continue;
             }
         };
-        let mesh = mesh_assets.add(chunk_mesh);
-        if let Some(mut old_mesh_entity_commands) = old_mesh.and_then(|om| commands.get_entity(om.entities[0]).ok()) {
-            old_mesh_entity_commands.insert(Mesh3d(mesh));
-            chunk_mutations.push((pos, Mutation::NewMeshRevision(chunk.new_with_same_revision(()))));
-        } else {
-            let entity = commands
-                .spawn((
-                    Mesh3d(mesh),
-                    MeshMaterial3d(voxel_material.clone()),
-                    Transform::from_translation(AbsBlockPos::from(pos).as_vec3()),
-                ))
-                .id();
-            chunk_mutations.push((
-                pos,
-                Mutation::NewMesh(chunk.new_with_same_revision(ChunkMeshState {
-                    entities: smallvec![entity],
-                })),
-            ));
+        let mut chunk_meshes: SmallVec<[_; 4]> = SmallVec::new();
+        if let Some(mesh) = chunk_mesh {
+            chunk_meshes.push(mesh_assets.add(mesh));
         }
+        let mut mesh_entities: SmallVec<[_; 4]> = SmallVec::new();
+        if let Some(old_mesh) = old_mesh {
+            mesh_entities.extend_from_slice(&old_mesh.entities[..]);
+        }
+
+        if mesh_entities.len() < chunk_meshes.len() {
+            let to_spawn = chunk_meshes.len() - mesh_entities.len();
+            let bundle = (
+                Mesh3d::default(),
+                MeshMaterial3d(voxel_material.clone()),
+                Transform::from_translation(AbsBlockPos::from(pos).as_vec3()),
+            );
+            for _ in 0..to_spawn {
+                mesh_entities.push(commands.spawn(bundle.clone()).id());
+            }
+        } else if mesh_entities.len() > chunk_meshes.len() {
+            let to_despawn = mesh_entities.len() - chunk_meshes.len();
+            for _ in 0..to_despawn {
+                let Some(e) = mesh_entities.pop() else { continue };
+                commands.entity(e).try_despawn();
+            }
+        }
+
+        for (e, new_mesh) in mesh_entities.iter().copied().zip_eq(chunk_meshes) {
+            commands.entity(e).insert(Mesh3d(new_mesh));
+        }
+
+        chunk_mutations.push((
+            pos,
+            chunk.new_with_same_revision(ChunkMeshState {
+                entities: mesh_entities,
+            }),
+        ));
     }
     let loaded_chunks = voxels.loaded_chunks_mut();
     for (cpos, mutation) in chunk_mutations {
         let Some(chunk) = loaded_chunks.get_chunk_mut(cpos) else {
             unreachable!();
         };
-        match mutation {
-            Mutation::NewMesh(mesh) => chunk.mutate_without_revision().extra_data.mesh = Some(mesh),
-            Mutation::NewMeshRevision(revision) => chunk
-                .mutate_without_revision()
-                .extra_data
-                .mesh
-                .as_mut()
-                .unwrap()
-                .set_revision_from(&revision),
-        }
+        chunk.mutate_without_revision().extra_data.mesh = Some(mutation);
     }
 }

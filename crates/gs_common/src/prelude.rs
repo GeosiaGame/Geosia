@@ -5,6 +5,7 @@
 
 // Anyhow error handling
 pub use anyhow::{anyhow, bail, ensure, Context, Result};
+pub use bevy::prelude::Result as BevyResult;
 
 // Tokio and std MPSC channels
 pub use std::sync::mpsc::{
@@ -42,6 +43,9 @@ pub use tokio_util::compat::TokioAsyncReadCompatExt;
 // Our Promises
 pub use crate::promises::{GenericAsyncResult, AsyncResult};
 
+// Identifiers
+pub use gs_schemas::registry::{RegistryId, RegistryName, RegistryNameRef, GS_REGISTRY_DOMAIN, GS_REGISTRY_DOMAIN_CONST, GS_REGISTRY_DOMAIN_KS};
+
 // Capnp namespaces
 pub use gs_schemas::schemas::network_capnp as rpc;
 
@@ -49,3 +53,6 @@ pub use gs_schemas::schemas::network_capnp as rpc;
 pub use bevy::prelude::*;
 // Prefer `tracing` logging methods to `log`.
 pub use bevy::log::tracing::{debug, error, info, trace, warn};
+// Our core bevy types
+pub use crate::universe::UniverseTransform;
+pub use crate::network::{EntityNetworkId, server_entity_syncer::ServerToClientSyncableEntity};

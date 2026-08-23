@@ -1,5 +1,6 @@
 //! The network client thread implementation.
 
+pub mod client_entity_syncer;
 pub mod client_packet_handlers;
 
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};

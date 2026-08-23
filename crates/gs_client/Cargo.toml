@@ -32,6 +32,7 @@ tokio.workspace = true
 tracing.workspace = true
 # Remote, bevy plugins
 bevy_egui.workspace = true
+uuid = { version = "1.23.4", features = ["v4"] }
 
 [dependencies.bevy]
 workspace = true

@@ -30,7 +30,6 @@ pub trait GenericAsyncResult {
     fn blocking_generic_wait(self: Box<Self>) -> Result<(), anyhow::Error>;
 
     /// Waits for the result by awaiting the inner future, wraps the error in a generic anyhow type.
-    #[must_use]
     fn async_generic_wait(self: Box<Self>) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>>;
 
     /// Spawns a new Tokio async task waiting for the result, and logs the error out if it is a failure.
