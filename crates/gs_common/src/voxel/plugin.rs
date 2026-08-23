@@ -164,16 +164,6 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
 
     /// Adds persistent storage support to the universe.
     pub fn with_persistent_storage(mut self, persistence_layer: Box<dyn ChunkPersistenceLayer<ED>>) -> Result<Self> {
-        // TODO: make the player load the chunks
-        self.bundle.world_scope(|w| {
-            w.spawn((
-                UniverseTransform {
-                    position: AbsBlockPos::ZERO.into(),
-                },
-                ChunkLoader::default(),
-            ));
-        });
-
         self.bundle.insert(PersistentVoxelStorage::<ED> {
             persistence_layer,
             live_requests: default(),
