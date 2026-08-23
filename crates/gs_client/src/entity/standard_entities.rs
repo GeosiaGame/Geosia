@@ -97,12 +97,12 @@ fn same_entities_on_both_game_sides() {
     setup_standard_client_entities(&mut client_registry);
     let mut server_ids: Vec<_> = server_registry
         .iter()
-        .map(|(id, name, value)| name.to_owned())
+        .map(|(_id, name, _value)| name.to_owned())
         .collect();
     server_ids.sort();
     let mut client_ids: Vec<_> = client_registry
         .iter()
-        .map(|(id, name, value)| name.to_owned())
+        .map(|(_id, name, _value)| name.to_owned())
         .collect();
     client_ids.sort();
     assert_eq!(server_ids, client_ids);
