@@ -7,6 +7,7 @@ use gs_schemas::player::{AccountId, CharacterId, PlayerAccount, PlayerCharacter}
 use crate::entity::standard_entities::PLAYER_AVATAR_ENTITY_NAME;
 use crate::network::server::{ConnectedPlayer, ServerPlayerJoined, ServerPlayerLeft};
 use crate::prelude::*;
+use crate::voxel::plugin::ChunkLoader;
 
 /// A bevy plugin for registering the shared player information resources with the engine.
 pub fn player_data_common_plugin(app: &mut App) {
@@ -86,6 +87,7 @@ impl ServerPlayerAvatar {
             ServerToClientSyncableEntity {
                 registry_id: PLAYER_AVATAR_ENTITY_NAME
             }
+            ChunkLoader
         }
     }
 }

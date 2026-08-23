@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
-use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, AbsChunkRange, RelChunkPos};
+use gs_schemas::coordinates::{AbsBlockPos, AbsChunkPos, AbsChunkRange, RelChunkPos, WorldPos};
 use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::mutwatcher::{MutWatcher, RevisionNumber};
 use gs_schemas::schemas::network_capnp::{PacketId, chunk_data_stream_packet};
@@ -25,6 +25,8 @@ use crate::{InGameSystemSet, ServerData};
 
 /// The maximum number of stored chunk packets before applying stream backpressure.
 pub const CHUNK_PACKET_QUEUE_LENGTH: usize = 20;
+
+pub(crate) const CHUNK_LOAD_RADIUS: i32 = 6;
 
 /// Initializes the settings related to the voxel universe.
 #[derive(Default)]
@@ -118,6 +120,12 @@ pub struct ChunkLoader {
     pub radius: i32,
 }
 
+impl Default for ChunkLoader {
+    fn default() -> Self {
+        ChunkLoader { radius: CHUNK_LOAD_RADIUS }
+    }
+}
+
 /// Builder for voxel universe initialization
 pub struct VoxelUniverseBuilder<'world, ExtraData: GsExtraData> {
     _block_registry: Arc<BlockRegistry>,
@@ -155,7 +163,7 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
     pub fn with_persistent_storage(mut self, persistence_layer: Box<dyn ChunkPersistenceLayer<ED>>) -> Result<Self> {
         // TODO: make the player load the chunks
         self.bundle.world_scope(|w| {
-            w.spawn((VoxelPosition(AbsBlockPos::ZERO), ChunkLoader { radius: 4 }));
+            w.spawn((UniverseTransform { position: AbsBlockPos::ZERO.into() }, ChunkLoader::default()));
         });
 
         self.bundle.insert(PersistentVoxelStorage::<ED> {
@@ -199,7 +207,7 @@ fn server_system_process_chunk_loading(
         &mut PersistentVoxelStorage<ServerData>,
         &VoxelUniverseTag,
     )>,
-    chunk_loaders: Query<(&ChunkLoader, &VoxelPosition)>,
+    mut chunk_loaders: Query<(&ChunkLoader, &UniverseTransform)>,
 ) {
     let Ok((mut voxels, mut persistence, _)) = voxel_q.single_mut() else {
         return;
@@ -234,12 +242,12 @@ fn server_system_process_chunk_loading(
         let _span = trace_span!("Scan for new chunk load requests").entered();
         let mut to_request: BTreeSet<AbsChunkPos> = default();
 
-        for (loader, lpos) in chunk_loaders.iter() {
+        for (loader, pos) in chunk_loaders.iter() {
             if loader.radius <= 0 {
                 continue;
             }
             let r = loader.radius;
-            let center: AbsChunkPos = lpos.chunk_pos();
+            let center: AbsChunkPos = pos.position.chunk;
             let range = AbsChunkRange::from_corners(center - RelChunkPos::splat(r), center + RelChunkPos::splat(r));
             for cpos in range.iter_xzy() {
                 if chunk_map.contains_key(&cpos) {
