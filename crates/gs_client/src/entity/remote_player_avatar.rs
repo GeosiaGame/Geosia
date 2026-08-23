@@ -1,7 +1,7 @@
 //! Entity representing other players connected to the server.
 
 use gs_common::InGameSystemSet;
-use gs_schemas::player::{AccountId, CharacterId, PlayerCharacter};
+use gs_schemas::player::{AccountId, CharacterId};
 
 use crate::prelude::*;
 
@@ -28,6 +28,7 @@ pub struct RemotePlayerAvatar {
 
 #[allow(clippy::new_without_default)] // Conflicts with FromTemplate
 impl RemotePlayerAvatar {
+    /// Constructs a new avatar with default field values
     pub fn new() -> Self {
         Self {
             account_id: AccountId::default(),
@@ -50,6 +51,7 @@ fn debug_draw_remote_avatars(avatars: Populated<(&RemotePlayerAvatar, &GlobalTra
         let mut iso = gtf.to_isometry();
         gizmos.sphere(iso, 2.0f32, bevy::color::palettes::tailwind::GREEN_500);
         iso.translation += vec3a(0f32, 2.1f32, 0f32);
+        iso.rotation *= Quat::from_rotation_y(std::f32::consts::PI);
         let text = format!("{}", avatar.character_id.0.get().as_braced());
         gizmos.text(
             iso,

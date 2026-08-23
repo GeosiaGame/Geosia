@@ -32,31 +32,48 @@ pub struct PlayerCache {
 
 /// A link between a [`ServerPlayerAvatar`] and a [`ConnectedPlayer`], inserted on the [`ConnectedPlayer`] entity.
 #[derive(Clone, Component, FromTemplate)]
-#[relationship(relationship_target = ServerPlayerAvatar)]
+#[relationship(relationship_target = ServerPlayerAvatarControlled)]
 pub struct ServerPlayerAvatarController(Entity);
+
+impl ServerPlayerAvatarController {
+    /// Returns the ID of the player avatar controlled by this entity.
+    pub fn server_player_avatar_id(&self) -> Entity {
+        self.0
+    }
+}
+
+/// A link between a [`ServerPlayerAvatar`] and a [`ConnectedPlayer`], inserted on the [`ServerPlayerAvatar`] entity.
+#[derive(Clone, Component, FromTemplate)]
+#[relationship_target(relationship = ServerPlayerAvatarController)]
+pub struct ServerPlayerAvatarControlled(Entity);
+
+impl ServerPlayerAvatarControlled {
+    /// Returns the ID of the player controlling this entity.
+    pub fn connected_player_id(&self) -> Entity {
+        self.0
+    }
+}
 
 /// Links an entity inside the game universe to a [`PlayerCharacter`], acting as its in-game avatar.
 /// Co-exists on the player entity with:
 /// - [`UniverseTransform`]
 /// - [`ServerToClientSyncableEntity`]
 #[derive(Debug, Clone, SceneComponent, FromTemplate)]
-#[relationship_target(relationship = ServerPlayerAvatarController)]
 pub struct ServerPlayerAvatar {
     #[allow(dead_code)]
     /// The ID of the account owning this avatar.
     pub account_id: AccountId,
     /// The ID of the character represented by this avatar.
     pub character_id: CharacterId,
-    #[relationship]
-    controller: Entity,
 }
 
+#[allow(clippy::new_without_default)] // Conflicts with FromTemplate
 impl ServerPlayerAvatar {
+    /// Constructs a new avatar with default field values
     pub fn new() -> Self {
         Self {
             account_id: AccountId::default(),
             character_id: CharacterId::default(),
-            controller: Entity::PLACEHOLDER,
         }
     }
 
@@ -64,9 +81,7 @@ impl ServerPlayerAvatar {
     fn scene() -> impl Scene {
         bsn! {
             #ServerPlayerAvatar
-            ServerPlayerAvatar {
-                controller: Entity::PLACEHOLDER
-            }
+            ServerPlayerAvatar
             UniverseTransform
             ServerToClientSyncableEntity {
                 registry_id: PLAYER_AVATAR_ENTITY_NAME
@@ -81,27 +96,40 @@ fn server_create_avatar_for_joining_player(
     mut commands: Commands,
 ) -> BevyResult {
     let player_info = player_info.get(event.connected_player)?;
+    let account_id = player_info.authenticated_info.player_character.account.id;
+    let character_id = player_info.authenticated_info.player_character.id;
 
-    commands.spawn_scene(bsn! {
-        @ServerPlayerAvatar {
-            account_id: {player_info.authenticated_info.player_character.account.id},
-            character_id: {player_info.authenticated_info.player_character.id},
-            controller: {event.connected_player},
-        }
-        UniverseTransform {
-            position: {WorldPos::from_blockpos(AbsBlockPos::new(0, 6, 12))},
-        }
-    });
+    let avatar = commands
+        .spawn_scene(bsn! {
+            @ServerPlayerAvatar {
+                account_id: account_id,
+                character_id: character_id,
+            }
+            UniverseTransform {
+                position: {WorldPos::from_blockpos(AbsBlockPos::new(0, 6, 12))},
+            }
+        })
+        .id();
+
+    commands
+        .entity(event.connected_player)
+        .insert(ServerPlayerAvatarController(avatar));
+
+    info!(
+        "Spawned avatar {:?} for joining player {:?} {:?}",
+        avatar, event.connected_player, player_info.authenticated_info.address
+    );
+
     Ok(())
 }
 
 fn server_destroy_avatar_for_leaving_player(
     event: On<ServerPlayerLeft>,
-    avatars: Query<(Entity, &ServerPlayerAvatar)>,
+    avatars: Query<(Entity, Option<&ServerPlayerAvatarControlled>)>,
     mut commands: Commands,
 ) -> BevyResult {
-    for (avatar_id, avatar) in avatars {
-        if avatar.controller == event.connected_player {
+    for (avatar_id, controlled) in avatars {
+        if controlled.map(ServerPlayerAvatarControlled::connected_player_id) == Some(event.connected_player) {
             commands.entity(avatar_id).try_despawn();
         }
     }

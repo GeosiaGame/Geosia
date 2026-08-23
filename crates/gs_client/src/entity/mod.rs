@@ -1,3 +1,5 @@
+//! The client logic and implementation of various in-game entity types.
+
 pub mod remote_player_avatar;
 pub mod standard_entities;
 

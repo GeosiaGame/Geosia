@@ -1,3 +1,4 @@
+//! Defines the default entity types and their client-side deserialization functions.
 use std::io::Write;
 
 use gs_common::entity::standard_entities::*;

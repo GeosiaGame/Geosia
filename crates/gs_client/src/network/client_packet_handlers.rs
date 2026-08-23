@@ -2,7 +2,7 @@
 
 use gs_common::network::SharedRegistryHolder;
 use gs_common::{
-    InGameSystemSet, builtin_server_game_registries,
+    InGameSystemSet,
     network::{
         server::QueuedPacket,
         transport::{PacketWrapper, RPC_CLIENT_READER_OPTIONS},
@@ -143,6 +143,9 @@ pub fn client_packet_handler_system(
                 PacketId::EntityData => {
                     network_entity_client.packet_queue.push_back(incoming);
                 }
+                PacketId::MovePlayer => {
+                    // no-op
+                }
             }
         } else {
             // response on c2s
@@ -170,6 +173,11 @@ pub fn client_packet_handler_system(
                 }
                 PacketId::ChunkData | PacketId::EntityData => {
                     // no-op
+                }
+                PacketId::MovePlayer => {
+                    let root = incoming.data.parse_simple(reader_options)?;
+                    let _result = SimpleResult::from_i32(root.get()?.get_simple_payload());
+                    // TODO: Rollback failed movements
                 }
             }
         }

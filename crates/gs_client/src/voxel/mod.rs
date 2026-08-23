@@ -14,7 +14,7 @@ use gs_schemas::schemas::CapnpExt;
 use gs_schemas::voxel::chunk::Chunk;
 use gs_schemas::voxel::chunk_group::ChunkGroup;
 use meshgen::mesh_from_chunk;
-use smallvec::{SmallVec, smallvec};
+use smallvec::SmallVec;
 
 use crate::ClientData;
 use crate::prelude::*;
@@ -198,7 +198,7 @@ fn client_chunk_mesher_system(
             }
         }
 
-        for (e, new_mesh) in mesh_entities.iter().copied().zip_eq(chunk_meshes.into_iter()) {
+        for (e, new_mesh) in mesh_entities.iter().copied().zip_eq(chunk_meshes) {
             commands.entity(e).insert(Mesh3d(new_mesh));
         }
 

@@ -128,7 +128,7 @@ fn first_entity_sync(
     let mut root = packet.init_root();
     root.set_id(PacketId::EntityData);
     root.set_timestamp_ms(engine.network_thread.packet_timestamp());
-    let mut payload = root.init_payload();
+    let payload = root.init_payload();
     let entity_count = to_sync.p0().count();
     let mut new_entities = payload.init_new_entities(entity_count.try_into()?);
     let mut buffer: Vec<u8> = Vec::new();
@@ -295,7 +295,7 @@ fn dirty_entity_sync(
             entry.set_serialized(&data[..])?;
         }
 
-        let mut msg_deltas = payload.reborrow().init_new_entities(deltas.len().try_into()?);
+        let mut msg_deltas = payload.reborrow().init_updated_entities(deltas.len().try_into()?);
         for (i, (nid, data)) in deltas.drain(..).enumerate() {
             let mut entry = msg_deltas.reborrow().get(i.try_into()?);
             nid.get().write_to_message(&mut entry.reborrow().init_nid());

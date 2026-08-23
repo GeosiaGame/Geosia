@@ -1,11 +1,10 @@
-use std::borrow::Cow;
+//! Applies the in-game entity state changes as streamed from the server.
 use std::collections::VecDeque;
 
 use gs_common::InGameSystemSet;
 use gs_common::network::server::QueuedPacket;
 use gs_common::network::transport::RPC_CLIENT_READER_OPTIONS;
 use gs_common::network::{EntityNetworkIdLookupTable, SharedRegistryHolder};
-use gs_schemas::dependencies::itertools::Itertools;
 use gs_schemas::schemas::network_capnp::entity_data_stream_packet;
 use gs_schemas::schemas::{CapnpExt, capnp_bytes_to_cow};
 use uuid::{NonNilUuid, Uuid};

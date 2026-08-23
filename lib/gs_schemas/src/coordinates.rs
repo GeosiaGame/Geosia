@@ -109,6 +109,13 @@ impl WorldPos {
             offset: bpos.as_vec3a() + offset,
             chunk: cpos,
         }
+        .renormalized()
+    }
+
+    /// Constructs itself from a given block position at the given offset.
+    #[inline]
+    pub fn from_offset_chunkpos(chunk: AbsChunkPos, offset: Vec3A) -> Self {
+        Self { offset, chunk }.renormalized()
     }
 
     /// Converts any chunk-sized integer part of [`WorldPos::offset`] to the integer [`WorldPos::chunk`] offset to improve precision for further calculations.
@@ -205,6 +212,23 @@ impl Default for WorldPos {
     fn default() -> Self {
         Self::ZERO
     }
+}
+
+#[test]
+fn test_worldpos() {
+    for x in -128..128 {
+        let dpos = DVec3::new(x as f64, 0.0, 0.0);
+        let wpos = WorldPos::from_dvec3(dpos);
+        let d2pos = wpos.as_dvec3();
+        assert_eq!(dpos, d2pos);
+    }
+    assert_eq!(
+        WorldPos::from_dvec3(DVec3::new(CHUNK_DIMD + 1.0, 0.0, 0.0)),
+        WorldPos {
+            offset: Vec3A::new(1.0, 0.0, 0.0),
+            chunk: AbsChunkPos::new(1, 0, 0),
+        }
+    );
 }
 
 // xxx yyy zzz -> zyxzyxzyx bit pattern

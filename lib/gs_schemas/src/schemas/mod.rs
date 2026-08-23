@@ -17,7 +17,7 @@ use futures::{AsyncRead, AsyncReadExt};
 use smallvec::SmallVec;
 use uuid::Uuid;
 
-use crate::coordinates::{AbsBlockPos, WorldPos};
+use crate::coordinates::{AbsChunkPos, WorldPos};
 use crate::registry::RegistryName;
 
 /// Common game object types.
@@ -381,8 +381,8 @@ impl CapnpExt for WorldPos {
     }
 
     fn read_from_message(reader: &Self::Reader<'_>) -> Result<Self, Self::ReaderError> {
-        Ok(Self::from_offset_blockpos(
-            AbsBlockPos::new(reader.get_chunk_x(), reader.get_chunk_y(), reader.get_chunk_z()),
+        Ok(Self::from_offset_chunkpos(
+            AbsChunkPos::new(reader.get_chunk_x(), reader.get_chunk_y(), reader.get_chunk_z()),
             Vec3A::new(reader.get_x(), reader.get_y(), reader.get_z()),
         ))
     }

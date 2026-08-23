@@ -12,7 +12,6 @@ use bevy::log::LogPlugin;
 use bevy::platform::cell::SyncCell;
 use bevy::window::{CursorOptions, ExitCondition, PresentMode};
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
-use gs_common::entity::standard_entities;
 use gs_common::network::networked_entities_plugin;
 use gs_common::network::thread::NetworkThread;
 use gs_common::registries::GameRegistries;
