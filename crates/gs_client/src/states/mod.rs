@@ -27,3 +27,6 @@ pub struct MainMenuSystemSet;
 pub struct LoadingGameSystemSet;
 
 pub use gs_common::InGameSystemSet;
+
+/// Marker component for entities that should despawn when leaving the running game.
+pub const DESPAWN_OUT_OF_GAME: DespawnOnExit<ClientAppState> = DespawnOnExit(ClientAppState::InGame);

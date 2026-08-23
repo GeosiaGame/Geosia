@@ -14,7 +14,7 @@ use crate::prelude::*;
 pub type NetworkEntityRef<'w, 's> = EntityRefExcept<'w, 's, (ServerToClientSyncableEntity,)>;
 
 /// A callback type that reads network-serializable components off an entity and serializes them to the given writer.
-pub type EntitySerializer = fn(data: NetworkEntityRef, writer: &mut dyn Write) -> std::io::Result<()>;
+pub type EntitySerializer = fn(data: NetworkEntityRef, writer: &mut dyn Write) -> Result<()>;
 /// A callback type that reads network-serializable components from a byte slice and updates the in-world entity with them.
 pub type EntityDeserializer = fn(bytes: &[u8], target: EntityWorldMut) -> Result<()>;
 
@@ -58,7 +58,7 @@ pub type EntityRegistry = Registry<EntitySchema>;
 // This happens when e.g. the bundle in `NetworkEntityRef` is not a valid set of ECS components.
 #[test]
 fn can_implement_serializers() {
-    fn serializer(_data: NetworkEntityRef, _writer: &mut dyn Write) -> std::io::Result<()> {
+    fn serializer(_data: NetworkEntityRef, _writer: &mut dyn Write) -> Result<()> {
         Ok(())
     }
     let _: EntitySerializer = serializer;

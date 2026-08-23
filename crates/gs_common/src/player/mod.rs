@@ -1,8 +1,6 @@
 //! The server-side model of player data and behaviour.
 //! See [`gs_schemas::player`] for more information.
 
-use bevy::ecs::lifecycle::HookContext;
-use bevy::ecs::world::DeferredWorld;
 use gs_schemas::coordinates::{AbsBlockPos, WorldPos};
 use gs_schemas::player::{AccountId, CharacterId, PlayerAccount, PlayerCharacter};
 
@@ -30,71 +28,48 @@ pub struct PlayerCache {
     accounts_by_uuid: HashMap<AccountId, Arc<PlayerAccount>>,
     #[allow(dead_code)]
     characters_by_uuid: HashMap<CharacterId, Arc<PlayerCharacter>>,
-    avatars_by_character: HashMap<CharacterId, Entity>,
 }
 
 /// A link between a [`ServerPlayerAvatar`] and a [`ConnectedPlayer`], inserted on the [`ConnectedPlayer`] entity.
-#[derive(Clone, Component)]
+#[derive(Clone, Component, FromTemplate)]
 #[relationship(relationship_target = ServerPlayerAvatar)]
-pub struct HasServerPlayerAvatar(Entity);
+pub struct ServerPlayerAvatarController(Entity);
 
 /// Links an entity inside the game universe to a [`PlayerCharacter`], acting as its in-game avatar.
-#[derive(Debug, Component)]
-#[component(on_add = Self::on_add, on_discard = Self::on_discard)]
-#[require(UniverseTransform, ServerToClientSyncableEntity = ServerToClientSyncableEntity::new(PLAYER_AVATAR_ENTITY_NAME))]
-#[relationship_target(relationship = HasServerPlayerAvatar)]
+/// Co-exists on the player entity with:
+/// - [`UniverseTransform`]
+/// - [`ServerToClientSyncableEntity`]
+#[derive(Debug, Clone, SceneComponent, FromTemplate)]
+#[relationship_target(relationship = ServerPlayerAvatarController)]
 pub struct ServerPlayerAvatar {
     #[allow(dead_code)]
-    /// Do not ever modify after construction.
-    pub account: AccountId,
-    /// Do not ever modify after construction.
-    pub character: CharacterId,
+    /// The ID of the account owning this avatar.
+    pub account_id: AccountId,
+    /// The ID of the character represented by this avatar.
+    pub character_id: CharacterId,
     #[relationship]
-    connected_player: Entity,
+    controller: Entity,
 }
 
 impl ServerPlayerAvatar {
-    pub fn new(account: AccountId, character: CharacterId) -> Self {
+    pub fn new() -> Self {
         Self {
-            account,
-            character,
-            connected_player: Entity::PLACEHOLDER,
+            account_id: AccountId::default(),
+            character_id: CharacterId::default(),
+            controller: Entity::PLACEHOLDER,
         }
     }
 
-    fn on_add(mut world: DeferredWorld, ctx: HookContext) {
-        let Some(avatar) = world.entity(ctx.entity).get::<ServerPlayerAvatar>() else {
-            return;
-        };
-        let character = avatar.character;
-        let Some(mut cache) = world.get_resource_mut::<PlayerCache>() else {
-            return;
-        };
-        if let Err(e) = cache.avatars_by_character.try_insert(character, ctx.entity) {
-            error!("Could not insert player character {character:?} into the cache as one already exists: {e}");
-        }
-    }
-
-    fn on_discard(mut world: DeferredWorld, ctx: HookContext) {
-        let Some(avatar) = world.entity(ctx.entity).get::<ServerPlayerAvatar>() else {
-            return;
-        };
-        let character = avatar.character;
-        let Some(mut cache) = world.get_resource_mut::<PlayerCache>() else {
-            return;
-        };
-        let cached = cache.avatars_by_character.entry(character);
-        match cached {
-            hashbrown::hash_map::Entry::Occupied(occupied) if *occupied.get() == ctx.entity => {
-                occupied.remove();
+    /// Creates a full [`ServerPlayerAvatar`] with all the necessary components present.
+    fn scene() -> impl Scene {
+        bsn! {
+            #ServerPlayerAvatar
+            ServerPlayerAvatar {
+                controller: Entity::PLACEHOLDER
             }
-            hashbrown::hash_map::Entry::Occupied(_) => {
-                error!(
-                    "Could not remove player character {character:?} from the cache as the mapping points to a different character"
-                );
-            }
-            hashbrown::hash_map::Entry::Vacant(_) => {
-                error!("Could not remove player character {character:?} from the cache as it doesn't exist");
+            UniverseTransform
+            ServerToClientSyncableEntity {
+                registry_id: PLAYER_AVATAR_ENTITY_NAME
             }
         }
     }
@@ -107,30 +82,29 @@ fn server_create_avatar_for_joining_player(
 ) -> BevyResult {
     let player_info = player_info.get(event.connected_player)?;
 
-    let avatar = commands.spawn((
-        ServerPlayerAvatar {
-            account: player_info.authenticated_info.player_character.account.id,
-            character: player_info.authenticated_info.player_character.id,
-            connected_player: event.connected_player,
-        },
+    commands.spawn_scene(bsn! {
+        @ServerPlayerAvatar {
+            account_id: {player_info.authenticated_info.player_character.account.id},
+            character_id: {player_info.authenticated_info.player_character.id},
+            controller: {event.connected_player},
+        }
         UniverseTransform {
-            position: WorldPos::from_blockpos(AbsBlockPos::new(0, 6, 12)),
-        },
-    ));
-    let avatar = avatar.id();
-    commands
-        .get_entity(event.connected_player)?
-        .insert(HasServerPlayerAvatar(avatar));
-
+            position: {WorldPos::from_blockpos(AbsBlockPos::new(0, 6, 12))},
+        }
+    });
     Ok(())
 }
 
 fn server_destroy_avatar_for_leaving_player(
     event: On<ServerPlayerLeft>,
-    player_info: Query<&ConnectedPlayer>,
+    avatars: Query<(Entity, &ServerPlayerAvatar)>,
     mut commands: Commands,
 ) -> BevyResult {
-    // TODO
+    for (avatar_id, avatar) in avatars {
+        if avatar.controller == event.connected_player {
+            commands.entity(avatar_id).try_despawn();
+        }
+    }
 
     Ok(())
 }

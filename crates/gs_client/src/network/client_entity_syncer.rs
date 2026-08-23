@@ -12,7 +12,7 @@ use uuid::{NonNilUuid, Uuid};
 
 use crate::network::client_packet_handlers::client_packet_handler_system;
 use crate::prelude::*;
-use crate::states::{ClientAppState, LoadingGameSystemSet};
+use crate::states::{ClientAppState, DESPAWN_OUT_OF_GAME, LoadingGameSystemSet};
 
 /// Sets up entity syncing on the client side.
 pub fn client_entity_syncer_plugin(app: &mut App) {
@@ -62,7 +62,11 @@ fn process_entity_packet_queue(world: &mut World) -> BevyResult {
                 .context("missing new entity registry id")?;
             let data = new_ent.get_serialized()?;
             let data = capnp_bytes_to_cow(&data);
-            let e = world.spawn((EntityNetworkId(nid), ClientRemoteEntity { registry_id: rid }));
+            let e = world.spawn((
+                DESPAWN_OUT_OF_GAME,
+                EntityNetworkId(nid),
+                ClientRemoteEntity { registry_id: rid },
+            ));
             (etype.deserialize_full)(&data, e)?;
         }
         for upd_ent in payload.get_updated_entities()? {

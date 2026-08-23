@@ -6,7 +6,7 @@ use std::fmt::{Display, Formatter};
 use std::net::SocketAddr;
 
 use bevy::ecs::lifecycle::HookContext;
-use bevy::ecs::relationship::RelationshipSourceCollection;
+use bevy::ecs::template::TemplateContext;
 use bevy::ecs::world::DeferredWorld;
 use smallvec::SmallVec;
 use thiserror::Error;
@@ -57,6 +57,62 @@ impl Display for PeerAddress {
 /// A [`Resource`] holding the shared network registries copy for the currently running game.
 #[derive(Clone, Resource, Deref, DerefMut)]
 pub struct SharedRegistryHolder(pub GameRegistries);
+
+macro_rules! impl_shared_registry_resolver {
+    ($tmpl_name: ident, $registry: ident) => {
+        #[doc = concat!("A [`Template`] implementation for [`RegistryId`] resolution in the current `", stringify!($registry), "` registry.")]
+        #[derive(Default)]
+        pub struct $tmpl_name {
+            /// The name to resolve.
+            pub registry_name: RegistryName,
+        }
+
+        impl Template for $tmpl_name {
+            type Output = RegistryId;
+
+            fn build_template(&self, context: &mut TemplateContext) -> BevyResult<Self::Output> {
+                let world = context.entity.world();
+                let holder = world.get_resource::<SharedRegistryHolder>().context("get_resource::<SharedRegistryHolder>")?;
+                let registry = &*holder.$registry;
+                let (id, _) =
+                    registry.lookup_name_to_object(self.registry_name.as_ref()).with_context(|| format!("SharedRegistryHolder.{}.lookup_name_to_object({})", stringify!($registry), self.registry_name))?;
+                Ok(id)
+            }
+
+            fn clone_template(&self) -> Self {
+                Self { registry_name: self.registry_name.clone() }
+            }
+        }
+
+        impl From<RegistryName> for $tmpl_name {
+            fn from(value: RegistryName) -> Self {
+                Self { registry_name: value }
+            }
+        }
+
+        impl From<&RegistryName> for $tmpl_name {
+            fn from(value: &RegistryName) -> Self {
+                Self { registry_name: value.clone() }
+            }
+        }
+
+        impl From<RegistryNameRef<'_>> for $tmpl_name {
+            fn from(value: RegistryNameRef<'_>) -> Self {
+                Self { registry_name: value.to_owned() }
+            }
+        }
+
+        impl From<&RegistryNameRef<'_>> for $tmpl_name {
+            fn from(value: &RegistryNameRef<'_>) -> Self {
+                Self { registry_name: value.to_owned() }
+            }
+        }
+    };
+}
+
+impl_shared_registry_resolver!(SharedBlockRegistryIdResolverTemplate, block_types);
+impl_shared_registry_resolver!(SharedBiomeRegistryIdResolverTemplate, biome_types);
+impl_shared_registry_resolver!(SharedEntityRegistryIdResolverTemplate, entity_types);
 
 /// Stores backwards mappings from a network ID to the entity that has it.
 #[derive(Clone, Debug, Default, Resource)]

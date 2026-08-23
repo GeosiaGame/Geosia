@@ -12,16 +12,21 @@ use bevy::log::LogPlugin;
 use bevy::platform::cell::SyncCell;
 use bevy::window::{CursorOptions, ExitCondition, PresentMode};
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
+use gs_common::entity::standard_entities;
 use gs_common::network::networked_entities_plugin;
 use gs_common::network::thread::NetworkThread;
+use gs_common::registries::GameRegistries;
 use gs_common::universe::geosia_universe_plugin;
 use gs_common::{GAME_BRAND_NAME, GameBevyCommand};
 use gs_schemas::dependencies::smallvec::SmallVec;
+use gs_schemas::registry::Registry;
 use gs_schemas::{GameSide, GsExtraData};
 use network::client_packet_handlers::ClientPacketHandlerPlugin;
 use states::{ClientAppState, InGameSystemSet, LoadingGameSystemSet, MainMenuSystemSet};
 use voxel::ClientVoxelUniversePlugin;
 
+use crate::entity::client_entities_plugin;
+use crate::entity::standard_entities::setup_standard_client_entities;
 use crate::network::NetworkThreadClientState;
 use crate::network::client_entity_syncer::client_entity_syncer_plugin;
 use crate::prelude::*;
@@ -110,6 +115,7 @@ pub fn client_main() {
         .add_plugins(states::in_game::InGamePlugin)
         .add_plugins(ClientVoxelUniversePlugin)
         .add_plugins(ClientPacketHandlerPlugin)
+        .add_plugins(client_entities_plugin)
         .add_plugins(networked_entities_plugin)
         .add_plugins(client_entity_syncer_plugin)
         .add_plugins(ui::chat::chat_plugin)
@@ -135,6 +141,22 @@ fn control_command_handler_system(world: &mut World) {
     };
     for cmd in pending_cmds {
         cmd(world);
+    }
+}
+
+/// Simple hardcoded registries of some game objects.
+pub fn builtin_client_game_registries() -> GameRegistries {
+    let mut block_types = Registry::default();
+    gs_common::voxel::blocks::setup_basic_blocks(&mut block_types);
+    let mut biome_types = Registry::default();
+    gs_common::voxel::biomes::setup_basic_biomes(&mut biome_types);
+    let mut entity_types = Registry::default();
+    setup_standard_client_entities(&mut entity_types);
+
+    GameRegistries {
+        block_types: Arc::new(block_types),
+        biome_types: Arc::new(biome_types),
+        entity_types: Arc::new(entity_types),
     }
 }
 

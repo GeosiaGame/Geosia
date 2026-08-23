@@ -20,6 +20,7 @@ use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::log::LogPlugin;
 use bevy::platform::cell::SyncCell;
+use bevy::scene::ScenePlugin;
 use bevy::state::app::StatesPlugin;
 use bevy::time::TimePlugin;
 use entity::standard_entities;
@@ -187,7 +188,7 @@ impl GameServer {
         let server = Self {
             config,
             savefile,
-            shared_registries: builtin_game_registries(),
+            shared_registries: builtin_server_game_registries(),
             engine_thread,
             network_thread,
             pause: AtomicBool::new(true),
@@ -329,7 +330,8 @@ impl GameServer {
             .add_plugins(TransformPlugin)
             .add_plugins(DiagnosticsPlugin)
             .add_plugins(AssetPlugin::default())
-            .add_plugins(ScheduleRunnerPlugin::run_loop(TICK));
+            .add_plugins(ScheduleRunnerPlugin::run_loop(TICK))
+            .add_plugins(ScenePlugin);
 
         app.add_plugins(geosia_universe_plugin)
             .add_plugins(VoxelUniversePlugin::<ServerData>::new())
@@ -414,7 +416,7 @@ impl GameServer {
 }
 
 /// Simple hardcoded registries of some game objects.
-pub fn builtin_game_registries() -> GameRegistries {
+pub fn builtin_server_game_registries() -> GameRegistries {
     let mut block_types = Registry::default();
     voxel::blocks::setup_basic_blocks(&mut block_types);
     let mut biome_types = Registry::default();

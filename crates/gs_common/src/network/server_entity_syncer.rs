@@ -2,16 +2,16 @@
 
 use bevy::ecs::entity::EntityHashMap;
 use bevy::ecs::lifecycle::HookContext;
-use bevy::ecs::world::{DeferredWorld, EntityRefExcept};
+use bevy::ecs::world::DeferredWorld;
 use gs_schemas::limits::ConnectedPlayersBitset;
 use gs_schemas::schemas::network_capnp::PacketId;
 use gs_schemas::schemas::{CapnpExt, new_packet_builder};
-use hashbrown::hash_map::Entry;
 use smallvec::SmallVec;
 use uuid::NonNilUuid;
 
 use crate::entity::NetworkEntityRef;
-use crate::network::server::{ConnectedPlayer, ServerPlayerJoined};
+use crate::network::SharedEntityRegistryIdResolverTemplate;
+use crate::network::server::ConnectedPlayer;
 use crate::network::server_packet_handler::BootstrappedGameDataTag;
 use crate::network::transport::PacketWrapper;
 use crate::prelude::*;
@@ -26,12 +26,13 @@ pub fn server_entity_syncer_plugin(app: &mut App) {
 }
 
 /// Sends the entity to nearby (or all) clients and keeps all networked components in sync automatically.
-#[derive(Component)]
+#[derive(Component, FromTemplate)]
 #[require(EntityNetworkId)]
 #[component(on_discard = Self::on_discard)]
 pub struct ServerToClientSyncableEntity {
     /// The registry name for the entity type to spawn/sync on the other side.
-    pub registry_name: RegistryName,
+    #[template(SharedEntityRegistryIdResolverTemplate)]
+    pub registry_id: RegistryId,
     /// List of players aware of the entity already.
     /// Use acquire-release ordering to access as the discard hook might access the data from a different thread than.
     aware_players: ConnectedPlayersBitset,
@@ -50,10 +51,10 @@ struct DespawnedEntityToSync {
 }
 
 impl ServerToClientSyncableEntity {
-    /// Constructs a fresh marker for network sync, must match a name in the entity registry
-    pub fn new(registry_name: RegistryName) -> Self {
+    /// Constructs a fresh marker for network sync, must match an entry in the entity registry
+    pub fn new(registry_id: RegistryId) -> Self {
         Self {
-            registry_name,
+            registry_id,
             aware_players: 0,
         }
     }
@@ -133,10 +134,10 @@ fn first_entity_sync(
     let mut buffer: Vec<u8> = Vec::new();
     for (i, (entity, syncable, nid)) in to_sync.p0().iter().enumerate() {
         let mut new_entity = new_entities.reborrow().get(i as u32);
-        let (rid, schema) = entity_registry
-            .lookup_name_to_object(syncable.registry_name.as_ref())
+        let schema = entity_registry
+            .lookup_id_to_object(syncable.registry_id)
             .context("entity_registry.lookup_name_to_object")?;
-        new_entity.set_registry_id(rid.0.get());
+        new_entity.set_registry_id(syncable.registry_id.0.get());
         nid.0.get().write_to_message(&mut new_entity.reborrow().init_nid());
         buffer.clear();
         (schema.serialize_full)(entity, &mut buffer)?;
@@ -162,20 +163,16 @@ fn first_entity_sync(
 
 fn dirty_entity_sync(
     engine: Res<GameServerResource>,
-    players: Populated<(&ConnectedPlayer, &PlayerHadFirstEntitySyncTag), (With<BootstrappedGameDataTag>)>,
-    to_sync: ParamSet<(
-        Query<
-            (
-                NetworkEntityRef,
-                &ServerToClientSyncableEntity,
-                &EntityNetworkId,
-                Has<ServerToClientEntityDirtyTag>,
-            ),
-            Without<ConnectedPlayer>,
-        >,
-        // Mutable access to write the connected players set conflicts with EntityRef for dynamic serialization
-        Query<&mut ServerToClientSyncableEntity, (With<EntityNetworkId>, Without<ConnectedPlayer>)>,
-    )>,
+    players: Populated<(&ConnectedPlayer, &PlayerHadFirstEntitySyncTag), With<BootstrappedGameDataTag>>,
+    mut to_sync: Query<
+        (
+            NetworkEntityRef,
+            &mut ServerToClientSyncableEntity,
+            &EntityNetworkId,
+            Has<ServerToClientEntityDirtyTag>,
+        ),
+        Without<ConnectedPlayer>,
+    >,
     to_delete: Query<
         (Entity, &DespawnedEntityToSync),
         (Without<ConnectedPlayer>, Without<ServerToClientSyncableEntity>),
@@ -199,42 +196,52 @@ fn dirty_entity_sync(
     let mut delta_entity_data: EntityHashMap<(NonNilUuid, Rc<[u8]>)> = EntityHashMap::new();
     let mut buffer: Vec<u8> = Vec::new();
 
-    let get_full_entity =
-        |e_ref: NetworkEntityRef, syncable: &ServerToClientSyncableEntity, nid: &EntityNetworkId| -> Result<_> {
-            let entry = full_entity_data.entry(e_ref.entity());
-            use bevy::platform::collections::hash_map::Entry;
-            Ok(match entry {
-                Entry::Occupied(entry) => entry.get().clone(),
-                Entry::Vacant(entry) => {
-                    let (rid, schema) = entity_registry
-                        .lookup_name_to_object(syncable.registry_name.as_ref())
-                        .context("entity_registry.lookup_name_to_object")?;
-                    buffer.clear();
-                    (schema.serialize_full)(e_ref, &mut buffer)?;
-                    entry.insert((nid.0, rid, buffer.clone().into())).clone()
-                }
-            })
-        };
+    let mut get_full_entity_data = |buffer: &mut Vec<u8>,
+                                    e_ref: NetworkEntityRef,
+                                    syncable: &ServerToClientSyncableEntity,
+                                    nid: &EntityNetworkId|
+     -> Result<_> {
+        let entry = full_entity_data.entry(e_ref.entity());
+        use bevy::platform::collections::hash_map::Entry;
+        Ok(match entry {
+            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Vacant(entry) => {
+                let schema = entity_registry
+                    .lookup_id_to_object(syncable.registry_id)
+                    .context("entity_registry.lookup_id_to_object")?;
+                buffer.clear();
+                (schema.serialize_full)(e_ref, buffer)?;
+                entry
+                    .insert((nid.0, syncable.registry_id, buffer.clone().into()))
+                    .clone()
+            }
+        })
+    };
 
-    let get_delta_entity =
-        |e_ref: NetworkEntityRef, syncable: &ServerToClientSyncableEntity, nid: &EntityNetworkId| -> Result<_> {
-            let entry = delta_entity_data.entry(e_ref.entity());
-            use bevy::platform::collections::hash_map::Entry;
-            Ok(match entry {
-                Entry::Occupied(entry) => entry.get().clone(),
-                Entry::Vacant(entry) => {
-                    let (rid, schema) = entity_registry
-                        .lookup_name_to_object(syncable.registry_name.as_ref())
-                        .context("entity_registry.lookup_name_to_object")?;
-                    buffer.clear();
-                    (schema.serialize_delta)(e_ref, &mut buffer)?;
-                    entry.insert((nid.0, buffer.clone().into())).clone()
-                }
-            })
-        };
+    let mut get_entity_delta_data = |buffer: &mut Vec<u8>,
+                                     e_ref: NetworkEntityRef,
+                                     syncable: &ServerToClientSyncableEntity,
+                                     nid: &EntityNetworkId|
+     -> Result<_> {
+        let entry = delta_entity_data.entry(e_ref.entity());
+        use bevy::platform::collections::hash_map::Entry;
+        Ok(match entry {
+            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Vacant(entry) => {
+                let schema = entity_registry
+                    .lookup_id_to_object(syncable.registry_id)
+                    .context("entity_registry.lookup_id_to_object")?;
+                buffer.clear();
+                (schema.serialize_delta)(e_ref, buffer)?;
+                entry.insert((nid.0, buffer.clone().into())).clone()
+            }
+        })
+    };
 
     let packet_timestamp = engine.network_thread.packet_timestamp();
     let mut deletions: SmallVec<[NonNilUuid; 32]> = SmallVec::with_capacity(globally_deleted_entities.len());
+    let mut insertions: SmallVec<[(NonNilUuid, RegistryId, Rc<[u8]>); 32]> = SmallVec::new();
+    let mut deltas: SmallVec<[(NonNilUuid, Rc<[u8]>); 32]> = SmallVec::new();
     for (player, player_sync_tag) in players {
         let player_mask = player_sync_tag.bitset_mask();
         deletions.clear();
@@ -244,11 +251,56 @@ fn dirty_entity_sync(
             }
         }
 
+        for (e_ref, mut e_sync_info, nid, is_dirty) in to_sync.iter_mut() {
+            let e_old_mask = e_sync_info.aware_players;
+            let e_was_seen = (e_old_mask & player_mask) != 0;
+            let e_should_be_seen = true;
+            let e_new_mask = (e_old_mask & (!player_mask)) | if e_should_be_seen { player_mask } else { 0 };
+            match (e_was_seen, e_should_be_seen, is_dirty) {
+                (false, false, _) => {
+                    // no-op, remains unseen
+                }
+                (false, true, _) => {
+                    // needs to become seen, send full data
+                    let full_data = get_full_entity_data(&mut buffer, e_ref, &e_sync_info, nid)?;
+                    insertions.push(full_data);
+                }
+                (true, true, false) => {
+                    // no-op, still seen but no changes
+                }
+                (true, true, true) => {
+                    // still seen with changes
+                    let changes = get_entity_delta_data(&mut buffer, e_ref, &e_sync_info, nid)?;
+                    deltas.push(changes);
+                }
+                (true, false, _) => {
+                    // was seen but becomes unseen, send removal
+                    deletions.push(nid.0);
+                }
+            }
+            e_sync_info.aware_players = e_new_mask & valid_player_bits;
+        }
+
         let mut packet = new_packet_builder::<gs_schemas::schemas::network_capnp::entity_data_stream_packet::Owned>();
         let mut root = packet.init_root();
         root.set_id(PacketId::EntityData);
         root.set_timestamp_ms(packet_timestamp);
         let mut payload = root.init_payload();
+
+        let mut msg_insertions = payload.reborrow().init_new_entities(insertions.len().try_into()?);
+        for (i, (nid, rid, data)) in insertions.drain(..).enumerate() {
+            let mut entry = msg_insertions.reborrow().get(i.try_into()?);
+            nid.get().write_to_message(&mut entry.reborrow().init_nid());
+            entry.set_registry_id(rid.0.get());
+            entry.set_serialized(&data[..])?;
+        }
+
+        let mut msg_deltas = payload.reborrow().init_new_entities(deltas.len().try_into()?);
+        for (i, (nid, data)) in deltas.drain(..).enumerate() {
+            let mut entry = msg_deltas.reborrow().get(i.try_into()?);
+            nid.get().write_to_message(&mut entry.reborrow().init_nid());
+            entry.set_serialized(&data[..])?;
+        }
 
         let mut msg_deletions = payload.reborrow().init_deleted_entities(deletions.len().try_into()?);
         for (i, v) in deletions.drain(..).enumerate() {
@@ -257,7 +309,14 @@ fn dirty_entity_sync(
         }
 
         let packet = PacketWrapper::from(packet);
-        player.main_s2c_stream.send_packet(packet);
+        // TODO: dedicated stream
+        let _ = player.main_s2c_stream.send_packet(packet);
+    }
+
+    for (e_ref, _e_sync_info, _nid, is_dirty) in to_sync.iter_mut() {
+        if is_dirty {
+            commands.entity(e_ref.id()).remove::<ServerToClientEntityDirtyTag>();
+        }
     }
 
     Ok(())
