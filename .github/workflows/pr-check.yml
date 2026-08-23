@@ -29,9 +29,9 @@ jobs:
       matrix:
         os: [ ubuntu-24.04 ]
         rust:
-          - version: '1.96.0'
+          - version: '1.98.0'
             name: 'stable'
-          - version: 'nightly-2026-06-14'
+          - version: 'nightly-2026-08-22'
             name: 'nightly'
     env:
       RUST_BACKTRACE: full

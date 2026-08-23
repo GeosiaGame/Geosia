@@ -3,7 +3,7 @@ members = ["lib/*", "crates/*"]
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.97"
+rust-version = "1.98"
 edition = "2024"
 license = "LGPL-3.0-only"
 authors = ["Geosia team"]
@@ -201,10 +201,10 @@ quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
 [workspace.dependencies.bevy]
-version = "0.19.0"
+version = "0.19.1"
 default-features = false
 # Extra features are used in gs_client on top of these common ones
-# https://docs.rs/crate/bevy/0.19.0/source/Cargo.toml.orig#133
+# https://docs.rs/crate/bevy/0.19.1/source/Cargo.toml.orig#133
 features = [
     "std",
     "default_app",
@@ -220,7 +220,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_math]
-version = "0.19.0"
+version = "0.19.1"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -228,7 +228,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_color]
-version = "0.19.0"
+version = "0.19.1"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -236,7 +236,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_reflect]
-version = "0.19.0"
+version = "0.19.1"
 features = ["smallvec", "glam", "uuid", "std"]
 
 [profile.dev]
