@@ -469,7 +469,7 @@ fn generated_chunk_minimap_gizmo(
         if let Some(_) = current_chunk {
             let LinearRgba {red: luma, .. } = image.get_color_at(p_x, p_y).expect("invalid color").to_linear();
 
-            const SINGLE_STEP_LUMA: f32 = 8.0 / 255.0;
+            const SINGLE_STEP_LUMA: f32 = 1.0 / CHUNK_LOAD_RADIUS as f32;
             image.set_color_at(p_x, p_y, LinearRgba::gray(luma + SINGLE_STEP_LUMA).into()).expect("invalid color");
         }
     }
