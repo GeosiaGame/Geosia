@@ -26,6 +26,9 @@ use crate::{InGameSystemSet, ServerData};
 /// The maximum number of stored chunk packets before applying stream backpressure.
 pub const CHUNK_PACKET_QUEUE_LENGTH: usize = 20;
 
+/// public for client crate use only
+pub const CHUNK_LOAD_RADIUS: i32 = 6;
+
 /// Initializes the settings related to the voxel universe.
 #[derive(Default)]
 pub struct VoxelUniversePlugin<ExtraData: GsExtraData> {
@@ -118,6 +121,14 @@ pub struct ChunkLoader {
     pub radius: i32,
 }
 
+impl Default for ChunkLoader {
+    fn default() -> Self {
+        ChunkLoader {
+            radius: CHUNK_LOAD_RADIUS,
+        }
+    }
+}
+
 /// Builder for voxel universe initialization
 pub struct VoxelUniverseBuilder<'world, ExtraData: GsExtraData> {
     _block_registry: Arc<BlockRegistry>,
@@ -153,11 +164,6 @@ impl<'world, ED: GsExtraData> VoxelUniverseBuilder<'world, ED> {
 
     /// Adds persistent storage support to the universe.
     pub fn with_persistent_storage(mut self, persistence_layer: Box<dyn ChunkPersistenceLayer<ED>>) -> Result<Self> {
-        // TODO: make the player load the chunks
-        self.bundle.world_scope(|w| {
-            w.spawn((VoxelPosition(AbsBlockPos::ZERO), ChunkLoader { radius: 4 }));
-        });
-
         self.bundle.insert(PersistentVoxelStorage::<ED> {
             persistence_layer,
             live_requests: default(),
@@ -199,7 +205,7 @@ fn server_system_process_chunk_loading(
         &mut PersistentVoxelStorage<ServerData>,
         &VoxelUniverseTag,
     )>,
-    chunk_loaders: Query<(&ChunkLoader, &VoxelPosition)>,
+    chunk_loaders: Query<(&ChunkLoader, &UniverseTransform)>,
 ) {
     let Ok((mut voxels, mut persistence, _)) = voxel_q.single_mut() else {
         return;
@@ -234,12 +240,12 @@ fn server_system_process_chunk_loading(
         let _span = trace_span!("Scan for new chunk load requests").entered();
         let mut to_request: BTreeSet<AbsChunkPos> = default();
 
-        for (loader, lpos) in chunk_loaders.iter() {
+        for (loader, pos) in chunk_loaders.iter() {
             if loader.radius <= 0 {
                 continue;
             }
             let r = loader.radius;
-            let center: AbsChunkPos = lpos.chunk_pos();
+            let center: AbsChunkPos = pos.position.chunk;
             let range = AbsChunkRange::from_corners(center - RelChunkPos::splat(r), center + RelChunkPos::splat(r));
             for cpos in range.iter_xzy() {
                 if chunk_map.contains_key(&cpos) {
