@@ -50,7 +50,7 @@ impl<State: NetworkThreadState> NetworkThread<State> {
             .enable_all()
             .thread_name(format!("GS {side:?} Network Worker"))
             .build()
-            .context("Could not initialize the tokio runtime for the engine")?;
+            .wrap_err("Could not initialize the tokio runtime for the engine")?;
 
         let startup_time = Instant::now();
 
@@ -70,7 +70,7 @@ impl<State: NetworkThreadState> NetworkThread<State> {
             .name(format!("GS {side:?} Network Thread"))
             .stack_size(8 * 1024 * 1024)
             .spawn(move || Self::thread_main(network_rt, net_rx, result_aware_state_factory, side))
-            .context("Could not create a thread for the engine network subsystem")?;
+            .wrap_err("Could not create a thread for the engine network subsystem")?;
 
         result_rx.blocking_recv()??;
 

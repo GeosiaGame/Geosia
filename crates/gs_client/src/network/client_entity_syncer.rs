@@ -53,12 +53,12 @@ fn process_entity_packet_queue(world: &mut World) -> BevyResult {
         let msg = root.get()?;
         let payload = msg.get_payload()?;
         for new_ent in payload.get_new_entities()? {
-            let rid = RegistryId::try_new(new_ent.get_registry_id()).context("invalid new entity registry id")?;
+            let rid = RegistryId::try_new(new_ent.get_registry_id()).wrap_err("invalid new entity registry id")?;
             let nid = Uuid::read_from_message(&new_ent.get_nid()?)?;
-            let nid = NonNilUuid::new(nid).context("invalid new entity network id")?;
+            let nid = NonNilUuid::new(nid).wrap_err("invalid new entity network id")?;
             let etype = registry
                 .lookup_id_to_object(rid)
-                .context("missing new entity registry id")?;
+                .wrap_err("missing new entity registry id")?;
             let data = new_ent.get_serialized()?;
             let data = capnp_bytes_to_cow(&data);
             let e = world.spawn((
@@ -70,19 +70,19 @@ fn process_entity_packet_queue(world: &mut World) -> BevyResult {
         }
         for upd_ent in payload.get_updated_entities()? {
             let nid = Uuid::read_from_message(&upd_ent.get_nid()?)?;
-            let nid = NonNilUuid::new(nid).context("invalid updated entity network id")?;
+            let nid = NonNilUuid::new(nid).wrap_err("invalid updated entity network id")?;
             let e = world
                 .resource::<EntityNetworkIdLookupTable>()
                 .get_entity(nid)
-                .context("update for non-existent entity ID")?;
+                .wrap_err("update for non-existent entity ID")?;
             let rid = world
                 .entity(e)
                 .get::<ClientRemoteEntity>()
-                .context("missing client remote entity component on networked entity")?
+                .wrap_err("missing client remote entity component on networked entity")?
                 .registry_id;
             let etype = registry
                 .lookup_id_to_object(rid)
-                .context("missing new entity registry id")?;
+                .wrap_err("missing new entity registry id")?;
             let data = upd_ent.get_serialized()?;
             let data = capnp_bytes_to_cow(&data);
             let e = world.entity_mut(e);
@@ -90,11 +90,11 @@ fn process_entity_packet_queue(world: &mut World) -> BevyResult {
         }
         for del_ent in payload.get_deleted_entities()? {
             let nid = Uuid::read_from_message(&del_ent)?;
-            let nid = NonNilUuid::new(nid).context("invalid deleted entity network id")?;
+            let nid = NonNilUuid::new(nid).wrap_err("invalid deleted entity network id")?;
             let e = world
                 .resource::<EntityNetworkIdLookupTable>()
                 .get_entity(nid)
-                .context("update for non-existent entity ID")?;
+                .wrap_err("update for non-existent entity ID")?;
             world.entity_mut(e).despawn();
         }
     }

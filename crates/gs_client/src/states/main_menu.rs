@@ -175,7 +175,7 @@ async fn server_query_task(ip: String) -> Result<String> {
         .connect_with(quinn_client_config(), remote_address, "example.com")?
         .await?;
     let address = PeerAddress::Network {
-        local: local_addr.as_socket().context("Obtaining local socket address")?,
+        local: local_addr.as_socket().wrap_err("Obtaining local socket address")?,
         remote: quic_connection.remote_address(),
     };
     let net_conn = NetworkConnection::wrap_remote(GameSide::Client, address, endpoint, quic_connection);
@@ -189,8 +189,8 @@ async fn server_query_task(ip: String) -> Result<String> {
     }
     let pkt = PacketWrapper::from(pkt);
     let send_time = Instant::now();
-    stream.send_packet(pkt).context("Sending metadata request")?;
-    let response = stream.recv_packet().await.context("Receiving metadata request")?;
+    stream.send_packet(pkt).wrap_err("Sending metadata request")?;
+    let response = stream.recv_packet().await.wrap_err("Receiving metadata request")?;
     let recv_time = Instant::now();
     stream.close();
     drop(stream);
@@ -200,7 +200,7 @@ async fn server_query_task(ip: String) -> Result<String> {
     )?;
     let response = response.get()?;
     if response.get_id()? != PacketId::GetServerMetadata {
-        return Err(anyhow::anyhow!(
+        return Err(eyre::eyre!(
             "Invalid packet ID received, got {} but expected GetServerMetadata",
             response.get_id()?
         ));

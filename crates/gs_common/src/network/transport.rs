@@ -223,7 +223,7 @@ impl PacketWrapper {
     }
 
     /// Accessor for data of packets that use capnp struct payload types.
-    pub fn parse_typed<OwnedPayloadType: capnp::traits::Owned>(
+    pub fn parse_typed<OwnedPayloadType: capnp::traits::Owned + 'static>(
         &self,
         reader_options: ReaderOptions,
     ) -> capnp::Result<TypedReader<PacketSegments, network_packet::Owned<OwnedPayloadType>>> {
@@ -330,7 +330,7 @@ impl PacketStream {
             .await
             .recv()
             .await
-            .ok_or_else(|| anyhow!("internal socket closed"))
+            .ok_or_else(|| eyre!("internal socket closed"))
     }
 
     /// Initiates a new stream over a QUIC network connection.

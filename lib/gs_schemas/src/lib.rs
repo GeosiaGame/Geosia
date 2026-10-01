@@ -4,7 +4,7 @@ extern crate core;
 
 use std::fmt::{Debug, Formatter};
 
-use anyhow::Context;
+use eyre::WrapErr;
 use smallvec::{Array, SmallVec};
 
 pub mod actions;
@@ -64,7 +64,6 @@ impl std::fmt::Display for GameSide {
 
 /// Re-exported dependencies used in API types
 pub mod dependencies {
-    pub use anyhow;
     pub use bevy_color;
     pub use bevy_math;
     pub use bitflags;
@@ -74,15 +73,16 @@ pub mod dependencies {
     pub use capnp;
     pub use chrono;
     pub use either;
+    pub use eyre;
     pub use hashbrown;
     pub use itertools;
-    pub use kstring;
     pub use noise;
     pub use rand;
     pub use rand_xoshiro;
     pub use rusqlite;
     pub use serde;
     pub use smallvec;
+    pub use smol_str;
     pub use thiserror;
     pub use uuid;
     pub use zorder;
@@ -141,7 +141,7 @@ where
 
 /// A simple list of errors used for accumulating errors from a loop if it's desired to handle them all at the end instead of breaking the loop.
 #[derive(Debug)]
-pub struct ErrorList(anyhow::Result<()>);
+pub struct ErrorList(eyre::Result<()>);
 
 impl Default for ErrorList {
     fn default() -> Self {
@@ -156,17 +156,17 @@ impl ErrorList {
     }
 
     /// Processes the given [`Result`], attaching to the error list if it's an error
-    pub fn attach_if_err<T, E: Into<anyhow::Error>>(&mut self, result: Result<T, E>) {
+    pub fn attach_if_err<T, E: Into<eyre::Error>>(&mut self, result: Result<T, E>) {
         if let Err(e) = result.map_err(Into::into) {
             match self.0 {
                 Ok(_) => self.0 = Err(e),
-                Err(_) => self.0 = std::mem::replace(&mut self.0, Ok(())).context(e),
+                Err(_) => self.0 = std::mem::replace(&mut self.0, Ok(())).wrap_err(e),
             }
         }
     }
 
     /// Converts the entire list into a single [`Result`]
-    pub fn into_result(self) -> anyhow::Result<()> {
+    pub fn into_result(self) -> eyre::Result<()> {
         self.0
     }
 }

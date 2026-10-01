@@ -11,11 +11,11 @@ use std::{
     sync::OnceLock,
 };
 
-use anyhow::{Context, anyhow};
 use capnp::message::ReaderOptions;
 use chrono::{DateTime, Utc};
-use kstring::KString;
+use eyre::{WrapErr, eyre};
 use rusqlite::{Connection, OpenFlags, ToSql, types::FromSql};
+use smol_str::SmolStr;
 use uuid::Uuid;
 
 use crate::{ErrorList, registry::RegistryName};
@@ -29,31 +29,31 @@ pub static SAVEFILE_CAPNP_READER_OPTIONS: ReaderOptions = ReaderOptions {
     nesting_limit: 48,
 };
 
-/// sqlite-compatible [`KString`] wrapper
+/// sqlite-compatible [`SmolStr`] wrapper
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
-pub struct SqlKString(KString);
+pub struct SqlSmolStr(SmolStr);
 
-impl Deref for SqlKString {
-    type Target = KString;
+impl Deref for SqlSmolStr {
+    type Target = SmolStr;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for SqlKString {
+impl DerefMut for SqlSmolStr {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl FromSql for SqlKString {
+impl FromSql for SqlSmolStr {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        Ok(Self(KString::from_ref(value.as_str()?)))
+        Ok(Self(SmolStr::from(value.as_str()?)))
     }
 }
 
-impl ToSql for SqlKString {
+impl ToSql for SqlSmolStr {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
         Ok(rusqlite::types::ToSqlOutput::Borrowed(rusqlite::types::ValueRef::Text(
             self.as_bytes(),
@@ -186,30 +186,30 @@ impl SavefileMetadata {
 }
 
 /// Reads the savefile metadata (if available) for a given save directory.
-pub fn get_save_metadata(save_dir_path: &Path) -> anyhow::Result<SavefileMetadata> {
+pub fn get_save_metadata(save_dir_path: &Path) -> eyre::Result<SavefileMetadata> {
     let db_path = save_dir_path.join(SAVEFILE_DB_NAME);
     let db_stat = fs::metadata(&db_path)?;
     let conn = Connection::open_with_flags(
         &db_path,
         OpenFlags::SQLITE_OPEN_EXRESCODE | OpenFlags::SQLITE_OPEN_NO_MUTEX | OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
-    let schema_ver = queries::select_savefile_schema_version(&conn).context("Reading the schema version")?;
+    let schema_ver = queries::select_savefile_schema_version(&conn).wrap_err("Reading the schema version")?;
     if schema_ver > NEWEST_SUPPORTED_SAVE_VERSION {
-        return Err(anyhow!(
+        return Err(eyre!(
             "Saved schema version {schema_ver} greater than max supported {NEWEST_SUPPORTED_SAVE_VERSION}, you probably need to update the game."
         ));
     }
     let name = queries::select_savefile_meta_name(&conn)?;
     let created_at = queries::select_savefile_meta_created_at(&conn)?;
     let uuid = queries::select_savefile_meta_universe_uuid(&conn)?;
-    let modified_at = db_stat.modified().map(DateTime::<Utc>::from).unwrap_or_default();
+    let modified_at = db_stat.modified().map_or_default(DateTime::<Utc>::from);
     conn.close().map_err(|(_, e)| e)?;
     Ok(SavefileMetadata {
         location: SavefileLocation::Path(save_dir_path.to_owned()),
         name,
         dir_name: save_dir_path
             .file_name()
-            .ok_or_else(|| anyhow!("Could not extract directory name from {db_path:?}"))?
+            .ok_or_else(|| eyre!("Could not extract directory name from {db_path:?}"))?
             .to_string_lossy()
             .into_owned(),
         disk_size: db_stat.len(),
@@ -228,7 +228,7 @@ pub fn list_saves(saves_directory: &Path) -> (Vec<SavefileMetadata>, ErrorList) 
     let dir_entries = match fs::read_dir(saves_directory) {
         Ok(de) => de,
         Err(e) => {
-            errors.attach_if_err::<(), _>(Err(e).context("Could not enumerate saves subdirectories"));
+            errors.attach_if_err::<(), _>(Err(e).wrap_err("Could not enumerate saves subdirectories"));
             return (saves, errors);
         }
     };
@@ -244,7 +244,7 @@ pub fn list_saves(saves_directory: &Path) -> (Vec<SavefileMetadata>, ErrorList) 
                 saves.push(meta);
             }
             Err(e) => {
-                errors.attach_if_err::<(), _>(Err(e).context(dir_path.to_string_lossy().into_owned()));
+                errors.attach_if_err::<(), _>(Err(e).wrap_err(dir_path.to_string_lossy().into_owned()));
                 continue;
             }
         }
@@ -336,7 +336,7 @@ pub fn new_save(saves_directory: &Path, mut name: &str) -> Result<SavefileMetada
     queries::insert_new_savefile_meta(&conn, name, created_at, uuid).map_err(sql_to_io_error)?;
     conn.close().map_err(|(_, e)| sql_to_io_error(e))?;
     let db_meta = fs::metadata(&save_db_path)?;
-    let modified_at = db_meta.modified().map(DateTime::<Utc>::from).unwrap_or_default();
+    let modified_at = db_meta.modified().map_or_default(DateTime::<Utc>::from);
     Ok(SavefileMetadata {
         location: SavefileLocation::Path(save_dir),
         name: name.to_owned(),
@@ -350,7 +350,7 @@ pub fn new_save(saves_directory: &Path, mut name: &str) -> Result<SavefileMetada
 
 #[cfg(test)]
 mod test {
-    use anyhow::Result;
+    use eyre::Result;
     use tempfile::tempdir;
 
     use super::*;

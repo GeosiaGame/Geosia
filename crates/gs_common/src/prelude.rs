@@ -3,8 +3,8 @@
 // some of the imports here are not used yet, but are pre-defined for symmetry
 #![allow(unused)]
 
-// Anyhow error handling
-pub use anyhow::{anyhow, bail, ensure, Context, Result};
+// Error handling
+pub use eyre::{eyre, bail, ensure, WrapErr, ContextCompat, Result};
 pub use bevy::prelude::Result as BevyResult;
 
 // Tokio and std MPSC channels

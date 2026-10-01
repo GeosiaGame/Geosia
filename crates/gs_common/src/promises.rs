@@ -2,7 +2,7 @@
 
 use std::pin::Pin;
 
-use anyhow::Error;
+use eyre::Error;
 use tokio::sync::Notify;
 use tracing::error;
 
@@ -24,12 +24,12 @@ pub trait GenericAsyncResult {
     fn is_err(&mut self) -> Option<bool>;
 
     /// Checks if the result is available right now, returns a type-erased reference if it is.
-    fn generic_poll(&mut self) -> Option<Result<(), &anyhow::Error>>;
+    fn generic_poll(&mut self) -> Option<Result<(), &eyre::Error>>;
 
-    /// Waits for the result by blocking the current thread, wraps the error in a generic anyhow type.
-    fn blocking_generic_wait(self: Box<Self>) -> Result<(), anyhow::Error>;
+    /// Waits for the result by blocking the current thread, wraps the error in a generic eyre type.
+    fn blocking_generic_wait(self: Box<Self>) -> Result<(), eyre::Error>;
 
-    /// Waits for the result by awaiting the inner future, wraps the error in a generic anyhow type.
+    /// Waits for the result by awaiting the inner future, wraps the error in a generic eyre type.
     fn async_generic_wait(self: Box<Self>) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>>;
 
     /// Spawns a new Tokio async task waiting for the result, and logs the error out if it is a failure.
@@ -45,7 +45,7 @@ pub enum AsyncResult<OkT: Send + 'static> {
     /// Queried and completed.
     Resolved(Result<OkT>),
     /// Queried and the other end was missing.
-    Aborted(anyhow::Error),
+    Aborted(eyre::Error),
 }
 
 impl<OkT: Send + 'static> AsyncResult<OkT> {
@@ -61,12 +61,12 @@ impl<OkT: Send + 'static> AsyncResult<OkT> {
     }
 
     /// Constructs a new pre-resolved variant.
-    pub fn new_err(err: anyhow::Error) -> Self {
+    pub fn new_err(err: eyre::Error) -> Self {
         Self::Resolved(Err(err))
     }
 
     /// Checks if the result is available right now, returns a reference if it is.
-    pub fn poll(&mut self) -> Option<Result<&OkT, &anyhow::Error>> {
+    pub fn poll(&mut self) -> Option<Result<&OkT, &eyre::Error>> {
         match self {
             Self::Unresolved(recv) => match recv.try_recv() {
                 Ok(v) => {
@@ -76,7 +76,7 @@ impl<OkT: Send + 'static> AsyncResult<OkT> {
                 }
                 Err(tokio::sync::oneshot::error::TryRecvError::Empty) => None,
                 Err(e @ tokio::sync::oneshot::error::TryRecvError::Closed) => {
-                    *self = Self::Aborted(anyhow::Error::from(e));
+                    *self = Self::Aborted(eyre::Error::from(e));
                     None
                 }
             },
@@ -90,7 +90,7 @@ impl<OkT: Send + 'static> AsyncResult<OkT> {
         match self {
             Self::Unresolved(chan) => match chan.blocking_recv() {
                 Ok(v) => v,
-                Err(e) => Err(anyhow::Error::from(e)),
+                Err(e) => Err(eyre::Error::from(e)),
             },
             Self::Resolved(val) => val,
             Self::Aborted(err) => Err(err),
@@ -102,7 +102,7 @@ impl<OkT: Send + 'static> AsyncResult<OkT> {
         match self {
             Self::Unresolved(chan) => match chan.await {
                 Ok(v) => v,
-                Err(e) => Err(anyhow::Error::from(e)),
+                Err(e) => Err(eyre::Error::from(e)),
             },
             Self::Resolved(val) => val,
             Self::Aborted(err) => Err(err),

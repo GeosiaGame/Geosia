@@ -49,7 +49,7 @@ enum DatabaseThreadCommand<ExtraData: GsExtraData> {
 }
 enum DatabaseThreadResponse<ExtraData: GsExtraData> {
     ShutdownDone,
-    Error(anyhow::Error),
+    Error(eyre::Error),
     LoadDone(Box<[ChunkProviderResult<ExtraData>]>),
     SaveDone,
 }
@@ -60,7 +60,7 @@ impl<ExtraData: GsExtraData> SavefilePersistenceLayer<ExtraData> {
         savefile_metadata: SavefileMetadata,
         generator_provider: Arc<Mutex<dyn ChunkPersistenceLayer<ExtraData>>>,
     ) -> Result<Self> {
-        let database = savefile_metadata.open_rw().context("Opening savefile database")?;
+        let database = savefile_metadata.open_rw().wrap_err("Opening savefile database")?;
         let shared_state = Arc::new(DatabaseThreadSharedState::default());
 
         let thread_state = DatabaseThreadState {
@@ -74,7 +74,7 @@ impl<ExtraData: GsExtraData> SavefilePersistenceLayer<ExtraData> {
             .spawn(move || {
                 savefile_persistence_thread_main(thread_state);
             })
-            .context("Creating savefile thread")?;
+            .wrap_err("Creating savefile thread")?;
         Ok(Self {
             db_thread: Some(db_thread),
             shared_state,
@@ -159,7 +159,7 @@ fn savefile_persistence_thread_handle_command<ExtraData: GsExtraData>(
                         let mut data = data.as_bytes();
                         let reader =
                             capnp::serialize::read_message_from_flat_slice(&mut data, SAVEFILE_CAPNP_READER_OPTIONS)
-                                .map_err(anyhow::Error::from);
+                                .map_err(eyre::Error::from);
                         let reader = reader.map(capnp::message::TypedReader::<_, full_chunk_data::Owned>::new);
                         let reader = match reader {
                             Ok(reader) => reader,
@@ -168,9 +168,9 @@ fn savefile_persistence_thread_handle_command<ExtraData: GsExtraData>(
                                 continue;
                             }
                         };
-                        let inner_reader = reader.get().map_err(anyhow::Error::from);
+                        let inner_reader = reader.get().map_err(eyre::Error::from);
                         let chunk = inner_reader.and_then(|reader| {
-                            Chunk::read_full(&reader, ExtraData::ChunkData::default()).map_err(anyhow::Error::from)
+                            Chunk::read_full(&reader, ExtraData::ChunkData::default()).map_err(eyre::Error::from)
                         });
 
                         output.push((position, chunk));

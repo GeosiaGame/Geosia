@@ -103,7 +103,7 @@ fn update_grab_mode(
     egui_settings.input_system_settings.run_write_ime_messages_system = !new_grabbed;
     egui_settings
         .input_system_settings
-        .run_write_window_pointer_moved_messages_system = !new_grabbed;
+        .run_write_window_pointer_moved_messages = !new_grabbed;
     egui_settings
         .input_system_settings
         .run_write_window_touch_messages_system = !new_grabbed;

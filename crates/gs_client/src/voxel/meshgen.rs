@@ -67,7 +67,7 @@ pub fn default_chunk_material() -> ChunkMeshMaterial {
     }
 }
 
-const SHADER_ASSET_PATH: &str = "shaders/chunk_mesh_main.wgsl";
+const SHADER_ASSET_PATH: &str = "shaders/chunk_mesh_main.wesl";
 
 impl MaterialExtension for ChunkMeshMaterialExtension {
     fn vertex_shader() -> ShaderRef {
@@ -132,7 +132,7 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
         // Assume the chunk is at (0,0,0), mesh is translated using transforms elsewhere
         let ipos = AbsBlockPos::new(cell_x, cell_y, cell_z);
         let ventry = get_block(chunks, ipos);
-        let vdef = registry.lookup_id_to_object(ventry.id).context("invalid block")?;
+        let vdef = registry.lookup_id_to_object(ventry.id).wrap_err("invalid block")?;
         let vstdmeta = StandardShapeMetadata::from_meta(ventry.metadata);
         let vshape = if vdef.has_drawable_mesh {
             vstdmeta.shape()
@@ -158,7 +158,7 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
             let touchside = side_dir.opposite();
             let touchpos = ipos + ioffset;
             let tentry = get_block(chunks, touchpos);
-            let tdef = registry.lookup_id_to_object(tentry.id).context("invalid block")?;
+            let tdef = registry.lookup_id_to_object(tentry.id).wrap_err("invalid block")?;
             let tstdmeta = StandardShapeMetadata::from_meta(tentry.metadata);
             let tshape = if tdef.has_drawable_mesh {
                 tstdmeta.shape()
@@ -183,7 +183,7 @@ pub fn mesh_from_chunk(registry: &BlockRegistry, chunks: &ChunkRefNeighborhood<C
                 for &ao_off in vtx.ao_offsets.iter() {
                     let pos = ipos + RelBlockPos::from(vor.unapply_to_ivec(ao_off));
                     let bentry = get_block(chunks, pos);
-                    let bdef = registry.lookup_id_to_object(bentry.id).context("invalid block")?;
+                    let bdef = registry.lookup_id_to_object(bentry.id).wrap_err("invalid block")?;
                     let bstdmeta = StandardShapeMetadata::from_meta(bentry.metadata);
                     let bshape = if bdef.has_drawable_mesh {
                         bstdmeta.shape()

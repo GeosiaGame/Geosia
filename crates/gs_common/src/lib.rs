@@ -307,7 +307,7 @@ impl GameServer {
         let engine = {
             let e = engine
                 .recv()
-                .context("Could not receive initialization data in the engine thread")?;
+                .wrap_err("Could not receive initialization data in the engine thread")?;
             drop(engine); // force-drop the receiver early to not hold onto its memory
             e
         };
@@ -433,6 +433,7 @@ pub fn builtin_server_game_registries() -> GameRegistries {
 
 /// Runs static pre-main setup needed (e.g. cryptography init)
 pub fn geosia_pre_main() {
+    color_eyre::install().unwrap();
     // Set up bevy's logging once per process
     App::new().add_plugins(LogPlugin::default()).run();
     rustls::crypto::aws_lc_rs::default_provider()

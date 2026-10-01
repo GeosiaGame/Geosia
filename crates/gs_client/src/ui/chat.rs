@@ -7,7 +7,7 @@ use bevy_egui::input::egui_wants_any_keyboard_input;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
 use gs_common::InGameSystemSet;
 use gs_common::network::transport::PacketWrapper;
-use gs_schemas::dependencies::kstring::KString;
+use gs_schemas::dependencies::smol_str::SmolStr;
 use gs_schemas::schemas::new_packet_builder;
 
 use super::IsCursorGrabbed;
@@ -39,8 +39,8 @@ pub fn chat_plugin(app: &mut App) {
 
 #[derive(Resource)]
 struct ChatState {
-    messages: VecDeque<KString>,
-    predicted_messages: VecDeque<KString>,
+    messages: VecDeque<SmolStr>,
+    predicted_messages: VecDeque<SmolStr>,
     entry_string: String,
     text_was_focused: bool,
     request_edit_focus: bool,
@@ -121,7 +121,7 @@ fn chat_ui(
                         let _ = client.main_c2s_stream.send_packet(packet);
                         state
                             .predicted_messages
-                            .push_back(KString::from_string(format!("<...> {}", state.entry_string)));
+                            .push_back(SmolStr::new(format!("<...> {}", state.entry_string)));
                         state.entry_string.clear();
                         edit_resp.scroll_to_me(None);
                         commands.trigger(SetGrabMode(true));

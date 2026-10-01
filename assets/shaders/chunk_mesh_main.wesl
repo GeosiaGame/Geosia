@@ -1,41 +1,53 @@
-// Based on bevy_pbr/render/mesh.wgsl
-#import bevy_pbr::{
-    pbr_fragment::pbr_input_from_standard_material,
-    pbr_functions::alpha_discard,
-}
+// Based on bevy_pbr/render/mesh.wesl and pbr.wesl
+import bevy_pbr::render::{
+    mesh_bindings::mesh,
+    mesh_functions,
+    skinning,
+    morph::{morph_position, morph_normal, morph_tangent},
+    forward_io::{Vertex, UncompressedVertex, VertexOutput, decompress_vertex},
+    view_transformations::position_world_to_clip,
+};
+import bevy_pbr::{
+    render::{
+        pbr_types,
+        pbr_functions::alpha_discard,
+        pbr_fragment::pbr_input_from_standard_material,
+    },
+    decal::clustered::apply_decals,
+};
 
-#ifdef PREPASS_PIPELINE
-#import bevy_pbr::{
-    prepass_io::{Vertex, VertexOutput, FragmentOutput},
-    pbr_deferred_functions::deferred_output,
-}
-#else
-#import bevy_pbr::{
-    forward_io::{Vertex, VertexOutput, FragmentOutput},
+import bevy_pbr::render::{
+    forward_io::{FragmentOutput},
     pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
-}
-#endif
+    pbr_types::STANDARD_MATERIAL_FLAGS_UNLIT_BIT,
+};
+
+@if(VISIBILITY_RANGE_DITHER)
+import bevy_pbr::render::pbr_functions::visibility_range_dither;
+
+@if(MESHLET_MESH_MATERIAL_PASS)
+import bevy_pbr::meshlet::visibility_buffer_resolve::resolve_vertex_output;
+
+@if(MATERIAL_OIT_ENABLED)
+import bevy_core_pipeline::oit::draw::oit_draw;
+
+@if(FORWARD_DECAL)
+import bevy_pbr::decal::forward::get_forward_decal_info;
 
 struct ChunkVertex {
     @builtin(instance_index) instance_index: u32,
-    #ifdef VERTEX_POSITIONS
-        @location(0) position: vec3<f32>,
-    #endif
-    #ifdef VERTEX_NORMALS
-        @location(1) normal: vec3<f32>,
-    #endif
-    #ifdef VERTEX_UVS_A
-        @location(2) uv: vec2<f32>,
-    #endif
-    #ifdef VERTEX_UVS_B
-        @location(3) uv_b: vec2<f32>,
-    #endif
-    #ifdef VERTEX_TANGENTS
-        @location(4) tangent: vec4<f32>,
-    #endif
-    #ifdef VERTEX_COLORS
-        @location(5) color: vec4<f32>,
-    #endif
+    @if(VERTEX_POSITIONS)
+    @location(0) position: vec3<f32>,
+    @if(VERTEX_NORMALS)
+    @location(1) normal: vec3<f32>,
+    @if(VERTEX_UVS_A)
+    @location(2) uv: vec2<f32>,
+    @if(VERTEX_UVS_B)
+    @location(3) uv_b: vec2<f32>,
+    @if(VERTEX_TANGENTS)
+    @location(4) tangent: vec4<f32>,
+    @if(VERTEX_COLORS)
+    @location(5) color: vec4<f32>,
     @location(6) barycentric_color_offset: vec3<f32>,
     @location(7) block_index_with_flags: u32,
 }
@@ -46,27 +58,21 @@ struct ChunkVertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) world_position: vec4<f32>,
     @location(1) world_normal: vec3<f32>,
-#ifdef VERTEX_UVS_A
+    @if(VERTEX_UVS_A)
     @location(2) uv: vec2<f32>,
-#endif
-#ifdef VERTEX_UVS_B
+    @if(VERTEX_UVS_B)
     @location(3) uv_b: vec2<f32>,
-#endif
-#ifdef VERTEX_TANGENTS
+    @if(VERTEX_TANGENTS)
     @location(4) world_tangent: vec4<f32>,
-#endif
-#ifdef VERTEX_COLORS
+    @if(VERTEX_COLORS)
     @location(5) color: vec4<f32>,
-#endif
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     @location(6) @interpolate(flat) instance_index: u32,
-#endif
-#ifdef VISIBILITY_RANGE_DITHER
+    @if(VISIBILITY_RANGE_DITHER)
     @location(7) @interpolate(flat) visibility_range_dither: i32,
-#endif
     @location(8) barycentric_coords: vec2<f32>,
     @location(9) barycentric_color_offset: vec3<f32>,
-    @location(10) block_index: u32,
+    @location(10) @interpolate(flat) block_index: u32,
 }
 
 /*
@@ -79,14 +85,6 @@ struct ChunkMeshMaterial {
 var<uniform> chunk_mesh_material: ChunkMeshMaterial;
 */
 
-#import bevy_pbr::{
-    mesh_bindings::mesh,
-    mesh_functions,
-    skinning,
-    morph::morph,
-    view_transformations::position_world_to_clip,
-}
-
 @vertex
 fn vertex(vertex: ChunkVertex) -> ChunkVertexOutput {
     var out: ChunkVertexOutput;
@@ -95,41 +93,35 @@ fn vertex(vertex: ChunkVertex) -> ChunkVertexOutput {
 
     var world_from_local = mesh_world_from_local;
 
-#ifdef VERTEX_NORMALS
+@if(VERTEX_NORMALS && !SKINNED)
     out.world_normal = mesh_functions::mesh_normal_local_to_world(
         vertex.normal,
         vertex.instance_index
     );
-#endif
 
     out.world_position = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(vertex.position, 1.0));
     out.position = position_world_to_clip(out.world_position.xyz);
 
-#ifdef VERTEX_UVS_A
+@if(VERTEX_UVS_A)
     out.uv = vertex.uv;
-#endif
-#ifdef VERTEX_UVS_B
+@if(VERTEX_UVS_B)
     out.uv_b = vertex.uv_b;
-#endif
 
-#ifdef VERTEX_TANGENTS
+@if(VERTEX_TANGENTS)
     out.world_tangent = mesh_functions::mesh_tangent_local_to_world(
         world_from_local,
         vertex.tangent,
         vertex.instance_index
     );
-#endif
 
     out.color = vertex.color;
 
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+@if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex.instance_index;
-#endif
 
-#ifdef VISIBILITY_RANGE_DITHER
+@if(VISIBILITY_RANGE_DITHER)
     out.visibility_range_dither = mesh_functions::get_visibility_range_dither_level(
         vertex.instance_index, mesh_world_from_local[3]);
-#endif
 
     let index = vertex.block_index_with_flags;
     let baryx = f32((index & (1u << 17u)) > 0u);
@@ -150,19 +142,15 @@ fn fragment(
     in.position = chunk_in.position;
     in.world_position = chunk_in.world_position;
     in.world_normal = chunk_in.world_normal;
-#ifdef VERTEX_UVS_A
+@if(VERTEX_UVS_A)
     in.uv = chunk_in.uv;
-#endif
-#ifdef VERTEX_UVS_B
+@if(VERTEX_UVS_B)
     in.uv_b = chunk_in.uv_b;
-#endif
-#ifdef VERTEX_TANGENTS
+@if(VERTEX_TANGENTS)
     in.world_tangent = chunk_in.world_tangent;
-#endif
     in.color = chunk_in.color;
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+@if(VERTEX_OUTPUT_INSTANCE_INDEX)
     in.instance_index = chunk_in.instance_index;
-#endif
 
     // generate a PbrInput struct from the StandardMaterial bindings
     var pbr_input = pbr_input_from_standard_material(in, is_front);
@@ -172,12 +160,12 @@ fn fragment(
     pbr_input.material.base_color = vec4(corrected_v_color, pbr_input.material.base_color.w);
 
     // alpha discard
-    pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
+    pbr_input.material.base_color = alpha_discard(
+            pbr_input.material.flags,
+            pbr_input.material.alpha_cutoff,
+            pbr_input.material.base_color
+        );
 
-#ifdef PREPASS_PIPELINE
-    // in deferred mode we can't modify anything after that, as lighting is run in a separate fullscreen shader.
-    let out = deferred_output(in, pbr_input);
-#else
     var out: FragmentOutput;
     // apply lighting
     out.color = apply_pbr_lighting(pbr_input);
@@ -185,7 +173,6 @@ fn fragment(
     // apply in-shader post processing (fog, alpha-premultiply, and also tonemapping, debanding if the camera is non-hdr)
     // note this does not include fullscreen postprocessing effects like bloom.
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
-#endif
 
     return out;
 }
