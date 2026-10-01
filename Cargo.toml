@@ -187,7 +187,7 @@ zorder = "0.2.2"
 zstd = "0.13.3"
 
 # Remote, bevy plugins
-bevy_egui = { version = "0.40.1", default-features = false, features = [
+bevy_egui = { version = "0.42.0", default-features = false, features = [
     "manage_clipboard",
     "open_url",
     "default_fonts",
@@ -216,7 +216,8 @@ features = [
     "multi_threaded",
     "serialize",
 
-    # "dev"
+    # "dev",
+    # "trace_tracy",
 ]
 
 [workspace.dependencies.bevy_math]

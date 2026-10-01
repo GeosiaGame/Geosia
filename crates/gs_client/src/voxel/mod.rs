@@ -152,6 +152,7 @@ fn client_chunk_mesher_system(
     let mut chunk_mutations: Vec<(AbsChunkPos, MutWatcher<ChunkMeshState>)> = Vec::new();
 
     for (&pos, chunk) in loaded_chunks.chunks.iter() {
+        let _span = info_span!("client_mesh_chunk", pos = %pos).entered();
         let old_mesh = chunk.extra_data.mesh.as_ref();
         let needs_mesh = if let Some(old_mesh) = old_mesh {
             old_mesh.is_older_than(chunk)
