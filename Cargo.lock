@@ -299,15 +299,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arc-swap"
-version = "1.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c049c0be4daef0b145cb3555416b3b8ef5b7888a38aea1a3a155801fe7b0810b"
-dependencies = [
- "rustversion",
-]
-
-[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1099,7 +1090,7 @@ dependencies = [
  "bevy_ui_render",
  "bevy_ui_widgets",
  "bevy_window",
- "smol_str",
+ "smol_str 0.2.2",
 ]
 
 [[package]]
@@ -1265,7 +1256,7 @@ dependencies = [
  "derive_more",
  "log",
  "serde",
- "smol_str",
+ "smol_str 0.2.2",
  "thiserror 2.0.21",
 ]
 
@@ -1643,7 +1634,7 @@ dependencies = [
  "petgraph",
  "serde",
  "smallvec",
- "smol_str",
+ "smol_str 0.2.2",
  "thiserror 2.0.21",
  "uuid",
  "variadics_please",
@@ -1934,7 +1925,7 @@ dependencies = [
  "parley",
  "serde",
  "smallvec",
- "smol_str",
+ "smol_str 0.2.2",
  "swash",
  "sys-locale",
  "thiserror 2.0.21",
@@ -2073,7 +2064,7 @@ dependencies = [
  "bevy_ui",
  "bevy_window",
  "parley",
- "smol_str",
+ "smol_str 0.2.2",
  "web-sys",
 ]
 
@@ -2275,6 +2266,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "borsh"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "553c5d846a6ba5150c65e3b1b8ec073bcf1abc20f9b7220de384a4443ea4e20a"
+dependencies = [
+ "bytes",
+ "cfg_aliases",
+]
+
+[[package]]
 name = "build-rs"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2380,18 +2381,18 @@ dependencies = [
 
 [[package]]
 name = "capnp"
-version = "0.23.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa8c2ce958193219f203a6887788231a1aaa0b22ed012d67436ea3b87a9645c4"
+checksum = "93f7ce2b1b49d58b2b754f9146ef07e3244f9b67e7563bc1292fbd5f01b142f0"
 dependencies = [
  "embedded-io",
 ]
 
 [[package]]
 name = "capnp-futures"
-version = "0.23.1"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f0ac8177a7bee149f8cfeb2b6ae7c58da0b57913ff31ed6bec2fd725894ee67"
+checksum = "c3a1724aec0e9587f267bf19708934afa545113a44f20acac4b3db9a92857056"
 dependencies = [
  "capnp",
  "futures-channel",
@@ -2400,9 +2401,9 @@ dependencies = [
 
 [[package]]
 name = "capnpc"
-version = "0.23.3"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad416fa35bb240c41f2794ecf1a95a41885f16a03e51bba4cb6845ce7db4bab3"
+checksum = "82ca16312ddb64529d31c8dc46148671c22e57b80134fa5f17811ad5a6a79492"
 dependencies = [
  "capnp",
 ]
@@ -3822,7 +3823,6 @@ dependencies = [
 name = "gs_common"
 version = "0.0.0"
 dependencies = [
- "arc-swap",
  "bevy",
  "bevy_math",
  "capnp",
@@ -3834,7 +3834,6 @@ dependencies = [
  "gs_schemas",
  "hashbrown 0.16.1",
  "image",
- "lru",
  "noise",
  "quinn",
  "rand 0.9.5",
@@ -3878,7 +3877,6 @@ dependencies = [
  "futures",
  "hashbrown 0.16.1",
  "itertools 0.14.0",
- "kstring",
  "noise",
  "quickcheck",
  "quickcheck_macros",
@@ -3889,6 +3887,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "smallvec",
+ "smol_str 0.3.6",
  "tempfile",
  "thiserror 2.0.21",
  "url",
@@ -4434,16 +4433,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
-name = "kstring"
-version = "2.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a09b82a7f771ed02dc0dd9b27130a0fa5499fa15ed3027116c1e5e4e591bd9e"
-dependencies = [
- "serde",
- "static_assertions",
-]
-
-[[package]]
 name = "ktx2"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4709,15 +4698,6 @@ dependencies = [
  "scoped-tls",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "lru"
-version = "0.16.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f66e8d5d03f609abc3a39e6f08e4164ebf1447a732906d39eb9b99b7919ef39"
-dependencies = [
- "hashbrown 0.16.1",
 ]
 
 [[package]]
@@ -6768,6 +6748,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "smol_str"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4aaa7368fcf4852a4c2dd92df0cace6a71f2091ca0a23391ce7f3a31833f1523"
+dependencies = [
+ "borsh",
+ "serde_core",
+]
+
+[[package]]
 name = "socket2"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8445,7 +8435,7 @@ dependencies = [
  "rustix 0.38.44",
  "sctk-adwaita",
  "smithay-client-toolkit 0.19.2",
- "smol_str",
+ "smol_str 0.2.2",
  "tracing",
  "unicode-segmentation",
  "wasm-bindgen",

@@ -11,8 +11,8 @@ use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, LazyLock};
 
-use kstring::KString;
 use regex::Regex;
+use smol_str::SmolStr;
 use url::Url;
 use uuid::{NonNilUuid, Uuid};
 
@@ -24,7 +24,7 @@ pub struct AccountId(pub NonNilUuid);
 pub struct CharacterId(pub NonNilUuid);
 
 /// The special domain host name for unregistered players.
-pub static NONREGISTERED_PLAYER_DOMAIN: KString = KString::from_static("geosia.localhost");
+pub static NONREGISTERED_PLAYER_DOMAIN: SmolStr = SmolStr::new_static("geosia.localhost");
 /// The special domain host for unregistered players.
 pub static NONREGISTERED_PLAYER_URL_BASE: LazyLock<Url> =
     LazyLock::new(|| Url::parse("https://geosia.localhost").unwrap());
@@ -81,7 +81,7 @@ pub struct PlayerAccount {
     /// Uniquely identifies this account.
     pub id: AccountId,
     /// Convenience display name, do not rely on this staying the same over time.
-    pub display_name: KString,
+    pub display_name: SmolStr,
 }
 
 /// Stores default display name, UUID and skin information about a specific character.
@@ -92,7 +92,7 @@ pub struct PlayerCharacter {
     /// Uniquely identifies this character.
     pub id: CharacterId,
     /// In-game name of the character, do not rely on this staying the same over time.
-    pub display_name: KString,
+    pub display_name: SmolStr,
 }
 
 impl PlayerAccount {
@@ -117,7 +117,7 @@ impl PlayerAccount {
         if display_name.is_empty() || display_name.chars().all(char::is_whitespace) {
             return Err(eyre::eyre!("Player display name cannot be empty"));
         }
-        let display_name = KString::from_ref(display_name);
+        let display_name = SmolStr::from(display_name);
         Ok(Self {
             url,
             id: AccountId(uuid),
@@ -138,7 +138,7 @@ impl PlayerCharacter {
         if display_name.is_empty() || display_name.chars().all(char::is_whitespace) {
             return Err(eyre::eyre!("Character display name cannot be empty"));
         }
-        let display_name = KString::from_ref(display_name);
+        let display_name = SmolStr::from(display_name);
         Ok(Self {
             account,
             id: CharacterId(uuid),

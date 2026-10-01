@@ -12,7 +12,7 @@ use gs_common::{
 };
 use gs_schemas::{
     GameSide,
-    dependencies::{kstring::KString, uuid::Uuid},
+    dependencies::{smol_str::SmolStr, uuid::Uuid},
     schemas::{
         CapnpExt,
         game_types_capnp::{SimpleResult, game_bootstrap_data},
@@ -54,7 +54,7 @@ impl Plugin for ClientPacketHandlerPlugin {
 #[derive(Clone, Event)]
 pub struct ChatMessage {
     /// The contents of the message
-    pub message: KString,
+    pub message: SmolStr,
     /// If the message is the echo response to a player-sent message
     pub is_echo: bool,
 }
@@ -126,7 +126,7 @@ pub fn client_packet_handler_system(
                     let message = String::from_utf8_lossy(root.get()?.get_payload()?.as_bytes());
                     info!("Chat message received: {message}");
                     commands.trigger(ChatMessage {
-                        message: KString::from_ref(&message),
+                        message: SmolStr::new(&message),
                         is_echo: false,
                     });
                 }
@@ -162,7 +162,7 @@ pub fn client_packet_handler_system(
                     let message = String::from_utf8_lossy(root.get()?.get_payload()?.as_bytes());
                     info!("Chat message echo received: {message}");
                     commands.trigger(ChatMessage {
-                        message: KString::from_ref(&message),
+                        message: SmolStr::new(&message),
                         is_echo: true,
                     });
                 }

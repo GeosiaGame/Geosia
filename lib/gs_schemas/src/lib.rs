@@ -76,13 +76,13 @@ pub mod dependencies {
     pub use eyre;
     pub use hashbrown;
     pub use itertools;
-    pub use kstring;
     pub use noise;
     pub use rand;
     pub use rand_xoshiro;
     pub use rusqlite;
     pub use serde;
     pub use smallvec;
+    pub use smol_str;
     pub use thiserror;
     pub use uuid;
     pub use zorder;

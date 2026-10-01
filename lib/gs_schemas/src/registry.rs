@@ -8,18 +8,18 @@ use std::sync::Arc;
 use bytemuck::{PodInOption, TransparentWrapper, ZeroableInOption};
 use hashbrown::{Equivalent, HashMap};
 use itertools::Itertools;
-use kstring::{KString, KStringRef};
 use rusqlite::ToSql;
 use rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use serde::{Deserialize, Serialize};
+use smol_str::SmolStr;
 use thiserror::Error;
 
 /// Default namespace for the game objects (as a `const` for compile-time functions)
 pub const GS_REGISTRY_DOMAIN_CONST: &str = "gs";
 /// Default namespace for the game objects
 pub static GS_REGISTRY_DOMAIN: &str = GS_REGISTRY_DOMAIN_CONST;
-/// Default namespace for the game objects, as a [`KString`] for convenience
-pub static GS_REGISTRY_DOMAIN_KS: KString = KString::from_static(GS_REGISTRY_DOMAIN);
+/// Default namespace for the game objects, as a [`SmolStr`] for convenience
+pub static GS_REGISTRY_DOMAIN_KS: SmolStr = SmolStr::new_static(GS_REGISTRY_DOMAIN);
 
 /// Checks if the given name is a valid registry name (`[a-z0-9_]+`).
 pub const fn is_valid_registry_name(name: &str) -> bool {
@@ -57,18 +57,18 @@ pub enum RegistryNameParseError {
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Default, Hash, Serialize, Deserialize)]
 pub struct RegistryName {
     /// The namespace
-    pub ns: KString,
+    pub ns: SmolStr,
     /// The object name, unique in the namespace
-    pub key: KString,
+    pub key: SmolStr,
 }
 
 /// Reference to a simple namespaced registry object name, see [`RegistryName`] for the owned variant
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Default, Hash)]
 pub struct RegistryNameRef<'n> {
     /// The namespace
-    pub ns: KStringRef<'n>,
+    pub ns: &'n str,
     /// The object name, unique in the namespace
-    pub key: KStringRef<'n>,
+    pub key: &'n str,
 }
 
 impl RegistryName {
@@ -79,7 +79,7 @@ impl RegistryName {
         }
         Ok(Self {
             ns: GS_REGISTRY_DOMAIN_KS.clone(),
-            key: KString::from_ref(key),
+            key: SmolStr::from(key),
         })
     }
 
@@ -90,8 +90,8 @@ impl RegistryName {
             panic!("Invalid registry key");
         }
         Self {
-            ns: KString::from_static(GS_REGISTRY_DOMAIN_CONST),
-            key: KString::from_static(key),
+            ns: SmolStr::new_static(GS_REGISTRY_DOMAIN_CONST),
+            key: SmolStr::new_static(key),
         }
     }
 
@@ -104,8 +104,8 @@ impl RegistryName {
             return Err(RegistryNameParseError::InvalidComponent);
         }
         Ok(Self {
-            ns: KString::from_ref(ns),
-            key: KString::from_ref(key),
+            ns: SmolStr::from(ns),
+            key: SmolStr::from(key),
         })
     }
 
@@ -119,8 +119,8 @@ impl RegistryName {
             panic!("Invalid registry key");
         }
         Self {
-            ns: KString::from_static(ns),
-            key: KString::from_static(key),
+            ns: SmolStr::new_static(ns),
+            key: SmolStr::new_static(key),
         }
     }
 
@@ -132,14 +132,17 @@ impl RegistryName {
 
 impl<'a> RegistryNameRef<'a> {
     /// Constructs a name reference out of the given namespace and key.
-    pub fn new(ns: impl Into<KStringRef<'a>>, key: impl Into<KStringRef<'a>>) -> Result<Self, RegistryNameParseError> {
-        let ns: KStringRef = ns.into();
-        let key: KStringRef = key.into();
+    pub fn new(
+        ns: &'a (impl AsRef<str> + ?Sized),
+        key: &'a (impl AsRef<str> + ?Sized),
+    ) -> Result<Self, RegistryNameParseError> {
+        let ns: &'a str = ns.as_ref();
+        let key: &'a str = key.as_ref();
 
-        if !is_valid_registry_name(&ns) {
+        if !is_valid_registry_name(ns) {
             return Err(RegistryNameParseError::InvalidComponent);
         }
-        if !is_valid_registry_name(&key) {
+        if !is_valid_registry_name(key) {
             return Err(RegistryNameParseError::InvalidComponent);
         }
 
@@ -155,20 +158,17 @@ impl<'a> RegistryNameRef<'a> {
         if !is_valid_registry_name(key) {
             panic!("Invalid registry key");
         }
-        Self {
-            ns: KStringRef::from_static(ns),
-            key: KStringRef::from_static(key),
-        }
+        Self { ns, key }
     }
 
     /// Constructs a `gs:`-namespaced name reference
-    pub fn gs(key: impl Into<KStringRef<'a>>) -> Result<Self, RegistryNameParseError> {
-        let key: KStringRef = key.into();
-        if !is_valid_registry_name(&key) {
+    pub fn gs(key: &'a (impl AsRef<str> + ?Sized)) -> Result<Self, RegistryNameParseError> {
+        let key: &str = key.as_ref();
+        if !is_valid_registry_name(key) {
             return Err(RegistryNameParseError::InvalidComponent);
         }
         Ok(Self {
-            ns: KStringRef::from(&GS_REGISTRY_DOMAIN_KS),
+            ns: &GS_REGISTRY_DOMAIN_KS,
             key,
         })
     }
@@ -180,8 +180,8 @@ impl<'a> RegistryNameRef<'a> {
             panic!("Invalid registry key");
         }
         Self {
-            ns: KStringRef::from_static(GS_REGISTRY_DOMAIN_CONST),
-            key: KStringRef::from_static(key),
+            ns: GS_REGISTRY_DOMAIN_CONST,
+            key,
         }
     }
 
@@ -207,13 +207,13 @@ impl Equivalent<RegistryNameRef<'_>> for RegistryName {
 
 impl PartialEq<RegistryName> for RegistryNameRef<'_> {
     fn eq(&self, other: &RegistryName) -> bool {
-        self.ns.as_str() == other.ns.as_str() && self.key.as_str() == other.key.as_str()
+        self.ns == other.ns.as_str() && self.key == other.key.as_str()
     }
 }
 
 impl PartialEq<RegistryNameRef<'_>> for RegistryName {
     fn eq(&self, other: &RegistryNameRef) -> bool {
-        self.ns.as_str() == other.ns.as_str() && self.key.as_str() == other.key.as_str()
+        self.ns.as_str() == other.ns && self.key.as_str() == other.key
     }
 }
 
@@ -626,9 +626,9 @@ mod test {
         assert_eq!(reg.lookup_id_to_object(b_id).map(|o| o.0.key.as_str()), Some("b"));
         assert_eq!(reg.lookup_id_to_object(c_id).map(|o| o.0.key.as_str()), None);
 
-        let dyn_a = KString::from_string(String::from("a"));
-        let dyn_b = KString::from_string(String::from("b"));
-        let dyn_c = KString::from_string(String::from("c"));
+        let dyn_a = SmolStr::from(String::from("a"));
+        let dyn_b = SmolStr::from(String::from("b"));
+        let dyn_c = SmolStr::from(String::from("c"));
 
         assert_eq!(
             reg.lookup_name_to_object(RegistryNameRef::gs(&dyn_a).unwrap())

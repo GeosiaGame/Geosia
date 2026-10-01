@@ -425,7 +425,7 @@ pub fn read_packet_simple(
 }
 
 /// Helper to get a typed reader from a packet of a known pointer type.
-pub fn read_packet<OwnedPayloadType: capnp::traits::Owned>(
+pub fn read_packet<OwnedPayloadType: capnp::traits::Owned + 'static>(
     packet_bytes: &[u8],
     reader_options: ReaderOptions,
 ) -> capnp::Result<TypedReader<BufferSegments<&[u8]>, network_capnp::network_packet::Owned<OwnedPayloadType>>> {
@@ -435,7 +435,7 @@ pub fn read_packet<OwnedPayloadType: capnp::traits::Owned>(
 }
 
 /// Helper to create a typed writer for a packet of a known type
-pub fn new_packet_builder<OwnedPayloadType: capnp::traits::Owned>()
+pub fn new_packet_builder<OwnedPayloadType: capnp::traits::Owned + 'static>()
 -> TypedBuilder<network_capnp::network_packet::Owned<OwnedPayloadType>, HeapAllocator> {
     capnp::message::TypedBuilder::new_default()
 }
