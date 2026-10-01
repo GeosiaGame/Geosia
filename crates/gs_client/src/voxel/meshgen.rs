@@ -67,7 +67,7 @@ pub fn default_chunk_material() -> ChunkMeshMaterial {
     }
 }
 
-const SHADER_ASSET_PATH: &str = "shaders/chunk_mesh_main.wgsl";
+const SHADER_ASSET_PATH: &str = "shaders/chunk_mesh_main.wesl";
 
 impl MaterialExtension for ChunkMeshMaterialExtension {
     fn vertex_shader() -> ShaderRef {
