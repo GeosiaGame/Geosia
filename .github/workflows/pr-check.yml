@@ -27,23 +27,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-24.04 ]
+        os: [ ubuntu-26.04 ]
         rust:
-          - version: '1.98.0'
+          - version: '1.99.0'
             name: 'stable'
-          - version: 'nightly-2026-08-20'
+          - version: 'nightly-2026-09-30'
             name: 'nightly'
     env:
       RUST_BACKTRACE: full
       RUSTV: ${{ matrix.rust.version }}
     steps:
       - name: Install dependencies
-        if: matrix.os == 'ubuntu-24.04'
+        if: startsWith(matrix.os, 'ubuntu')
         run: |
           sudo apt-get update --yes
           sudo apt-get install --yes --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev libvulkan-dev
-      - uses: actions/checkout@v6
-      - uses: actions/cache@v5
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/bin/
