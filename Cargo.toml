@@ -116,7 +116,7 @@ chrono = "0.4.41"
 clap = { version = "4.5.39", features = ["derive"] }
 either = "1.15.0"
 futures = "0.3.31"
-glam = { version = "0.32.0", features = [
+glam = { version = "0.33.9", features = [
     "bytemuck",
     "serde",
 ] } # Keep in sync with bevy
@@ -134,7 +134,7 @@ rcgen = "0.14.5"
 regex = "1.11.2"
 rustls = { version = "0.23.27" }
 rustyline = "17.0.2"
-rusqlite = { version = "0.37.0", features = [
+rusqlite = { version = "0.40.2", features = [
     "array",
     "backup",
     "blob",
@@ -187,7 +187,7 @@ zorder = "0.2.2"
 zstd = "0.13.3"
 
 # Remote, bevy plugins
-bevy_egui = { version = "0.42.0", default-features = false, features = [
+bevy_egui = { version = "0.43.0-rc.1", default-features = false, features = [
     "manage_clipboard",
     "open_url",
     "default_fonts",
@@ -201,7 +201,7 @@ quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
 [workspace.dependencies.bevy]
-version = "0.19.1"
+version = "0.20.0-rc.2"
 default-features = false
 # Extra features are used in gs_client on top of these common ones
 # https://docs.rs/crate/bevy/0.19.1/source/Cargo.toml.orig#133
@@ -221,7 +221,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_math]
-version = "0.19.1"
+version = "0.20.0-rc.2"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -229,7 +229,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_color]
-version = "0.19.1"
+version = "0.20.0-rc.2"
 default-features = false
 features = [
     "serialize", # Support for `serde` Serialize/Deserialize
@@ -237,7 +237,7 @@ features = [
 ]
 
 [workspace.dependencies.bevy_reflect]
-version = "0.19.1"
+version = "0.20.0-rc.2"
 features = ["smallvec", "glam", "uuid", "std"]
 
 [profile.dev]
