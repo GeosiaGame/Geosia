@@ -79,9 +79,9 @@ pub fn setup_standard_server_entities(registry: &mut EntityRegistry) {
         .push_object(EntitySchema {
             name: PLAYER_AVATAR_ENTITY_NAME,
             serialize_full: |data, writer| {
-                let ut = data.get::<UniverseTransform>().context("get<UniverseTransform>")?;
-                let tf = data.get::<Transform>().context("get<Transform>")?;
-                let avatar = data.get::<ServerPlayerAvatar>().context("get<ServerPlayerAvatar>")?;
+                let ut = data.get::<UniverseTransform>().wrap_err("get<UniverseTransform>")?;
+                let tf = data.get::<Transform>().wrap_err("get<Transform>")?;
+                let avatar = data.get::<ServerPlayerAvatar>().wrap_err("get<ServerPlayerAvatar>")?;
 
                 let mut builder = TypedBuilder::<game_types_capnp::entity_components::Owned>::new_default();
                 let root = builder.init_root();
@@ -110,8 +110,8 @@ pub fn setup_standard_server_entities(registry: &mut EntityRegistry) {
             },
             serialize_delta: |data, writer| {
                 // TODO: detect all deltas
-                let ut = data.get_ref::<UniverseTransform>().context("get<UniverseTransform>")?;
-                let tf = data.get_ref::<Transform>().context("get<Transform>")?;
+                let ut = data.get_ref::<UniverseTransform>().wrap_err("get<UniverseTransform>")?;
+                let tf = data.get_ref::<Transform>().wrap_err("get<Transform>")?;
                 let any_changed = ut.is_changed() || tf.is_changed();
                 if !any_changed {
                     return Ok(());

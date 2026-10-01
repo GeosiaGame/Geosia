@@ -72,10 +72,10 @@ macro_rules! impl_shared_registry_resolver {
 
             fn build_template(&self, context: &mut TemplateContext) -> BevyResult<Self::Output> {
                 let world = context.entity.world();
-                let holder = world.get_resource::<SharedRegistryHolder>().context("get_resource::<SharedRegistryHolder>")?;
+                let holder = world.get_resource::<SharedRegistryHolder>().wrap_err("get_resource::<SharedRegistryHolder>")?;
                 let registry = &*holder.$registry;
                 let (id, _) =
-                    registry.lookup_name_to_object(self.registry_name.as_ref()).with_context(|| format!("SharedRegistryHolder.{}.lookup_name_to_object({})", stringify!($registry), self.registry_name))?;
+                    registry.lookup_name_to_object(self.registry_name.as_ref()).wrap_err_with(|| format!("SharedRegistryHolder.{}.lookup_name_to_object({})", stringify!($registry), self.registry_name))?;
                 Ok(id)
             }
 

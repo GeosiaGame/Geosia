@@ -347,7 +347,7 @@ pub fn overwrite_chunks(
 
 #[cfg(test)]
 mod test {
-    use anyhow::Result;
+    use eyre::Result;
     use rusqlite::TransactionBehavior;
 
     use super::*;

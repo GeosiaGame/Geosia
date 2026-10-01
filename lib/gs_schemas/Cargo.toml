@@ -21,7 +21,7 @@ name = "schemabench"
 harness = false
 
 [dependencies]
-anyhow.workspace = true
+eyre.workspace = true
 bevy_color.workspace = true
 bevy_math.workspace = true
 bevy_reflect.workspace = true

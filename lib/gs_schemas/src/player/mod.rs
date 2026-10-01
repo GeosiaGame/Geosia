@@ -97,27 +97,25 @@ pub struct PlayerCharacter {
 
 impl PlayerAccount {
     /// Parses a player account definition from untrusted inputs.
-    pub fn try_parse(url: &str, display_name: &str) -> Result<Self, anyhow::Error> {
+    pub fn try_parse(url: &str, display_name: &str) -> Result<Self, eyre::Error> {
         let url = Url::parse(url)?;
         let uuid = url
             .path_segments()
-            .ok_or_else(|| anyhow::anyhow!("Player URL must have path components"))?
+            .ok_or_else(|| eyre::eyre!("Player URL must have path components"))?
             .next_back()
-            .ok_or_else(|| anyhow::anyhow!("Player URL must have a UUID path component"))?;
+            .ok_or_else(|| eyre::eyre!("Player URL must have a UUID path component"))?;
         if !URL_UUID_PATTERN.is_match(uuid) {
-            return Err(anyhow::anyhow!("Player URL must end in a valid UUID path component"));
+            return Err(eyre::eyre!("Player URL must end in a valid UUID path component"));
         }
         let uuid = Uuid::try_parse(uuid)?;
         let Ok(uuid) = NonNilUuid::try_from(uuid) else {
-            return Err(anyhow::anyhow!("Player UUID must not be the nil UUID"));
+            return Err(eyre::eyre!("Player UUID must not be the nil UUID"));
         };
         if display_name.trim() != display_name {
-            return Err(anyhow::anyhow!(
-                "Player display name must not start/end with whitespace"
-            ));
+            return Err(eyre::eyre!("Player display name must not start/end with whitespace"));
         }
         if display_name.is_empty() || display_name.chars().all(char::is_whitespace) {
-            return Err(anyhow::anyhow!("Player display name cannot be empty"));
+            return Err(eyre::eyre!("Player display name cannot be empty"));
         }
         let display_name = KString::from_ref(display_name);
         Ok(Self {
@@ -130,17 +128,15 @@ impl PlayerAccount {
 
 impl PlayerCharacter {
     /// Parses a player character definition from untrusted inputs.
-    pub fn try_parse(account: Arc<PlayerAccount>, uuid: Uuid, display_name: &str) -> Result<Self, anyhow::Error> {
+    pub fn try_parse(account: Arc<PlayerAccount>, uuid: Uuid, display_name: &str) -> Result<Self, eyre::Error> {
         let Ok(uuid) = NonNilUuid::try_from(uuid) else {
-            return Err(anyhow::anyhow!("Character UUID must not be the nil UUID"));
+            return Err(eyre::eyre!("Character UUID must not be the nil UUID"));
         };
         if display_name.trim() != display_name {
-            return Err(anyhow::anyhow!(
-                "Character display name must not start/end with whitespace"
-            ));
+            return Err(eyre::eyre!("Character display name must not start/end with whitespace"));
         }
         if display_name.is_empty() || display_name.chars().all(char::is_whitespace) {
-            return Err(anyhow::anyhow!("Character display name cannot be empty"));
+            return Err(eyre::eyre!("Character display name cannot be empty"));
         }
         let display_name = KString::from_ref(display_name);
         Ok(Self {

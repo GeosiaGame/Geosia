@@ -95,7 +95,8 @@ gs_common = { path = "crates/gs_common", version = "0.0.0" }
 gs_schemas = { version = "0.0.1", path = "lib/gs_schemas" }
 
 # Remote
-anyhow = "1.0.98"
+eyre = "0.6.14"
+color-eyre = "0.6.5"
 arc-swap = "1.7.1"
 bitflags = { version = "2.9.1", features = ["bytemuck", "serde"] }
 bitvec = { version = "1.0.1", features = ["serde"] }

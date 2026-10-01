@@ -2,7 +2,7 @@
 
 use std::ops::Deref;
 
-use anyhow::Result;
+use eyre::Result;
 use gs_schemas::GsExtraData;
 use gs_schemas::coordinates::AbsChunkPos;
 use gs_schemas::mutwatcher::MutWatcher;

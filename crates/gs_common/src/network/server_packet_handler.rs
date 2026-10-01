@@ -189,7 +189,7 @@ pub fn server_packet_handler_system(
                         distance_limit: 64.0,
                         hit_mask: RaycastHitMask::all(),
                     };
-                    let bregistry = &**block_registry.as_ref().context("missing block registry")?;
+                    let bregistry = &**block_registry.as_ref().wrap_err("missing block registry")?;
                     let mut voxels = voxel_universe.single_mut()?;
                     let (voxels, voxel_storage) = (&mut *voxels.0, voxels.1.as_deref_mut());
                     let ray_ctx = RaycastContext {

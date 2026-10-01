@@ -15,7 +15,8 @@ workspace = true
 # Local
 gs_schemas.workspace = true
 # Remote
-anyhow.workspace = true
+eyre.workspace = true
+color-eyre.workspace = true
 arc-swap.workspace = true
 bevy.workspace = true
 bevy_math.workspace = true

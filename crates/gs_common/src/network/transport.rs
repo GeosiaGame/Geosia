@@ -330,7 +330,7 @@ impl PacketStream {
             .await
             .recv()
             .await
-            .ok_or_else(|| anyhow!("internal socket closed"))
+            .ok_or_else(|| eyre!("internal socket closed"))
     }
 
     /// Initiates a new stream over a QUIC network connection.

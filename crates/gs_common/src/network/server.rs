@@ -258,7 +258,7 @@ impl NetworkThreadState for NetworkThreadServerState {
             }
             NetworkThreadServerCommand::OpenNewStream(server_connection_key, sender) => {
                 let Some(conn) = self.connections.get_mut(server_connection_key) else {
-                    let _ = sender.send(Err(anyhow!("connection already dead")));
+                    let _ = sender.send(Err(eyre!("connection already dead")));
                     return;
                 };
                 let stream = conn.connection.open_stream().await;
@@ -399,7 +399,7 @@ impl NetworkThreadServerState {
                         engine.schedule_bevy(move |world| -> Result<Option<authentication_error::Kind>> {
                             let connected_players = world
                                 .get_resource::<ConnectedPlayersTable>()
-                                .context("Getting table of connected players")?;
+                                .wrap_err("Getting table of connected players")?;
                             let currently_connected_players = connected_players.players_by_address.len();
                             // TODO: harden against a flood of joins
                             if currently_connected_players
@@ -430,7 +430,7 @@ impl NetworkThreadServerState {
                             let mut signal = c2s_stream.close();
                             let _ = signal.wait_for(|v| *v).await;
                             connection.close().await;
-                            return Err(e.context("Could not obtain engine consent for player join"));
+                            return Err(e.wrap_err("Could not obtain engine consent for player join"));
                         }
                     }
 
@@ -445,7 +445,7 @@ impl NetworkThreadServerState {
                     return Ok(());
                 }
                 _ => {
-                    return Err(anyhow!("Invalid packet ID {:?} received", packet_id));
+                    return Err(eyre!("Invalid packet ID {:?} received", packet_id));
                 }
             }
         }

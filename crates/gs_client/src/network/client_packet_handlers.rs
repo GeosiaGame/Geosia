@@ -83,7 +83,7 @@ pub fn client_packet_handler_system(
                 }
                 PacketId::BootstrapGameData => {
                     if *current_state.get() != ClientAppState::LoadingGame {
-                        return Err(anyhow!("Received game bootstrap data outside of game loading"));
+                        return Err(eyre!("Received game bootstrap data outside of game loading"));
                     }
 
                     let incoming_data = incoming
@@ -136,7 +136,7 @@ pub fn client_packet_handler_system(
                 PacketId::ChunkData => {
                     network_voxel_client
                         .as_mut()
-                        .context("Received chunk data while missing a processing queue")?
+                        .wrap_err("Received chunk data while missing a processing queue")?
                         .chunk_packet_queue
                         .push_back(incoming);
                 }

@@ -136,7 +136,7 @@ fn first_entity_sync(
         let mut new_entity = new_entities.reborrow().get(i as u32);
         let schema = entity_registry
             .lookup_id_to_object(syncable.registry_id)
-            .context("entity_registry.lookup_name_to_object")?;
+            .wrap_err("entity_registry.lookup_name_to_object")?;
         new_entity.set_registry_id(syncable.registry_id.0.get());
         nid.0.get().write_to_message(&mut new_entity.reborrow().init_nid());
         buffer.clear();
@@ -208,7 +208,7 @@ fn dirty_entity_sync(
             Entry::Vacant(entry) => {
                 let schema = entity_registry
                     .lookup_id_to_object(syncable.registry_id)
-                    .context("entity_registry.lookup_id_to_object")?;
+                    .wrap_err("entity_registry.lookup_id_to_object")?;
                 buffer.clear();
                 (schema.serialize_full)(e_ref, buffer)?;
                 entry
@@ -230,7 +230,7 @@ fn dirty_entity_sync(
             Entry::Vacant(entry) => {
                 let schema = entity_registry
                     .lookup_id_to_object(syncable.registry_id)
-                    .context("entity_registry.lookup_id_to_object")?;
+                    .wrap_err("entity_registry.lookup_id_to_object")?;
                 buffer.clear();
                 (schema.serialize_delta)(e_ref, buffer)?;
                 entry.insert((nid.0, buffer.clone().into())).clone()

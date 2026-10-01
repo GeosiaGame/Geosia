@@ -213,7 +213,7 @@ impl NetworkThreadClientState {
     }
 
     async fn open_stream(&mut self) -> Result<(Arc<PacketStream>, PacketStreamKey)> {
-        let state = self.connected_state_mut().context("Not connected to server")?;
+        let state = self.connected_state_mut().wrap_err("Not connected to server")?;
         let stream = state.server_connection.open_stream().await?;
         let stream = Arc::new(stream);
         let key = state.streams.insert(Arc::clone(&stream));
@@ -228,7 +228,7 @@ impl NetworkThreadClientState {
         net_conn: NetworkConnection,
     ) -> Result<()> {
         if self.is_connected() {
-            return Err(anyhow!("Already connected!"));
+            return Err(eyre!("Already connected!"));
         }
 
         let net_conn = Arc::new(net_conn);
@@ -275,7 +275,7 @@ impl NetworkThreadClientState {
         let root = root.get()?;
         let rid = root.get_id()?;
         if rid != PacketId::Authenticate {
-            return Err(anyhow!("Received packet id was {}, not authenticate", rid));
+            return Err(eyre!("Received packet id was {}, not authenticate", rid));
         }
         match root.get_payload()?.which()? {
             gs_schemas::schemas::game_types_capnp::result::Which::Ok(_ok) => {
@@ -285,7 +285,7 @@ impl NetworkThreadClientState {
                 let err = err?;
                 let kind = err.get_kind()?;
                 let msg = err.get_message()?.to_str()?;
-                return Err(anyhow!("Server authentication error {kind:?}: {msg}"));
+                return Err(eyre!("Server authentication error {kind:?}: {msg}"));
             }
         }
 
@@ -331,7 +331,7 @@ impl NetworkThreadClientState {
         remote_address: SocketAddr,
     ) -> Result<()> {
         if !self.is_disconnected() {
-            return Err(anyhow!("Already connecting/ed to {:?}", self.server_address()));
+            return Err(eyre!("Already connecting/ed to {:?}", self.server_address()));
         }
 
         let bind_addr = SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0);
@@ -356,7 +356,7 @@ impl NetworkThreadClientState {
             .await?;
 
         let address = PeerAddress::Network {
-            local: local_addr.as_socket().context("Obtaining local socket address")?,
+            local: local_addr.as_socket().wrap_err("Obtaining local socket address")?,
             remote: quic_connection.remote_address(),
         };
         self.variant = NetworkThreadClientStateVariant::Connecting(address);

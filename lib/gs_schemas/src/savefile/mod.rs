@@ -11,9 +11,9 @@ use std::{
     sync::OnceLock,
 };
 
-use anyhow::{Context, anyhow};
 use capnp::message::ReaderOptions;
 use chrono::{DateTime, Utc};
+use eyre::{WrapErr, eyre};
 use kstring::KString;
 use rusqlite::{Connection, OpenFlags, ToSql, types::FromSql};
 use uuid::Uuid;
@@ -186,16 +186,16 @@ impl SavefileMetadata {
 }
 
 /// Reads the savefile metadata (if available) for a given save directory.
-pub fn get_save_metadata(save_dir_path: &Path) -> anyhow::Result<SavefileMetadata> {
+pub fn get_save_metadata(save_dir_path: &Path) -> eyre::Result<SavefileMetadata> {
     let db_path = save_dir_path.join(SAVEFILE_DB_NAME);
     let db_stat = fs::metadata(&db_path)?;
     let conn = Connection::open_with_flags(
         &db_path,
         OpenFlags::SQLITE_OPEN_EXRESCODE | OpenFlags::SQLITE_OPEN_NO_MUTEX | OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
-    let schema_ver = queries::select_savefile_schema_version(&conn).context("Reading the schema version")?;
+    let schema_ver = queries::select_savefile_schema_version(&conn).wrap_err("Reading the schema version")?;
     if schema_ver > NEWEST_SUPPORTED_SAVE_VERSION {
-        return Err(anyhow!(
+        return Err(eyre!(
             "Saved schema version {schema_ver} greater than max supported {NEWEST_SUPPORTED_SAVE_VERSION}, you probably need to update the game."
         ));
     }
@@ -209,7 +209,7 @@ pub fn get_save_metadata(save_dir_path: &Path) -> anyhow::Result<SavefileMetadat
         name,
         dir_name: save_dir_path
             .file_name()
-            .ok_or_else(|| anyhow!("Could not extract directory name from {db_path:?}"))?
+            .ok_or_else(|| eyre!("Could not extract directory name from {db_path:?}"))?
             .to_string_lossy()
             .into_owned(),
         disk_size: db_stat.len(),
@@ -228,7 +228,7 @@ pub fn list_saves(saves_directory: &Path) -> (Vec<SavefileMetadata>, ErrorList) 
     let dir_entries = match fs::read_dir(saves_directory) {
         Ok(de) => de,
         Err(e) => {
-            errors.attach_if_err::<(), _>(Err(e).context("Could not enumerate saves subdirectories"));
+            errors.attach_if_err::<(), _>(Err(e).wrap_err("Could not enumerate saves subdirectories"));
             return (saves, errors);
         }
     };
@@ -244,7 +244,7 @@ pub fn list_saves(saves_directory: &Path) -> (Vec<SavefileMetadata>, ErrorList) 
                 saves.push(meta);
             }
             Err(e) => {
-                errors.attach_if_err::<(), _>(Err(e).context(dir_path.to_string_lossy().into_owned()));
+                errors.attach_if_err::<(), _>(Err(e).wrap_err(dir_path.to_string_lossy().into_owned()));
                 continue;
             }
         }
@@ -350,7 +350,7 @@ pub fn new_save(saves_directory: &Path, mut name: &str) -> Result<SavefileMetada
 
 #[cfg(test)]
 mod test {
-    use anyhow::Result;
+    use eyre::Result;
     use tempfile::tempdir;
 
     use super::*;
